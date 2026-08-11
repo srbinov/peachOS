@@ -1,0 +1,3 @@
+[submodule "macOS-TopBar-Gnome"]
+	path = macOS-TopBar-Gnome
+	url = https://github.com/srbinov/macOS-TopBar-Gnome.git
