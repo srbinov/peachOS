@@ -46,13 +46,33 @@ ACCENT_CLASSES = {
 
 STYLE_CSS = b"""
 .sidebar-icon {
-    border-radius: 7px;
-    min-width: 26px;
-    min-height: 26px;
-    padding: 4px;
+    border-radius: 6px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 3px;
 }
 .sidebar-icon image {
     color: white;
+}
+.nav-row {
+    min-height: 28px;
+    padding: 0px 2px;
+}
+.nav-row label.title {
+    font-size: 13px;
+    font-weight: normal;
+}
+row.signin-row {
+    min-height: 40px;
+    padding: 4px 2px;
+}
+row.signin-row label.title {
+    font-weight: bold;
+    font-size: 13px;
+}
+row.signin-row label.subtitle {
+    opacity: 0.6;
+    font-size: 11px;
 }
 .accent-blue { background-color: #0A84FF; }
 .accent-lightblue { background-color: #5AC8FA; }
@@ -62,16 +82,6 @@ STYLE_CSS = b"""
 .accent-darkgray { background-color: #48484A; }
 .accent-teal { background-color: #32ADE6; }
 .accent-red { background-color: #FF3B30; }
-row.signin-row {
-    padding: 6px 4px;
-}
-row.signin-row label.title {
-    font-weight: bold;
-}
-row.signin-row label.subtitle {
-    opacity: 0.6;
-    font-size: 0.9em;
-}
 .placeholder-icon {
     opacity: 0.25;
 }
@@ -94,7 +104,7 @@ def make_sidebar_icon(icon_name: str, color: str) -> Gtk.Widget:
     box.add_css_class('sidebar-icon')
     box.add_css_class(ACCENT_CLASSES[color])
     image = Gtk.Image.new_from_icon_name(icon_name)
-    image.set_pixel_size(16)
+    image.set_pixel_size(12)
     box.append(image)
     return box
 
@@ -154,16 +164,18 @@ class SettingsWindow(Adw.ApplicationWindow):
         search = Gtk.SearchEntry(placeholder_text='Search')
         top_box.append(search)
 
+        account_name = GLib.get_real_name()
+        if not account_name or account_name == 'Unknown':
+            account_name = GLib.get_user_name()
+
         signin_row = Adw.ActionRow(
-            title='Sign in',
-            subtitle='with your Apple Account',
+            title=GLib.markup_escape_text(account_name),
+            subtitle='peachOS Account',
             activatable=True,
         )
         signin_row.add_css_class('signin-row')
-        avatar = Adw.Avatar(size=36, text='?', show_initials=False)
-        avatar.set_icon_name('avatar-default-symbolic')
+        avatar = Adw.Avatar(size=32, text=account_name, show_initials=True)
         signin_row.add_prefix(avatar)
-        signin_row.add_suffix(Gtk.Image.new_from_icon_name('go-next-symbolic'))
         signin_frame = Gtk.ListBox(css_classes=['boxed-list'])
         signin_frame.set_selection_mode(Gtk.SelectionMode.NONE)
         signin_frame.append(signin_row)
@@ -173,7 +185,7 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         scroller = Gtk.ScrolledWindow(vexpand=True)
         list_outer = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=18,
+            orientation=Gtk.Orientation.VERTICAL, spacing=10,
             margin_start=12, margin_end=12, margin_bottom=12,
         )
 
@@ -183,6 +195,7 @@ class SettingsWindow(Adw.ApplicationWindow):
             listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
             for row_id, title, icon_name, color in section:
                 row = Adw.ActionRow(title=GLib.markup_escape_text(title), activatable=True)
+                row.add_css_class('nav-row')
                 row.add_prefix(make_sidebar_icon(icon_name, color))
                 row._row_id = row_id
                 listbox.append(row)
