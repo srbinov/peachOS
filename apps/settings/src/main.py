@@ -206,7 +206,14 @@ class SettingsWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_default_size(820, 600)
-        self.set_size_request(680, 480)
+        # A real minimum, not a stand-in for "whatever the tallest tab's
+        # content needs" -- that job now belongs to the ScrolledWindow
+        # around _placeholder_stack below. Without it, every card added to
+        # a tab (Displays/Desktop & Dock especially) pushed the window's
+        # forced minimum height higher, to the point the window couldn't
+        # be shrunk at all and, once taller than the work area, had
+        # nowhere to go but under the dock.
+        self.set_size_request(680, 420)
         self.set_title('System Settings')
 
         self._history = []
@@ -226,9 +233,20 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._build_content_header()
         self._placeholder_stack = Gtk.Stack(
-            transition_type=Gtk.StackTransitionType.CROSSFADE
+            transition_type=Gtk.StackTransitionType.CROSSFADE,
+            vhomogeneous=False,  # size to the visible page, not the tallest one
         )
-        self._content_toolbar.set_content(self._placeholder_stack)
+        # Every page used to sit directly in the toolbar's content area, so
+        # a tall page's natural height became the *window's* forced minimum
+        # height -- nothing absorbed the overflow. A ScrolledWindow lets
+        # tab content scroll instead of dictating the window's own size.
+        content_scroller = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            vexpand=True,
+        )
+        content_scroller.set_child(self._placeholder_stack)
+        self._content_toolbar.set_content(content_scroller)
 
         self._pages = {}
         for section in SIDEBAR_SECTIONS:
