@@ -1,6 +1,6 @@
 import os
 
-from gi.repository import Gio, GLib, Gtk
+from gi.repository import Gdk, Gio, GLib, Gtk
 
 EXTENSION_UUID = 'dash2dock-lite@icedman.github.com'
 SCHEMA_ID = 'org.gnome.shell.extensions.dash2dock-lite'
@@ -136,6 +136,37 @@ class ToggleRow(Gtk.Box):
         self.append(self.switch)
 
 
+class ColorRow(Gtk.Box):
+    """A native GTK4 color picker (Gtk.ColorDialog), not a custom-drawn
+    wheel -- it already has a proper color wheel/palette and, with
+    with_alpha enabled, a built-in transparency slider. Reimplementing
+    that by hand would just be a worse version of what GTK already
+    ships."""
+
+    def __init__(self, title: str):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, css_classes=['network-row'])
+        self.set_margin_start(14)
+        self.set_margin_end(14)
+        self.set_margin_top(10)
+        self.set_margin_bottom(10)
+        self.append(Gtk.Label(label=title, xalign=0, hexpand=True))
+
+        dialog = Gtk.ColorDialog(title=f'Choose {title}', with_alpha=True)
+        self.button = Gtk.ColorDialogButton(dialog=dialog, valign=Gtk.Align.CENTER)
+        self.append(self.button)
+
+
+def _rgba_from_tuple(rgba_tuple) -> Gdk.RGBA:
+    r, g, b, a = rgba_tuple
+    rgba = Gdk.RGBA()
+    rgba.red, rgba.green, rgba.blue, rgba.alpha = r, g, b, a
+    return rgba
+
+
+def _tuple_from_rgba(rgba: Gdk.RGBA):
+    return (rgba.red, rgba.green, rgba.blue, rgba.alpha)
+
+
 class DesktopDockPage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -200,6 +231,17 @@ class DesktopDockPage(Gtk.Box):
         behavior_card.append(self._indicators_row)
         self.append(behavior_card)
 
+        self.append(Gtk.Label(label='Custom Colors', xalign=0, css_classes=['heading'], margin_start=4))
+        colors_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        self._bg_color_row = ColorRow('Background Color')
+        self._bg_color_row.button.connect('notify::rgba', self._on_bg_color_changed)
+        colors_card.append(self._bg_color_row)
+        colors_card.append(Gtk.Separator())
+        self._border_color_row = ColorRow('Border Color')
+        self._border_color_row.button.connect('notify::rgba', self._on_border_color_changed)
+        colors_card.append(self._border_color_row)
+        self.append(colors_card)
+
         reset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END)
         reset_btn = Gtk.Button(label='Restore Defaults')
         reset_btn.connect('clicked', self._on_restore_defaults)
@@ -215,6 +257,12 @@ class DesktopDockPage(Gtk.Box):
         self._animate_open_row.switch.set_active(self._settings.get_boolean('open-app-animation'))
         self._indicators_row.switch.set_active(
             self._settings.get_int('running-indicator-style') != INDICATOR_STYLE_OFF
+        )
+        self._bg_color_row.button.set_rgba(
+            _rgba_from_tuple(self._settings.get_value('background-color').unpack())
+        )
+        self._border_color_row.button.set_rgba(
+            _rgba_from_tuple(self._settings.get_value('border-color').unpack())
         )
         self._syncing = False
 
@@ -253,6 +301,16 @@ class DesktopDockPage(Gtk.Box):
             INDICATOR_STYLE_ON if state else INDICATOR_STYLE_OFF,
         )
         return False
+
+    def _on_bg_color_changed(self, button, _pspec):
+        if self._syncing:
+            return
+        self._settings.set_value('background-color', GLib.Variant('(dddd)', _tuple_from_rgba(button.get_rgba())))
+
+    def _on_border_color_changed(self, button, _pspec):
+        if self._syncing:
+            return
+        self._settings.set_value('border-color', GLib.Variant('(dddd)', _tuple_from_rgba(button.get_rgba())))
 
     def _on_restore_defaults(self, _button):
         interface_settings = Gio.Settings.new('org.gnome.desktop.interface')
