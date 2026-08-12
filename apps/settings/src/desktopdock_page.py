@@ -5,6 +5,12 @@ from gi.repository import Gdk, Gio, GLib, Gtk
 EXTENSION_UUID = 'dash2dock-lite@icedman.github.com'
 SCHEMA_ID = 'org.gnome.shell.extensions.dash2dock-lite'
 
+# "Minimized window animation" isn't a dash2dock-lite setting at all --
+# the Genie effect is a whole separate extension. "None" means that
+# extension is simply disabled, same enabled-extensions/disabled-extensions
+# mechanism used everywhere else in peachOS.
+GENIE_EXTENSION_UUID = 'compiz-alike-magic-lamp-effect@hermes83.github.com'
+
 # Extension GSettings schemas aren't in the global schema registry the way
 # app schemas are -- Gio.Settings.new(schema_id) hard-aborts the process
 # (not a catchable exception) if the schema isn't installed globally. GNOME
@@ -176,6 +182,7 @@ class DesktopDockPage(Gtk.Box):
         self.set_margin_bottom(18)
 
         self._settings = _load_extension_settings(SCHEMA_ID)
+        self._shell_settings = Gio.Settings.new('org.gnome.shell')
         self._syncing = False
 
         self.append(Gtk.Label(label='Dock', xalign=0, css_classes=['heading'], margin_start=4))
@@ -190,6 +197,8 @@ class DesktopDockPage(Gtk.Box):
         self._build_ui()
         self._refresh_from_settings()
         self._settings.connect('changed', lambda *_a: self._refresh_from_settings())
+        self._shell_settings.connect('changed::enabled-extensions', lambda *_a: self._refresh_genie_row())
+        self._shell_settings.connect('changed::disabled-extensions', lambda *_a: self._refresh_genie_row())
 
     def _build_ui(self):
         size_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
@@ -213,6 +222,11 @@ class DesktopDockPage(Gtk.Box):
         self._position_row = DropdownRow('Dock position on screen', DOCK_LOCATIONS)
         self._position_row.dropdown.connect('notify::selected', self._on_position_changed)
         position_card.append(self._position_row)
+        position_card.append(Gtk.Separator())
+
+        self._genie_row = DropdownRow('Minimized window animation', [('Genie Effect', True), ('None', False)])
+        self._genie_row.dropdown.connect('notify::selected', self._on_genie_changed)
+        position_card.append(self._genie_row)
         self.append(position_card)
 
         behavior_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
@@ -265,6 +279,32 @@ class DesktopDockPage(Gtk.Box):
             _rgba_from_tuple(self._settings.get_value('border-color').unpack())
         )
         self._syncing = False
+        self._refresh_genie_row()
+
+    def _refresh_genie_row(self):
+        enabled = GENIE_EXTENSION_UUID in self._shell_settings.get_strv('enabled-extensions')
+        self._syncing = True
+        self._genie_row.set_selected_value(enabled)
+        self._syncing = False
+
+    def _on_genie_changed(self, dropdown, _pspec):
+        if self._syncing:
+            return
+        want_enabled = self._genie_row.get_selected_value()
+        enabled_list = self._shell_settings.get_strv('enabled-extensions')
+        disabled_list = self._shell_settings.get_strv('disabled-extensions')
+        if want_enabled:
+            if GENIE_EXTENSION_UUID not in enabled_list:
+                enabled_list.append(GENIE_EXTENSION_UUID)
+            if GENIE_EXTENSION_UUID in disabled_list:
+                disabled_list.remove(GENIE_EXTENSION_UUID)
+        else:
+            if GENIE_EXTENSION_UUID in enabled_list:
+                enabled_list.remove(GENIE_EXTENSION_UUID)
+            if GENIE_EXTENSION_UUID not in disabled_list:
+                disabled_list.append(GENIE_EXTENSION_UUID)
+        self._shell_settings.set_strv('enabled-extensions', enabled_list)
+        self._shell_settings.set_strv('disabled-extensions', disabled_list)
 
     def _on_size_changed(self, scale):
         if self._syncing:
