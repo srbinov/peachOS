@@ -31,16 +31,20 @@ class InfoRow(Gtk.Box):
 
 class HistoryCard(Gtk.Box):
     def __init__(self, title: str):
+        # Margins go on the *children*, not on this box itself -- margins on
+        # the card widget just push it away from its siblings (that's what
+        # produced the header text sitting flush in the corner before: the
+        # card's own edges had zero internal padding for its content).
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=['wifi-card'])
-        self.set_margin_start(14)
-        self.set_margin_end(14)
-        self.set_margin_top(12)
-        self.set_margin_bottom(14)
-        self.append(Gtk.Label(label=title, xalign=0, css_classes=['heading']))
+        title_label = Gtk.Label(
+            label=title, xalign=0, css_classes=['heading'],
+            margin_start=14, margin_end=14, margin_top=12,
+        )
+        self.append(title_label)
         placeholder = Gtk.Label(
             label='Not enough history collected yet.',
-            xalign=0, css_classes=['dim-label', 'caption'],
-            margin_top=24, margin_bottom=24, halign=Gtk.Align.CENTER,
+            xalign=0.5, css_classes=['dim-label', 'caption'],
+            halign=Gtk.Align.CENTER, margin_top=20, margin_bottom=28,
         )
         self.append(placeholder)
 
@@ -88,8 +92,8 @@ class BatteryPage(Gtk.Box):
         self.append(settings_frame)
 
         toggle_row = Gtk.Box(css_classes=['linked'], halign=Gtk.Align.FILL, homogeneous=True)
-        btn_24h = Gtk.ToggleButton(label='Last 24 Hours', active=True)
-        btn_10d = Gtk.ToggleButton(label='Last 10 Days', group=btn_24h)
+        btn_24h = Gtk.ToggleButton(label='Last 24 Hours', active=True, css_classes=['segmented-toggle'])
+        btn_10d = Gtk.ToggleButton(label='Last 10 Days', group=btn_24h, css_classes=['segmented-toggle'])
         toggle_row.append(btn_24h)
         toggle_row.append(btn_10d)
         self.append(toggle_row)

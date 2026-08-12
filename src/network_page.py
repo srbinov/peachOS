@@ -1,8 +1,12 @@
+import os
+
 import gi
 
 gi.require_version('NM', '1.0')
 
 from gi.repository import GLib, Gtk, NM
+
+ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 DEVICE_TYPE_ICON = {
     NM.DeviceType.ETHERNET: 'network-wired-symbolic',
@@ -17,19 +21,24 @@ CONNECTED_STATES = {NM.DeviceState.ACTIVATED}
 
 
 class ServiceRow(Gtk.Box):
-    def __init__(self, title: str, icon_name: str, subtitle: str, connected: bool):
+    def __init__(self, title: str, icon_name: str, subtitle: str, connected: bool, icon_file: str = None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
         self.set_margin_start(12)
         self.set_margin_end(8)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
 
-        icon_box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=['sidebar-icon', 'accent-blue'])
-        icon_box.set_size_request(28, 28)
-        icon = Gtk.Image.new_from_icon_name(icon_name)
-        icon.set_pixel_size(15)
-        icon_box.append(icon)
-        self.append(icon_box)
+        if icon_file and os.path.isfile(icon_file):
+            icon = Gtk.Image.new_from_file(icon_file)
+            icon.set_pixel_size(28)
+            self.append(icon)
+        else:
+            icon_box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=['sidebar-icon', 'accent-blue'])
+            icon_box.set_size_request(28, 28)
+            icon = Gtk.Image.new_from_icon_name(icon_name)
+            icon.set_pixel_size(15)
+            icon_box.append(icon)
+            self.append(icon_box)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
         text_box.append(Gtk.Label(label=title, xalign=0))
@@ -59,17 +68,15 @@ class NetworkPage(Gtk.Box):
         NM.Client.new_async(None, self._on_client_ready)
 
     def _build_ui(self):
-        self._services_frame = Gtk.Box(css_classes=['wifi-card'])
-        self._services_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._services_frame.append(self._services_list)
-        self.append(self._services_frame)
+        self._devices_frame = Gtk.Box(css_classes=['wifi-card'])
+        self._devices_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self._devices_frame.append(self._devices_list)
+        self.append(self._devices_frame)
 
-        self._other_label = Gtk.Label(label='Other Services', xalign=0, css_classes=['heading'], visible=False)
-        self.append(self._other_label)
-        self._other_frame = Gtk.Box(css_classes=['wifi-card'], visible=False)
-        self._other_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._other_frame.append(self._other_list)
-        self.append(self._other_frame)
+        self._firewall_frame = Gtk.Box(css_classes=['wifi-card'])
+        self._firewall_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self._firewall_frame.append(self._firewall_list)
+        self.append(self._firewall_frame)
 
         self._status_label = Gtk.Label(
             label='Loading network services…', wrap=True,
@@ -92,31 +99,35 @@ class NetworkPage(Gtk.Box):
         self._refresh()
 
     def _refresh(self):
-        while (child := self._services_list.get_first_child()) is not None:
-            self._services_list.remove(child)
+        while (child := self._devices_list.get_first_child()) is not None:
+            self._devices_list.remove(child)
 
         devices = [
             d for d in self._client.get_devices()
             if d.get_device_type() not in (NM.DeviceType.LOOPBACK, NM.DeviceType.GENERIC)
         ]
 
+        self._devices_frame.set_visible(bool(devices))
+        self._status_label.set_visible(not devices)
         if not devices:
             self._status_label.set_label('No network interfaces detected.')
-            self._status_label.set_visible(True)
         else:
-            self._status_label.set_visible(False)
             for device in devices:
-                icon_name = DEVICE_TYPE_ICON.get(device.get_device_type(), 'network-wired-symbolic')
+                dtype = device.get_device_type()
+                icon_name = DEVICE_TYPE_ICON.get(dtype, 'network-wired-symbolic')
+                icon_file = os.path.join(ICON_DIR, 'wifi.svg') if dtype == NM.DeviceType.WIFI else None
                 title = device.get_iface() or device.get_type_description() or 'Network'
                 active_conn = device.get_active_connection()
                 if active_conn:
                     title = active_conn.get_id() or title
                 connected = device.get_state() in CONNECTED_STATES
                 subtitle = 'Connected' if connected else 'Not Connected'
-                self._services_list.append(ServiceRow(title, icon_name, subtitle, connected))
+                self._devices_list.append(ServiceRow(title, icon_name, subtitle, connected, icon_file=icon_file))
 
+        while (child := self._firewall_list.get_first_child()) is not None:
+            self._firewall_list.remove(child)
         firewall_active = self._read_firewall_status()
-        self._services_list.append(ServiceRow(
+        self._firewall_list.append(ServiceRow(
             'Firewall', 'security-high-symbolic',
             'Active' if firewall_active else 'Inactive', firewall_active,
         ))

@@ -109,10 +109,13 @@ headerbar.flat {
     border-radius: 999px;
 }
 .wifi-card {
-    background-color: @card_bg_color;
+    background-color: alpha(currentColor, 0.05);
     border-radius: 10px;
     border: none;
     box-shadow: none;
+}
+.segmented-toggle {
+    padding: 8px 4px;
 }
 .network-row:hover {
     background-color: alpha(currentColor, 0.06);
