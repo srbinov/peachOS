@@ -22,24 +22,33 @@ ACCENT_COLORS = [
 ]
 
 
-class SchemeOption(Gtk.ToggleButton):
-    def __init__(self, label: str, icon_filename: str, group: Gtk.ToggleButton = None):
-        super().__init__(css_classes=['flat', 'scheme-toggle'])
-        if group is not None:
-            self.set_group(group)
+class SchemeOption(Gtk.Box):
+    """A photo tile + label below it. The selection ring hugs only the
+    photo button -- the label is a separate sibling outside it, not
+    wrapped inside the clickable/ring area."""
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    def __init__(self, label: str, icon_filename: str, group: 'SchemeOption' = None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
+
+        self.toggle = Gtk.ToggleButton(css_classes=['flat', 'scheme-toggle'])
+        if group is not None:
+            self.toggle.set_group(group.toggle)
 
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = Gtk.Picture.new_for_filename(os.path.join(ICON_DIR, icon_filename))
         picture.set_content_fit(Gtk.ContentFit.COVER)
-        picture.set_size_request(92, 52)
+        picture.set_size_request(48, 27)
         photo_wrap.append(picture)
-        box.append(photo_wrap)
+        self.toggle.set_child(photo_wrap)
+        self.append(self.toggle)
 
-        box.append(Gtk.Label(label=label))
-        self.set_child(box)
+        self.append(Gtk.Label(label=label, css_classes=['caption']))
+
+        click = Gtk.GestureClick()
+        click.connect('released', lambda *_: self.toggle.set_active(True))
+        self.add_controller(click)
+        self.set_cursor_from_name('pointer')
 
 
 class ColorSwatch(Gtk.ToggleButton):
@@ -82,13 +91,13 @@ class AppearancePage(Gtk.Box):
         ))
 
         options_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=16, halign=Gtk.Align.CENTER,
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.CENTER,
             margin_bottom=14, margin_top=4,
         )
         self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg')
         self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', group=self._light_option)
-        self._light_option.connect('toggled', self._on_scheme_toggled)
-        self._dark_option.connect('toggled', self._on_scheme_toggled)
+        self._light_option.toggle.connect('toggled', self._on_scheme_toggled)
+        self._dark_option.toggle.connect('toggled', self._on_scheme_toggled)
         options_row.append(self._light_option)
         options_row.append(self._dark_option)
         appearance_card.append(options_row)
@@ -126,16 +135,16 @@ class AppearancePage(Gtk.Box):
     def _on_scheme_toggled(self, button):
         if self._syncing or not button.get_active():
             return
-        value = 'default' if button is self._light_option else 'prefer-dark'
+        value = 'default' if button is self._light_option.toggle else 'prefer-dark'
         self._settings.set_string('color-scheme', value)
 
     def _sync_scheme(self):
         self._syncing = True
         scheme = self._settings.get_string('color-scheme')
         if scheme == 'prefer-dark':
-            self._dark_option.set_active(True)
+            self._dark_option.toggle.set_active(True)
         else:
-            self._light_option.set_active(True)
+            self._light_option.toggle.set_active(True)
         self._syncing = False
 
     # ---- Theme (accent-color) ------------------------------------------

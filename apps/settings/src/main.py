@@ -122,32 +122,55 @@ headerbar.flat {
     background-color: alpha(currentColor, 0.06);
 }
 .scheme-photo {
-    border-radius: 8px;
+    border-radius: 5px;
 }
 .scheme-toggle {
-    padding: 6px;
-    border-radius: 12px;
+    min-width: 0;
+    min-height: 0;
+    padding: 3px;
+    border-radius: 8px;
     border: 2px solid transparent;
-    background: none;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+}
+.scheme-toggle:hover,
+.scheme-toggle:active,
+.scheme-toggle:checked,
+.scheme-toggle:checked:hover,
+.scheme-toggle:checked:active {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
 }
 .scheme-toggle:checked {
     border-color: @accent_bg_color;
-    background: none;
 }
 .color-swatch {
-    padding: 3px;
+    min-width: 0;
+    min-height: 0;
+    padding: 2px;
     border-radius: 999px;
     border: 2px solid transparent;
-    background: none;
-    min-width: 24px;
-    min-height: 24px;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+}
+.color-swatch:hover,
+.color-swatch:active,
+.color-swatch:checked,
+.color-swatch:checked:hover,
+.color-swatch:checked:active {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
 }
 .color-swatch:checked {
-    border-color: @accent_bg_color;
+    border-color: #FFFFFF;
 }
 .color-swatch-dot {
-    min-width: 18px;
-    min-height: 18px;
+    min-width: 14px;
+    min-height: 14px;
     border-radius: 999px;
 }
 """
