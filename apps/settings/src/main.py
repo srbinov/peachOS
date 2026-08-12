@@ -14,6 +14,7 @@ from wifi_page import WifiPage
 from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
 from battery_page import BatteryPage
+from appearance_page import AppearancePage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -120,6 +121,35 @@ headerbar.flat {
 .network-row:hover {
     background-color: alpha(currentColor, 0.06);
 }
+.scheme-photo {
+    border-radius: 8px;
+}
+.scheme-toggle {
+    padding: 6px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    background: none;
+}
+.scheme-toggle:checked {
+    border-color: @accent_bg_color;
+    background: none;
+}
+.color-swatch {
+    padding: 3px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background: none;
+    min-width: 24px;
+    min-height: 24px;
+}
+.color-swatch:checked {
+    border-color: @accent_bg_color;
+}
+.color-swatch-dot {
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 999px;
+}
 """
 
 
@@ -215,6 +245,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                     self._pages[row_id] = NetworkPage()
                 elif row_id == 'energy':
                     self._pages[row_id] = BatteryPage()
+                elif row_id == 'appearance':
+                    self._pages[row_id] = AppearancePage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
