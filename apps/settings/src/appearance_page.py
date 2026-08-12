@@ -15,12 +15,13 @@ def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
     size -- Picture's natural size comes from the source image, and
     set_size_request() only sets a minimum, not a cap, so it kept
     rendering huge regardless of the requested display size. A texture
-    that's already 48x27 has an unambiguous 48x27 natural size."""
+    that's already the target size has an unambiguous natural size."""
     pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, False)
     texture = Gdk.Texture.new_for_pixbuf(pixbuf)
     picture = Gtk.Picture.new_for_paintable(texture)
     picture.set_content_fit(Gtk.ContentFit.FILL)
     return picture
+
 
 # Real GNOME accent-color enum (org.gnome.desktop.interface accent-color) with
 # their actual rendered hex values, read from Adw.AccentColor.to_standalone_rgba()
@@ -49,55 +50,49 @@ def _apply_css(widget: Gtk.Widget, css: str):
 
 
 class SchemeOption(Gtk.Box):
-    """A photo tile + label below it. The selection ring hugs only the
-    photo button -- the label is a separate sibling outside it, not
-    wrapped inside the clickable/ring area.
-
-    Selection look is driven by a manually-toggled 'selected' CSS class
-    rather than the :checked pseudo-class -- the active GTK theme has its
-    own :checked/:hover/:active button styling that kept winning the
-    cascade fight no matter how many states were overridden. A class name
-    the theme has zero rules for sidesteps that entirely.
-    """
+    """A photo tile + label below it. Plain Box, not a Gtk.ToggleButton --
+    same reasoning as ColorSwatch below: the active GTK theme's baked-in
+    button checked/hover/focus styling kept winning the cascade fight no
+    matter how many states got overridden, so selection here is 100% a
+    manually-managed 'selected' CSS class on a widget the theme has no
+    opinions about. The selection ring is a separate inner box (ring_box)
+    wrapping just the photo -- the label is a sibling outside it, not
+    wrapped inside the clickable/ring area."""
 
     TILE_SIZE = (112, 63)  # 16:9, matches the demo photos' aspect ratio
 
-    def __init__(self, label: str, icon_filename: str, group: 'SchemeOption' = None):
+    def __init__(self, label: str, icon_filename: str, on_click):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
+        self._selected = False
 
-        self.toggle = Gtk.ToggleButton(css_classes=['flat', 'scheme-toggle'], halign=Gtk.Align.CENTER)
-        if group is not None:
-            self.toggle.set_group(group.toggle)
-
+        self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *self.TILE_SIZE)
         photo_wrap.append(picture)
+        self.ring_box.append(photo_wrap)
+        self.append(self.ring_box)
 
-        self.toggle.set_child(photo_wrap)
-        self.append(self.toggle)
         self.append(Gtk.Label(label=label, css_classes=['caption']))
 
         click = Gtk.GestureClick()
-        click.connect('released', lambda *_: self.toggle.set_active(True))
+        click.connect('released', lambda *_a: on_click(self))
         self.add_controller(click)
         self.set_cursor_from_name('pointer')
 
+    def get_selected(self) -> bool:
+        return self._selected
+
     def set_selected(self, selected: bool, ring_hex: str):
+        self._selected = selected
         if selected:
-            self.toggle.add_css_class('selected')
-            _apply_css(self.toggle, f'button.selected {{ border-color: {ring_hex}; }}')
+            self.ring_box.add_css_class('selected')
+            _apply_css(self.ring_box, f'box.selected {{ border-color: {ring_hex}; }}')
         else:
-            self.toggle.remove_css_class('selected')
+            self.ring_box.remove_css_class('selected')
 
 
 class ColorSwatch(Gtk.Box):
-    """Plain Box, not a ToggleButton -- GTK themes bake in a LOT of opinion
-    about button checked/hover/focus states, and overriding all of it
-    reliably turned out to be a losing battle (three attempts, still a
-    gray box showing through). A plain box has no such built-in states to
-    fight: selection is 100% our own 'selected' CSS class."""
-
     def __init__(self, name: str, hex_color: str, on_click):
         super().__init__(css_classes=['color-swatch'], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.accent_name = name
@@ -132,36 +127,31 @@ class AppearancePage(Gtk.Box):
         self.set_margin_bottom(18)
 
         self._settings = Gio.Settings.new('org.gnome.desktop.interface')
-        self._syncing = False
 
         self._build_ui()
 
-        self._settings.connect('changed::color-scheme', lambda *_: self._sync_scheme())
-        self._settings.connect('changed::accent-color', lambda *_: self._sync_accent())
-        self._sync_scheme()
-        self._sync_accent()
+        self._settings.connect('changed::color-scheme', lambda *_: self._refresh_scheme_selection())
+        self._settings.connect('changed::accent-color', lambda *_: self._refresh_all_selection())
+        self._refresh_all_selection()
 
     def _build_ui(self):
-        # Single horizontal row: "Appearance" label on the left, tiles on
-        # the right, both vertically centered together -- not stacked.
-        # Margins go on the children (same lesson as theme_card below):
-        # margins on the card itself only push it away from its siblings,
-        # they don't add internal padding for its content.
+        # Single horizontal row: "Appearance" label pinned top-left, tiles
+        # on the right. Margins go on the children, not appearance_card
+        # itself -- margins on the card widget only push it away from its
+        # siblings (external spacing), they don't add internal padding.
         appearance_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL)
         appearance_card.append(Gtk.Label(
             label='Appearance', xalign=0, css_classes=['heading'],
-            hexpand=True, valign=Gtk.Align.CENTER,
-            margin_start=14, margin_top=16, margin_bottom=16,
+            hexpand=True, valign=Gtk.Align.START,
+            margin_start=14, margin_top=14,
         ))
 
         options_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER,
             margin_end=14, margin_top=12, margin_bottom=12,
         )
-        self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg')
-        self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', group=self._light_option)
-        self._light_option.toggle.connect('toggled', self._on_scheme_toggled)
-        self._dark_option.toggle.connect('toggled', self._on_scheme_toggled)
+        self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg', on_click=self._on_scheme_clicked)
+        self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', on_click=self._on_scheme_clicked)
         options_row.append(self._light_option)
         options_row.append(self._dark_option)
         appearance_card.append(options_row)
@@ -169,9 +159,6 @@ class AppearancePage(Gtk.Box):
 
         self.append(Gtk.Label(label='Theme', xalign=0, css_classes=['heading'], margin_start=4))
 
-        # Margins go on the children, not on theme_card itself -- margins on
-        # the card widget only push it away from its siblings (external
-        # spacing), they don't add internal padding for its content.
         theme_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         theme_card.append(Gtk.Label(
             label='Color', xalign=0, hexpand=True,
@@ -179,7 +166,7 @@ class AppearancePage(Gtk.Box):
         ))
 
         swatch_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
             margin_end=14, margin_top=10, margin_bottom=10,
         )
         self._swatches = {}
@@ -192,42 +179,25 @@ class AppearancePage(Gtk.Box):
 
     # ---- Appearance (color-scheme) -------------------------------------
 
-    def _on_scheme_toggled(self, button):
-        if self._syncing or not button.get_active():
-            return
-        value = 'default' if button is self._light_option.toggle else 'prefer-dark'
+    def _on_scheme_clicked(self, option):
+        value = 'default' if option is self._light_option else 'prefer-dark'
         self._settings.set_string('color-scheme', value)
         self._refresh_scheme_selection()
 
-    def _sync_scheme(self):
-        self._syncing = True
-        scheme = self._settings.get_string('color-scheme')
-        if scheme == 'prefer-dark':
-            self._dark_option.toggle.set_active(True)
-        else:
-            self._light_option.toggle.set_active(True)
-        self._syncing = False
-        self._refresh_scheme_selection()
-
     def _refresh_scheme_selection(self):
+        is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
         ring_hex = ACCENT_HEX.get(self._settings.get_string('accent-color'), '#0461BE')
-        self._light_option.set_selected(self._light_option.toggle.get_active(), ring_hex)
-        self._dark_option.set_selected(self._dark_option.toggle.get_active(), ring_hex)
+        self._light_option.set_selected(not is_dark, ring_hex)
+        self._dark_option.set_selected(is_dark, ring_hex)
 
     # ---- Theme (accent-color) ------------------------------------------
 
     def _on_swatch_clicked(self, swatch):
-        if self._syncing:
-            return
         self._settings.set_string('accent-color', swatch.accent_name)
-        self._refresh_swatch_selection()
-        self._refresh_scheme_selection()
+        self._refresh_all_selection()
 
-    def _sync_accent(self):
-        self._refresh_swatch_selection()
-        self._refresh_scheme_selection()
-
-    def _refresh_swatch_selection(self):
+    def _refresh_all_selection(self):
         active = self._settings.get_string('accent-color')
         for name, swatch in self._swatches.items():
             swatch.set_selected(name == active)
+        self._refresh_scheme_selection()

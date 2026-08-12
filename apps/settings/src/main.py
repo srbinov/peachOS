@@ -124,28 +124,10 @@ headerbar.flat {
 .scheme-photo {
     border-radius: 5px;
 }
-.scheme-toggle {
-    min-width: 0;
-    min-height: 0;
+.scheme-ring {
     padding: 3px;
     border-radius: 8px;
     border: 2px solid transparent;
-    background-color: transparent;
-    background-image: none;
-    box-shadow: none;
-}
-.scheme-toggle:hover,
-.scheme-toggle:active,
-.scheme-toggle:checked,
-.scheme-toggle:checked:hover,
-.scheme-toggle:checked:active,
-.scheme-toggle:focus,
-.scheme-toggle:focus-visible,
-.scheme-toggle:focus-within {
-    background-color: transparent;
-    background-image: none;
-    box-shadow: none;
-    outline: none;
 }
 .color-swatch {
     padding: 2px;
@@ -156,8 +138,8 @@ headerbar.flat {
     border-color: #FFFFFF;
 }
 .color-swatch-dot {
-    min-width: 14px;
-    min-height: 14px;
+    min-width: 20px;
+    min-height: 20px;
     border-radius: 999px;
 }
 """
