@@ -99,27 +99,16 @@ headerbar.flat {
 
 ICON_DIR = os.path.join(DATA_DIR, 'icons')
 
-# The provided SVGs each have a different amount of internal padding baked
-# into their canvas (some artwork fills ~96% of the canvas, some only
-# ~64%), so scaling every file to the same pixel_size makes the actual
-# drawn icon look inconsistently sized even though the canvas size is
-# identical. These fractions are the measured bounding box of non-
-# transparent pixels as a share of the canvas (see
-# scratchpad/measure_icons.py) -- used to scale each icon's *canvas* so
-# the visible artwork ends up a consistent size instead.
-ICON_INK_FRACTION = {
-    'accessibility': 0.81,
-    'appearance': 0.82,
-    'bluetooth': 0.86,
-    'desktopdock': 0.99,
-    'energy': 0.85,
-    'general': 0.84,
-    'network': 0.64,
-    'wifi': 0.96,
-}
-DEFAULT_INK_FRACTION = 0.85
-
-ICON_SLOT_PX = 20  # fixed footprint every icon sits in, so labels always start at the same x
+# The provided SVGs originally had wildly inconsistent amounts of internal
+# padding baked into their canvas (ink ranging from ~64% to ~99% of the
+# canvas -- see scratchpad/measure_icons.py). Rather than compensating per
+# icon at render time, scratchpad/crop_icons.py rewrote each file's
+# viewBox to a tight, centered square around its actual artwork, so every
+# icon in data/icons/ is now uniformly ~94% ink. That means a single flat
+# pixel_size now gives consistent size *and* centering for all of them.
+SIDEBAR_ICON_PX = 18
+PLACEHOLDER_ICON_PX = 60
+ICON_SLOT_PX = 22  # fixed footprint every icon sits in, so labels always start at the same x
 
 
 def _custom_icon_path(row_id: str):
@@ -130,11 +119,6 @@ def _custom_icon_path(row_id: str):
     return None
 
 
-def _render_px_for_ink(row_id: str, target_ink_px: int) -> int:
-    frac = ICON_INK_FRACTION.get(row_id, DEFAULT_INK_FRACTION)
-    return round(target_ink_px / frac)
-
-
 def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
     box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
     box.set_size_request(ICON_SLOT_PX, ICON_SLOT_PX)
@@ -142,14 +126,14 @@ def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
     custom_path = _custom_icon_path(row_id)
     if custom_path:
         image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(_render_px_for_ink(row_id, target_ink_px=15))
+        image.set_pixel_size(SIDEBAR_ICON_PX)
         box.append(image)
         return box
 
     box.add_css_class('sidebar-icon')
     box.add_css_class(ACCENT_CLASSES[color])
     image = Gtk.Image.new_from_icon_name(icon_name)
-    image.set_pixel_size(13)
+    image.set_pixel_size(14)
     box.append(image)
     return box
 
@@ -158,7 +142,7 @@ def make_placeholder_icon(row_id: str, icon_name: str) -> Gtk.Widget:
     custom_path = _custom_icon_path(row_id)
     if custom_path:
         image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(_render_px_for_ink(row_id, target_ink_px=50))
+        image.set_pixel_size(PLACEHOLDER_ICON_PX)
         return image
     image = Gtk.Image.new_from_icon_name(icon_name)
     image.set_pixel_size(64)
