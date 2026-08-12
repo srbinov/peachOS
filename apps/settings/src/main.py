@@ -15,6 +15,7 @@ from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
 from battery_page import BatteryPage
 from appearance_page import AppearancePage
+from desktopdock_page import DesktopDockPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -239,6 +240,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                     self._pages[row_id] = BatteryPage()
                 elif row_id == 'appearance':
                     self._pages[row_id] = AppearancePage()
+                elif row_id == 'desktopdock':
+                    self._pages[row_id] = DesktopDockPage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
