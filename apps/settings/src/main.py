@@ -17,6 +17,7 @@ from battery_page import BatteryPage
 from appearance_page import AppearancePage
 from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
+from general_page import GeneralPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -265,6 +266,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                     self._pages[row_id] = DesktopDockPage()
                 elif row_id == 'displays':
                     self._pages[row_id] = DisplaysPage()
+                elif row_id == 'general':
+                    self._pages[row_id] = GeneralPage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)

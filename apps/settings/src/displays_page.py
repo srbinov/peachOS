@@ -2,6 +2,8 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 POWER_SERVICE = 'org.gnome.SettingsDaemon.Power'
@@ -267,6 +269,11 @@ class DisplaysPage(Gtk.Box):
             self._color_settings.connect(f'changed::{key}', lambda *_a: self._refresh_night_light())
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'displays.svg'), 'video-display-symbolic',
+            'Displays', 'Manage the arrangement, resolution, and color of your displays.',
+        ))
+
         header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
         icon_path = os.path.join(ICON_DIR, 'laptop.svg')
         if os.path.isfile(icon_path):

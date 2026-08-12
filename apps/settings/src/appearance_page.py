@@ -6,6 +6,8 @@ gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Gdk, GdkPixbuf, Gio, Gtk
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 
@@ -136,6 +138,11 @@ class AppearancePage(Gtk.Box):
         self._refresh_all_selection()
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'appearance.svg'), 'preferences-desktop-theme-symbolic',
+            'Appearance', 'Choose a light or dark appearance for peachOS, and pick an accent color.',
+        ))
+
         # Single horizontal row: "Appearance" label pinned top-left, tiles
         # on the right. Margins go on the children, not appearance_card
         # itself -- margins on the card widget only push it away from its

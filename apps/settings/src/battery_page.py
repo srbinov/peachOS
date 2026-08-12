@@ -2,6 +2,8 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 UPOWER_SERVICE = 'org.freedesktop.UPower'
@@ -64,6 +66,11 @@ class BatteryPage(Gtk.Box):
         self._connect_bus()
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'energy.svg'), 'battery-full-symbolic',
+            'Battery', 'Monitor battery health and manage power-saving settings.',
+        ))
+
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         icon_path = os.path.join(ICON_DIR, 'energy.svg')
         icon = Gtk.Image.new_from_file(icon_path) if os.path.isfile(icon_path) \

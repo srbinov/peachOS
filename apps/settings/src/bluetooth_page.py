@@ -2,6 +2,8 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 BLUEZ_SERVICE = 'org.bluez'
@@ -62,6 +64,11 @@ class BluetoothPage(Gtk.Box):
     # ---- UI ---------------------------------------------------------
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'bluetooth.svg'), 'bluetooth-symbolic',
+            'Bluetooth', 'Connect to accessories you can use for activities such as streaming music, typing, and gaming.',
+        ))
+
         card = Gtk.Box(css_classes=['wifi-card'])
         card_box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=12,

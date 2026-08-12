@@ -6,6 +6,8 @@ gi.require_version('NM', '1.0')
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk, NM
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 
@@ -87,6 +89,11 @@ class WifiPage(Gtk.Box):
     # ---- UI construction ----------------------------------------------
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'wifi.svg'), 'network-wireless-symbolic',
+            'Wi-Fi', 'Connect to available networks or manage your Wi-Fi settings.',
+        ))
+
         # Top info card: icon, title, description, toggle
         card = Gtk.Box(css_classes=['wifi-card'])
         card_box = Gtk.Box(

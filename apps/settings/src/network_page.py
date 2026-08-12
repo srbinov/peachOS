@@ -6,6 +6,8 @@ gi.require_version('NM', '1.0')
 
 from gi.repository import GLib, Gtk, NM
 
+from widgets import make_hero_header
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 DEVICE_TYPE_ICON = {
@@ -68,6 +70,11 @@ class NetworkPage(Gtk.Box):
         NM.Client.new_async(None, self._on_client_ready)
 
     def _build_ui(self):
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'network.svg'), 'network-workgroup-symbolic',
+            'Network', 'Manage the network interfaces and services connected to this computer.',
+        ))
+
         self._devices_frame = Gtk.Box(css_classes=['wifi-card'])
         self._devices_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._devices_frame.append(self._devices_list)

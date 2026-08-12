@@ -2,6 +2,10 @@ import os
 
 from gi.repository import Gdk, Gio, GLib, Gtk
 
+from widgets import make_hero_header
+
+ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
+
 EXTENSION_UUID = 'dash2dock-lite@icedman.github.com'
 SCHEMA_ID = 'org.gnome.shell.extensions.dash2dock-lite'
 
@@ -184,6 +188,11 @@ class DesktopDockPage(Gtk.Box):
         self._settings = _load_extension_settings(SCHEMA_ID)
         self._shell_settings = Gio.Settings.new('org.gnome.shell')
         self._syncing = False
+
+        self.append(make_hero_header(
+            os.path.join(ICON_DIR, 'desktopdock.svg'), 'view-dual-symbolic',
+            'Desktop & Dock', 'Customize the look and feel of the Dock, and how windows and apps appear on your desktop.',
+        ))
 
         self.append(Gtk.Label(label='Dock', xalign=0, css_classes=['heading'], margin_start=4))
 
