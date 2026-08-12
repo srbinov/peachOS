@@ -115,7 +115,7 @@ class NetworkPage(Gtk.Box):
             for device in devices:
                 dtype = device.get_device_type()
                 icon_name = DEVICE_TYPE_ICON.get(dtype, 'network-wired-symbolic')
-                icon_file = os.path.join(ICON_DIR, 'wifi.svg') if dtype == NM.DeviceType.WIFI else None
+                icon_file = os.path.join(ICON_DIR, 'wifi.svg')
                 title = device.get_iface() or device.get_type_description() or 'Network'
                 active_conn = device.get_active_connection()
                 if active_conn:
@@ -130,6 +130,7 @@ class NetworkPage(Gtk.Box):
         self._firewall_list.append(ServiceRow(
             'Firewall', 'security-high-symbolic',
             'Active' if firewall_active else 'Inactive', firewall_active,
+            icon_file=os.path.join(ICON_DIR, 'firewall.svg'),
         ))
 
     def _read_firewall_status(self) -> bool:
