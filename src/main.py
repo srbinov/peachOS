@@ -11,6 +11,9 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wifi_page import WifiPage
+from bluetooth_page import BluetoothPage
+from network_page import NetworkPage
+from battery_page import BatteryPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -21,7 +24,7 @@ SIDEBAR_SECTIONS = [
         ('wifi', 'Wi-Fi', 'network-wireless-symbolic', '#0A84FF'),
         ('bluetooth', 'Bluetooth', 'bluetooth-symbolic', '#0A84FF'),
         ('network', 'Network', 'network-workgroup-symbolic', '#5AC8FA'),
-        ('energy', 'Energy', 'battery-full-symbolic', '#34C759'),
+        ('energy', 'Battery', 'battery-full-symbolic', '#34C759'),
     ],
     [
         ('general', 'General', 'applications-system-symbolic', '#8E8E93'),
@@ -99,6 +102,10 @@ headerbar.flat {
 }
 .connected-dot {
     background-color: #34C759;
+    border-radius: 999px;
+}
+.disconnected-dot {
+    background-color: alpha(currentColor, 0.3);
     border-radius: 999px;
 }
 .wifi-card {
@@ -199,6 +206,12 @@ class SettingsWindow(Adw.ApplicationWindow):
             for row_id, title, icon_name, color in section:
                 if row_id == 'wifi':
                     self._pages[row_id] = WifiPage()
+                elif row_id == 'bluetooth':
+                    self._pages[row_id] = BluetoothPage()
+                elif row_id == 'network':
+                    self._pages[row_id] = NetworkPage()
+                elif row_id == 'energy':
+                    self._pages[row_id] = BatteryPage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
