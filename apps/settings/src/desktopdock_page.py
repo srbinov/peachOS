@@ -26,13 +26,14 @@ DOCK_LOCATIONS = [
     ('Right', 2),
 ]
 
-# keys.js declares 'running-indicator-style' options as:
-# ['default', 'dots', 'dot', 'dashes', 'dash', 'squares', 'square',
-#  'segmented', 'solid', 'triangles', 'triangle', 'diamonds', 'diamond',
-#  'binary'] -- there is no "none"/hidden entry, so "off" here means the
-# smallest/least visible real style ('dot'), not true invisibility.
-INDICATOR_STYLE_ON = 0   # 'default'
-INDICATOR_STYLE_OFF = 2  # 'dot'
+# keys.js lists 'default' as running-indicator-style option 0, but it's not
+# actually a visible style: apps/dot.js looks up a `_draw_${style}` method
+# (e.g. _draw_dot, _draw_squares, _draw_diamonds...) and there is no
+# _draw_default anywhere in that file, so style 0 silently draws nothing.
+# It's genuinely "none," just not spelled that way in the options list.
+# 'dot' (index 2) maps to the real _draw_dot method.
+INDICATOR_STYLE_ON = 2   # 'dot' -- draws a real indicator
+INDICATOR_STYLE_OFF = 0  # 'default' -- no _draw_default exists, draws nothing
 
 
 def _load_extension_settings(schema_id: str):
