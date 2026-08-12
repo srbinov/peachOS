@@ -99,7 +99,24 @@ headerbar.flat {
 """
 
 
-def make_sidebar_icon(icon_name: str, color: str) -> Gtk.Widget:
+ICON_DIR = os.path.join(DATA_DIR, 'icons')
+
+
+def _custom_icon_path(row_id: str):
+    for ext in ('.svg', '.png'):
+        path = os.path.join(ICON_DIR, row_id + ext)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
+    custom_path = _custom_icon_path(row_id)
+    if custom_path:
+        image = Gtk.Image.new_from_file(custom_path)
+        image.set_pixel_size(20)
+        return image
+
     box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
     box.add_css_class('sidebar-icon')
     box.add_css_class(ACCENT_CLASSES[color])
@@ -107,6 +124,18 @@ def make_sidebar_icon(icon_name: str, color: str) -> Gtk.Widget:
     image.set_pixel_size(12)
     box.append(image)
     return box
+
+
+def make_placeholder_icon(row_id: str, icon_name: str) -> Gtk.Widget:
+    custom_path = _custom_icon_path(row_id)
+    if custom_path:
+        image = Gtk.Image.new_from_file(custom_path)
+        image.set_pixel_size(64)
+        return image
+    image = Gtk.Image.new_from_icon_name(icon_name)
+    image.set_pixel_size(64)
+    image.add_css_class('placeholder-icon')
+    return image
 
 
 class SettingsWindow(Adw.ApplicationWindow):
@@ -140,7 +169,7 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._pages = {}
         for section in SIDEBAR_SECTIONS:
             for row_id, title, icon_name, color in section:
-                self._pages[row_id] = self._build_placeholder(title, icon_name, color)
+                self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
@@ -196,7 +225,7 @@ class SettingsWindow(Adw.ApplicationWindow):
             for row_id, title, icon_name, color in section:
                 row = Adw.ActionRow(title=GLib.markup_escape_text(title), activatable=True)
                 row.add_css_class('nav-row')
-                row.add_prefix(make_sidebar_icon(icon_name, color))
+                row.add_prefix(make_sidebar_icon(row_id, icon_name, color))
                 row._row_id = row_id
                 listbox.append(row)
             listbox.connect('row-selected', self._on_sidebar_row_selected)
@@ -231,7 +260,7 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._content_toolbar.add_top_bar(header)
 
-    def _build_placeholder(self, title: str, icon_name: str, color: str) -> Gtk.Widget:
+    def _build_placeholder(self, row_id: str, title: str, icon_name: str) -> Gtk.Widget:
         box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=12,
@@ -239,9 +268,7 @@ class SettingsWindow(Adw.ApplicationWindow):
             halign=Gtk.Align.CENTER,
             vexpand=True,
         )
-        icon = Gtk.Image.new_from_icon_name(icon_name)
-        icon.set_pixel_size(64)
-        icon.add_css_class('placeholder-icon')
+        icon = make_placeholder_icon(row_id, icon_name)
         box.append(icon)
 
         title_label = Gtk.Label(label=title, css_classes=['placeholder-title'])
