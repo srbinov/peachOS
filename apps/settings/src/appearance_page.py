@@ -34,7 +34,7 @@ class SchemeOption(Gtk.ToggleButton):
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = Gtk.Picture.new_for_filename(os.path.join(ICON_DIR, icon_filename))
         picture.set_content_fit(Gtk.ContentFit.COVER)
-        picture.set_size_request(140, 79)
+        picture.set_size_request(92, 52)
         photo_wrap.append(picture)
         box.append(photo_wrap)
 
@@ -82,7 +82,7 @@ class AppearancePage(Gtk.Box):
         ))
 
         options_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=28, halign=Gtk.Align.CENTER,
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=16, halign=Gtk.Align.CENTER,
             margin_bottom=14, margin_top=4,
         )
         self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg')
@@ -96,14 +96,19 @@ class AppearancePage(Gtk.Box):
 
         self.append(Gtk.Label(label='Theme', xalign=0, css_classes=['heading'], margin_start=4))
 
+        # Margins go on the children, not on theme_card itself -- margins on
+        # the card widget only push it away from its siblings (external
+        # spacing), they don't add internal padding for its content.
         theme_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        theme_card.set_margin_start(14)
-        theme_card.set_margin_end(14)
-        theme_card.set_margin_top(10)
-        theme_card.set_margin_bottom(10)
-        theme_card.append(Gtk.Label(label='Color', xalign=0, hexpand=True))
+        theme_card.append(Gtk.Label(
+            label='Color', xalign=0, hexpand=True,
+            margin_start=14, margin_top=10, margin_bottom=10,
+        ))
 
-        swatch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        swatch_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+            margin_end=14, margin_top=10, margin_bottom=10,
+        )
         self._swatches = {}
         first_swatch = None
         for name, hex_color in ACCENT_COLORS:
