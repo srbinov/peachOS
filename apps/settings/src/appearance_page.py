@@ -110,10 +110,11 @@ class ColorSwatch(Gtk.Box):
     def get_selected(self) -> bool:
         return self._selected
 
-    def set_selected(self, selected: bool):
+    def set_selected(self, selected: bool, ring_hex: str = '#FFFFFF'):
         self._selected = selected
         if selected:
             self.add_css_class('selected')
+            _apply_css(self, f'box.selected {{ border-color: {ring_hex}; }}')
         else:
             self.remove_css_class('selected')
 
@@ -130,7 +131,7 @@ class AppearancePage(Gtk.Box):
 
         self._build_ui()
 
-        self._settings.connect('changed::color-scheme', lambda *_: self._refresh_scheme_selection())
+        self._settings.connect('changed::color-scheme', lambda *_: self._refresh_all_selection())
         self._settings.connect('changed::accent-color', lambda *_: self._refresh_all_selection())
         self._refresh_all_selection()
 
@@ -198,6 +199,10 @@ class AppearancePage(Gtk.Box):
 
     def _refresh_all_selection(self):
         active = self._settings.get_string('accent-color')
+        # Ring needs to contrast with the background, not just the swatch's
+        # own color, so it tracks light/dark rather than staying fixed white.
+        is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
+        swatch_ring_hex = '#FFFFFF' if is_dark else '#000000'
         for name, swatch in self._swatches.items():
-            swatch.set_selected(name == active)
+            swatch.set_selected(name == active, swatch_ring_hex)
         self._refresh_scheme_selection()
