@@ -1,6 +1,6 @@
 import os
 
-from gi.repository import Gio, GLib, Gtk
+from gi.repository import Gio, Gtk
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -21,34 +21,68 @@ ACCENT_COLORS = [
     ('brown', '#7C5C36'),
 ]
 
+ACCENT_HEX = dict(ACCENT_COLORS)
+
+
+def _apply_css(widget: Gtk.Widget, css: str):
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode())
+    widget.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
 
 class SchemeOption(Gtk.Box):
     """A photo tile + label below it. The selection ring hugs only the
     photo button -- the label is a separate sibling outside it, not
-    wrapped inside the clickable/ring area."""
+    wrapped inside the clickable/ring area.
+
+    Selection look is driven by a manually-toggled 'selected' CSS class
+    rather than the :checked pseudo-class -- the active GTK theme has its
+    own :checked/:hover/:active button styling that kept winning the
+    cascade fight no matter how many states were overridden. A class name
+    the theme has zero rules for sidesteps that entirely.
+    """
+
+    TILE_SIZE = (48, 27)  # 16:9, matches the demo photos' aspect ratio
 
     def __init__(self, label: str, icon_filename: str, group: 'SchemeOption' = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
 
-        self.toggle = Gtk.ToggleButton(css_classes=['flat', 'scheme-toggle'])
+        self.toggle = Gtk.ToggleButton(css_classes=['flat', 'scheme-toggle'], halign=Gtk.Align.CENTER)
         if group is not None:
             self.toggle.set_group(group.toggle)
 
-        photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
+        photo_wrap = Gtk.Box(css_classes=['scheme-photo'], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
+        photo_wrap.set_size_request(*self.TILE_SIZE)
+
         picture = Gtk.Picture.new_for_filename(os.path.join(ICON_DIR, icon_filename))
         picture.set_content_fit(Gtk.ContentFit.COVER)
-        picture.set_size_request(48, 27)
+        # Picture's *natural* size comes from the source image (3840x2160
+        # here), and set_size_request() only sets a minimum -- it doesn't
+        # cap that natural size, so the box above kept growing to fit it
+        # regardless of the "48x27" request. Pinning the picture's own
+        # minimum to near-zero and letting it hexpand/vexpand instead makes
+        # photo_wrap's explicit size_request the only thing that matters.
+        picture.set_size_request(1, 1)
+        picture.set_hexpand(True)
+        picture.set_vexpand(True)
         photo_wrap.append(picture)
+
         self.toggle.set_child(photo_wrap)
         self.append(self.toggle)
-
         self.append(Gtk.Label(label=label, css_classes=['caption']))
 
         click = Gtk.GestureClick()
         click.connect('released', lambda *_: self.toggle.set_active(True))
         self.add_controller(click)
         self.set_cursor_from_name('pointer')
+
+    def set_selected(self, selected: bool, ring_hex: str):
+        if selected:
+            self.toggle.add_css_class('selected')
+            _apply_css(self.toggle, f'button.selected {{ border-color: {ring_hex}; }}')
+        else:
+            self.toggle.remove_css_class('selected')
 
 
 class ColorSwatch(Gtk.ToggleButton):
@@ -59,10 +93,14 @@ class ColorSwatch(Gtk.ToggleButton):
         self.accent_name = name
 
         dot = Gtk.Box(css_classes=['color-swatch-dot'])
-        css = Gtk.CssProvider()
-        css.load_from_data(f'box {{ background-color: {hex_color}; }}'.encode())
-        dot.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        _apply_css(dot, f'box {{ background-color: {hex_color}; }}')
         self.set_child(dot)
+
+    def set_selected(self, selected: bool):
+        if selected:
+            self.add_css_class('selected')
+        else:
+            self.remove_css_class('selected')
 
 
 class AppearancePage(Gtk.Box):
@@ -137,6 +175,7 @@ class AppearancePage(Gtk.Box):
             return
         value = 'default' if button is self._light_option.toggle else 'prefer-dark'
         self._settings.set_string('color-scheme', value)
+        self._refresh_scheme_selection()
 
     def _sync_scheme(self):
         self._syncing = True
@@ -146,6 +185,12 @@ class AppearancePage(Gtk.Box):
         else:
             self._light_option.toggle.set_active(True)
         self._syncing = False
+        self._refresh_scheme_selection()
+
+    def _refresh_scheme_selection(self):
+        ring_hex = ACCENT_HEX.get(self._settings.get_string('accent-color'), '#0461BE')
+        self._light_option.set_selected(self._light_option.toggle.get_active(), ring_hex)
+        self._dark_option.set_selected(self._dark_option.toggle.get_active(), ring_hex)
 
     # ---- Theme (accent-color) ------------------------------------------
 
@@ -153,6 +198,8 @@ class AppearancePage(Gtk.Box):
         if self._syncing or not button.get_active():
             return
         self._settings.set_string('accent-color', button.accent_name)
+        self._refresh_swatch_selection()
+        self._refresh_scheme_selection()
 
     def _sync_accent(self):
         self._syncing = True
@@ -161,3 +208,9 @@ class AppearancePage(Gtk.Box):
         if swatch:
             swatch.set_active(True)
         self._syncing = False
+        self._refresh_swatch_selection()
+        self._refresh_scheme_selection()
+
+    def _refresh_swatch_selection(self):
+        for swatch in self._swatches.values():
+            swatch.set_selected(swatch.get_active())

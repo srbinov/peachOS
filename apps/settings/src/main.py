@@ -143,9 +143,6 @@ headerbar.flat {
     background-image: none;
     box-shadow: none;
 }
-.scheme-toggle:checked {
-    border-color: @accent_bg_color;
-}
 .color-swatch {
     min-width: 0;
     min-height: 0;
@@ -165,7 +162,7 @@ headerbar.flat {
     background-image: none;
     box-shadow: none;
 }
-.color-swatch:checked {
+.color-swatch.selected {
     border-color: #FFFFFF;
 }
 .color-swatch-dot {
