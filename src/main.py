@@ -54,23 +54,24 @@ STYLE_CSS = b"""
 .sidebar-icon image {
     color: white;
 }
-.nav-row {
-    min-height: 28px;
-    padding: 0px 2px;
-}
-.nav-row label.title {
+.nav-row-label {
     font-size: 13px;
-    font-weight: normal;
 }
-row.signin-row {
-    min-height: 40px;
-    padding: 4px 2px;
+list.navigation-sidebar row {
+    margin: 0px 2px;
+    padding: 0px;
+    border-radius: 5px;
+    min-height: 26px;
 }
-row.signin-row label.title {
+button.signin-row {
+    padding: 3px 4px;
+    border-radius: 8px;
+}
+button.signin-row label.signin-name {
     font-weight: bold;
     font-size: 13px;
 }
-row.signin-row label.subtitle {
+button.signin-row label.signin-subtitle {
     opacity: 0.6;
     font-size: 11px;
 }
@@ -187,7 +188,7 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         top_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=10,
-            margin_start=12, margin_end=12, margin_top=4, margin_bottom=8,
+            margin_start=6, margin_end=6, margin_top=4, margin_bottom=8,
         )
 
         search = Gtk.SearchEntry(placeholder_text='Search')
@@ -197,25 +198,26 @@ class SettingsWindow(Adw.ApplicationWindow):
         if not account_name or account_name == 'Unknown':
             account_name = GLib.get_user_name()
 
-        signin_row = Adw.ActionRow(
-            title=GLib.markup_escape_text(account_name),
-            subtitle='peachOS Account',
-            activatable=True,
+        signin_button = Gtk.Button(css_classes=['flat', 'signin-row'])
+        signin_content = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+            margin_start=4,
         )
-        signin_row.add_css_class('signin-row')
         avatar = Adw.Avatar(size=32, text=account_name, show_initials=True)
-        signin_row.add_prefix(avatar)
-        signin_frame = Gtk.ListBox(css_classes=['boxed-list'])
-        signin_frame.set_selection_mode(Gtk.SelectionMode.NONE)
-        signin_frame.append(signin_row)
-        top_box.append(signin_frame)
+        signin_content.append(avatar)
+        signin_labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+        signin_labels.append(Gtk.Label(label=account_name, xalign=0, css_classes=['signin-name']))
+        signin_labels.append(Gtk.Label(label='peachOS Account', xalign=0, css_classes=['signin-subtitle']))
+        signin_content.append(signin_labels)
+        signin_button.set_child(signin_content)
+        top_box.append(signin_button)
 
         outer.append(top_box)
 
         scroller = Gtk.ScrolledWindow(vexpand=True)
         list_outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=10,
-            margin_start=12, margin_end=12, margin_bottom=12,
+            margin_start=6, margin_end=6, margin_bottom=12,
         )
 
         self._listboxes = []
@@ -223,9 +225,14 @@ class SettingsWindow(Adw.ApplicationWindow):
             listbox = Gtk.ListBox(css_classes=['navigation-sidebar'])
             listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
             for row_id, title, icon_name, color in section:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(title), activatable=True)
-                row.add_css_class('nav-row')
-                row.add_prefix(make_sidebar_icon(row_id, icon_name, color))
+                row = Gtk.ListBoxRow()
+                content = Gtk.Box(
+                    orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                    margin_start=4, margin_end=6, margin_top=3, margin_bottom=3,
+                )
+                content.append(make_sidebar_icon(row_id, icon_name, color))
+                content.append(Gtk.Label(label=title, xalign=0, css_classes=['nav-row-label']))
+                row.set_child(content)
                 row._row_id = row_id
                 listbox.append(row)
             listbox.connect('row-selected', self._on_sidebar_row_selected)
