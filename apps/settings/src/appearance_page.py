@@ -60,7 +60,7 @@ class SchemeOption(Gtk.Box):
     the theme has zero rules for sidesteps that entirely.
     """
 
-    TILE_SIZE = (48, 27)  # 16:9, matches the demo photos' aspect ratio
+    TILE_SIZE = (112, 63)  # 16:9, matches the demo photos' aspect ratio
 
     def __init__(self, label: str, icon_filename: str, group: 'SchemeOption' = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
@@ -128,16 +128,18 @@ class AppearancePage(Gtk.Box):
         self._sync_accent()
 
     def _build_ui(self):
-        appearance_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # Single horizontal row: "Appearance" label on the left, tiles on
+        # the right, both vertically centered together -- not stacked.
+        appearance_card = Gtk.Box(
+            css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL,
+            margin_start=14, margin_end=14, margin_top=14, margin_bottom=14,
+        )
         appearance_card.append(Gtk.Label(
             label='Appearance', xalign=0, css_classes=['heading'],
-            margin_start=14, margin_top=12,
+            hexpand=True, valign=Gtk.Align.CENTER,
         ))
 
-        options_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.CENTER,
-            margin_bottom=14, margin_top=4,
-        )
+        options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER)
         self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg')
         self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', group=self._light_option)
         self._light_option.toggle.connect('toggled', self._on_scheme_toggled)

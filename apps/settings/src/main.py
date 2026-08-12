@@ -138,10 +138,14 @@ headerbar.flat {
 .scheme-toggle:active,
 .scheme-toggle:checked,
 .scheme-toggle:checked:hover,
-.scheme-toggle:checked:active {
+.scheme-toggle:checked:active,
+.scheme-toggle:focus,
+.scheme-toggle:focus-visible,
+.scheme-toggle:focus-within {
     background-color: transparent;
     background-image: none;
     box-shadow: none;
+    outline: none;
 }
 .color-swatch {
     min-width: 0;
@@ -157,10 +161,14 @@ headerbar.flat {
 .color-swatch:active,
 .color-swatch:checked,
 .color-swatch:checked:hover,
-.color-swatch:checked:active {
+.color-swatch:checked:active,
+.color-swatch:focus,
+.color-swatch:focus-visible,
+.color-swatch:focus-within {
     background-color: transparent;
     background-image: none;
     box-shadow: none;
+    outline: none;
 }
 .color-swatch.selected {
     border-color: #FFFFFF;
