@@ -9,6 +9,9 @@ gi.require_version('Adw', '1')
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from wifi_page import WifiPage
+
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
 
@@ -93,6 +96,13 @@ button.signin-row label.signin-subtitle {
 headerbar.flat {
     box-shadow: none;
     background: transparent;
+}
+.connected-dot {
+    background-color: #34C759;
+    border-radius: 999px;
+}
+.network-row:hover {
+    background-color: alpha(currentColor, 0.06);
 }
 """
 
@@ -181,7 +191,10 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._pages = {}
         for section in SIDEBAR_SECTIONS:
             for row_id, title, icon_name, color in section:
-                self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
+                if row_id == 'wifi':
+                    self._pages[row_id] = WifiPage()
+                else:
+                    self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
