@@ -1,8 +1,26 @@
 import os
 
-from gi.repository import Gio, Gtk
+import gi
+
+gi.require_version('GdkPixbuf', '2.0')
+
+from gi.repository import Gdk, GdkPixbuf, Gio, Gtk
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
+
+
+def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
+    """Pre-rasterize to the *exact* target pixel size rather than asking
+    Gtk.Picture to display a full-res source (3840x2160 here) at a small
+    size -- Picture's natural size comes from the source image, and
+    set_size_request() only sets a minimum, not a cap, so it kept
+    rendering huge regardless of the requested display size. A texture
+    that's already 48x27 has an unambiguous 48x27 natural size."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, False)
+    texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+    picture = Gtk.Picture.new_for_paintable(texture)
+    picture.set_content_fit(Gtk.ContentFit.FILL)
+    return picture
 
 # Real GNOME accent-color enum (org.gnome.desktop.interface accent-color) with
 # their actual rendered hex values, read from Adw.AccentColor.to_standalone_rgba()
@@ -51,21 +69,9 @@ class SchemeOption(Gtk.Box):
         if group is not None:
             self.toggle.set_group(group.toggle)
 
-        photo_wrap = Gtk.Box(css_classes=['scheme-photo'], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
-        photo_wrap.set_size_request(*self.TILE_SIZE)
-
-        picture = Gtk.Picture.new_for_filename(os.path.join(ICON_DIR, icon_filename))
-        picture.set_content_fit(Gtk.ContentFit.COVER)
-        # Picture's *natural* size comes from the source image (3840x2160
-        # here), and set_size_request() only sets a minimum -- it doesn't
-        # cap that natural size, so the box above kept growing to fit it
-        # regardless of the "48x27" request. Pinning the picture's own
-        # minimum to near-zero and letting it hexpand/vexpand instead makes
-        # photo_wrap's explicit size_request the only thing that matters.
-        picture.set_size_request(1, 1)
-        picture.set_hexpand(True)
-        picture.set_vexpand(True)
+        picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *self.TILE_SIZE)
         photo_wrap.append(picture)
 
         self.toggle.set_child(photo_wrap)
