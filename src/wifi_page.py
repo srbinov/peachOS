@@ -114,7 +114,7 @@ class WifiPage(Gtk.Box):
         self._toggle.connect('state-set', self._on_toggle_state_set)
         card_box.append(self._toggle)
 
-        card.set_child(card_box)
+        card.append(card_box)
         self.append(card)
 
         # Connected-network status row (hidden until connected)
@@ -138,7 +138,7 @@ class WifiPage(Gtk.Box):
         details_btn = Gtk.Button(label='Details…')
         details_btn.connect('clicked', self._on_details_clicked)
         connected_box.append(details_btn)
-        self._connected_frame.set_child(connected_box)
+        self._connected_frame.append(connected_box)
         self.append(self._connected_frame)
 
         # Known network
@@ -146,7 +146,7 @@ class WifiPage(Gtk.Box):
         self.append(self._known_label)
         self._known_frame = Gtk.Box(css_classes=['wifi-card'], visible=False)
         self._known_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._known_frame.set_child(self._known_list)
+        self._known_frame.append(self._known_list)
         self.append(self._known_frame)
 
         # Other networks
@@ -159,7 +159,7 @@ class WifiPage(Gtk.Box):
         other_scroller = Gtk.ScrolledWindow(vexpand=True)
         self._other_frame = Gtk.Box(css_classes=['wifi-card'])
         self._other_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._other_frame.set_child(self._other_list)
+        self._other_frame.append(self._other_list)
         other_scroller.set_child(self._other_frame)
         self.append(other_scroller)
 
