@@ -109,7 +109,7 @@ headerbar.flat {
     border-radius: 999px;
 }
 .wifi-card {
-    background-color: alpha(currentColor, 0.05);
+    background-color: alpha(currentColor, 0.025);
     border-radius: 10px;
     border: none;
     box-shadow: none;
