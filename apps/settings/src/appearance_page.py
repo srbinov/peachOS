@@ -91,18 +91,32 @@ class SchemeOption(Gtk.Box):
             self.toggle.remove_css_class('selected')
 
 
-class ColorSwatch(Gtk.ToggleButton):
-    def __init__(self, name: str, hex_color: str, group: Gtk.ToggleButton = None):
-        super().__init__(css_classes=['flat', 'color-swatch'], tooltip_text=name.capitalize())
-        if group is not None:
-            self.set_group(group)
+class ColorSwatch(Gtk.Box):
+    """Plain Box, not a ToggleButton -- GTK themes bake in a LOT of opinion
+    about button checked/hover/focus states, and overriding all of it
+    reliably turned out to be a losing battle (three attempts, still a
+    gray box showing through). A plain box has no such built-in states to
+    fight: selection is 100% our own 'selected' CSS class."""
+
+    def __init__(self, name: str, hex_color: str, on_click):
+        super().__init__(css_classes=['color-swatch'], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.accent_name = name
+        self._selected = False
 
         dot = Gtk.Box(css_classes=['color-swatch-dot'])
         _apply_css(dot, f'box {{ background-color: {hex_color}; }}')
-        self.set_child(dot)
+        self.append(dot)
+
+        click = Gtk.GestureClick()
+        click.connect('released', lambda *_a: on_click(self))
+        self.add_controller(click)
+        self.set_cursor_from_name('pointer')
+
+    def get_selected(self) -> bool:
+        return self._selected
 
     def set_selected(self, selected: bool):
+        self._selected = selected
         if selected:
             self.add_css_class('selected')
         else:
@@ -130,16 +144,20 @@ class AppearancePage(Gtk.Box):
     def _build_ui(self):
         # Single horizontal row: "Appearance" label on the left, tiles on
         # the right, both vertically centered together -- not stacked.
-        appearance_card = Gtk.Box(
-            css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL,
-            margin_start=14, margin_end=14, margin_top=14, margin_bottom=14,
-        )
+        # Margins go on the children (same lesson as theme_card below):
+        # margins on the card itself only push it away from its siblings,
+        # they don't add internal padding for its content.
+        appearance_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL)
         appearance_card.append(Gtk.Label(
             label='Appearance', xalign=0, css_classes=['heading'],
             hexpand=True, valign=Gtk.Align.CENTER,
+            margin_start=14, margin_top=16, margin_bottom=16,
         ))
 
-        options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER)
+        options_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER,
+            margin_end=14, margin_top=12, margin_bottom=12,
+        )
         self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg')
         self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', group=self._light_option)
         self._light_option.toggle.connect('toggled', self._on_scheme_toggled)
@@ -165,12 +183,8 @@ class AppearancePage(Gtk.Box):
             margin_end=14, margin_top=10, margin_bottom=10,
         )
         self._swatches = {}
-        first_swatch = None
         for name, hex_color in ACCENT_COLORS:
-            swatch = ColorSwatch(name, hex_color, group=first_swatch)
-            if first_swatch is None:
-                first_swatch = swatch
-            swatch.connect('toggled', self._on_accent_toggled)
+            swatch = ColorSwatch(name, hex_color, on_click=self._on_swatch_clicked)
             self._swatches[name] = swatch
             swatch_row.append(swatch)
         theme_card.append(swatch_row)
@@ -202,23 +216,18 @@ class AppearancePage(Gtk.Box):
 
     # ---- Theme (accent-color) ------------------------------------------
 
-    def _on_accent_toggled(self, button):
-        if self._syncing or not button.get_active():
+    def _on_swatch_clicked(self, swatch):
+        if self._syncing:
             return
-        self._settings.set_string('accent-color', button.accent_name)
+        self._settings.set_string('accent-color', swatch.accent_name)
         self._refresh_swatch_selection()
         self._refresh_scheme_selection()
 
     def _sync_accent(self):
-        self._syncing = True
-        active = self._settings.get_string('accent-color')
-        swatch = self._swatches.get(active)
-        if swatch:
-            swatch.set_active(True)
-        self._syncing = False
         self._refresh_swatch_selection()
         self._refresh_scheme_selection()
 
     def _refresh_swatch_selection(self):
-        for swatch in self._swatches.values():
-            swatch.set_selected(swatch.get_active())
+        active = self._settings.get_string('accent-color')
+        for name, swatch in self._swatches.items():
+            swatch.set_selected(name == active)

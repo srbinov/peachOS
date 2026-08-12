@@ -148,27 +148,9 @@ headerbar.flat {
     outline: none;
 }
 .color-swatch {
-    min-width: 0;
-    min-height: 0;
     padding: 2px;
     border-radius: 999px;
     border: 2px solid transparent;
-    background-color: transparent;
-    background-image: none;
-    box-shadow: none;
-}
-.color-swatch:hover,
-.color-swatch:active,
-.color-swatch:checked,
-.color-swatch:checked:hover,
-.color-swatch:checked:active,
-.color-swatch:focus,
-.color-swatch:focus-visible,
-.color-swatch:focus-within {
-    background-color: transparent;
-    background-image: none;
-    box-shadow: none;
-    outline: none;
 }
 .color-swatch.selected {
     border-color: #FFFFFF;
