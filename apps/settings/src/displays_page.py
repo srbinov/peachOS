@@ -20,6 +20,7 @@ SCALE_DEFAULT = 1.0
 class ScalingSliderRow(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.append(Gtk.Label(label='Text Scaling', xalign=0, css_classes=['heading']))
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, SCALE_MIN, SCALE_MAX, 0.01)
         self.scale.set_draw_value(False)
         self.scale.set_hexpand(True)
@@ -98,7 +99,7 @@ class DisplaysPage(Gtk.Box):
             icon = Gtk.Image.new_from_file(icon_path)
         else:
             icon = Gtk.Image.new_from_icon_name('computer-symbolic')
-        icon.set_pixel_size(96)
+        icon.set_pixel_size(115)
         header.append(icon)
         header.append(Gtk.Label(label='Built-in Display', css_classes=['title-4']))
         self.append(header)

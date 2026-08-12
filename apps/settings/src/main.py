@@ -120,9 +120,11 @@ headerbar.flat {
 .segmented-toggle {
     padding: 8px 4px;
 }
-.network-row:hover {
-    background-color: alpha(currentColor, 0.06);
-}
+/* .network-row used to have a :hover background here, but it only ever
+   painted a partial region of the row (not the whole container) across
+   every tab that uses it, and reliably fixing GTK's hover-state coverage
+   for a Box containing interactive children (switches, dropdowns) wasn't
+   worth another round of fighting the theme's cascade -- removed. */
 .scheme-photo {
     border-radius: 5px;
 }
