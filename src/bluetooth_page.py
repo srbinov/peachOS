@@ -101,18 +101,18 @@ class BluetoothPage(Gtk.Box):
         self._my_frame.append(self._my_list)
         self.append(self._my_frame)
 
-        nearby_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        nearby_header.append(Gtk.Label(label='Nearby Devices', xalign=0, hexpand=True, css_classes=['heading']))
+        self._nearby_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self._nearby_header.append(Gtk.Label(label='Nearby Devices', xalign=0, hexpand=True, css_classes=['heading']))
         self._scan_spinner = Gtk.Spinner()
-        nearby_header.append(self._scan_spinner)
-        self.append(nearby_header)
+        self._nearby_header.append(self._scan_spinner)
+        self.append(self._nearby_header)
 
-        nearby_scroller = Gtk.ScrolledWindow(vexpand=True)
+        self._nearby_scroller = Gtk.ScrolledWindow(vexpand=True)
         self._nearby_frame = Gtk.Box(css_classes=['wifi-card'])
         self._nearby_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._nearby_frame.append(self._nearby_list)
-        nearby_scroller.set_child(self._nearby_frame)
-        self.append(nearby_scroller)
+        self._nearby_scroller.set_child(self._nearby_frame)
+        self.append(self._nearby_scroller)
 
         self._status_label = Gtk.Label(
             label='Checking for Bluetooth hardware…', wrap=True,
@@ -162,6 +162,8 @@ class BluetoothPage(Gtk.Box):
             self._my_frame.set_visible(False)
             self._my_label.set_visible(False)
             self._nearby_frame.set_visible(False)
+            self._nearby_scroller.set_visible(False)
+            self._nearby_header.set_visible(False)
             self._discoverable_label.set_visible(False)
             return
 
@@ -178,12 +180,17 @@ class BluetoothPage(Gtk.Box):
             self._my_frame.set_visible(False)
             self._my_label.set_visible(False)
             self._nearby_frame.set_visible(False)
+            self._nearby_scroller.set_visible(False)
+            self._nearby_header.set_visible(False)
             self._discoverable_label.set_visible(False)
             return
 
         self._adapter_path = adapter_path
         self._status_label.set_visible(False)
         self._discoverable_label.set_visible(True)
+        self._nearby_scroller.set_visible(True)
+        self._nearby_header.set_visible(True)
+        self._nearby_frame.set_visible(True)
 
         powered = objects[adapter_path][ADAPTER_IFACE].get('Powered', False)
         self._toggle.set_sensitive(True)

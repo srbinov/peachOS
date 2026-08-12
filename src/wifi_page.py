@@ -156,12 +156,13 @@ class WifiPage(Gtk.Box):
         other_header.append(self._scan_spinner)
         self.append(other_header)
 
-        other_scroller = Gtk.ScrolledWindow(vexpand=True)
+        self._other_header = other_header
+        self._other_scroller = Gtk.ScrolledWindow(vexpand=True)
         self._other_frame = Gtk.Box(css_classes=['wifi-card'])
         self._other_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._other_frame.append(self._other_list)
-        other_scroller.set_child(self._other_frame)
-        self.append(other_scroller)
+        self._other_scroller.set_child(self._other_frame)
+        self.append(self._other_scroller)
 
         self._status_label = Gtk.Label(
             label='Checking for Wi-Fi hardware…', wrap=True,
@@ -190,6 +191,8 @@ class WifiPage(Gtk.Box):
             self._status_label.set_visible(True)
             self._toggle.set_sensitive(False)
             self._other_frame.set_visible(False)
+            self._other_scroller.set_visible(False)
+            self._other_header.set_visible(False)
             return
 
         self._status_label.set_visible(False)
@@ -261,7 +264,13 @@ class WifiPage(Gtk.Box):
             self._known_label.set_visible(False)
             self._known_frame.set_visible(False)
             self._other_frame.set_visible(False)
+            self._other_scroller.set_visible(False)
+            self._other_header.set_visible(False)
             return
+
+        self._other_scroller.set_visible(True)
+        self._other_header.set_visible(True)
+        self._other_frame.set_visible(True)
 
         known_conns = [
             c for c in self._client.get_connections()
