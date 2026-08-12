@@ -47,9 +47,6 @@ ACCENT_CLASSES = {
 STYLE_CSS = b"""
 .sidebar-icon {
     border-radius: 6px;
-    min-width: 20px;
-    min-height: 20px;
-    padding: 3px;
 }
 .sidebar-icon image {
     color: white;
@@ -58,13 +55,13 @@ STYLE_CSS = b"""
     font-size: 13px;
 }
 list.navigation-sidebar row {
-    margin: 0px 2px;
+    margin: 0px 4px;
     padding: 0px;
     border-radius: 5px;
     min-height: 26px;
 }
 button.signin-row {
-    padding: 3px 4px;
+    padding: 0px;
     border-radius: 8px;
 }
 button.signin-row label.signin-name {
@@ -102,6 +99,28 @@ headerbar.flat {
 
 ICON_DIR = os.path.join(DATA_DIR, 'icons')
 
+# The provided SVGs each have a different amount of internal padding baked
+# into their canvas (some artwork fills ~96% of the canvas, some only
+# ~64%), so scaling every file to the same pixel_size makes the actual
+# drawn icon look inconsistently sized even though the canvas size is
+# identical. These fractions are the measured bounding box of non-
+# transparent pixels as a share of the canvas (see
+# scratchpad/measure_icons.py) -- used to scale each icon's *canvas* so
+# the visible artwork ends up a consistent size instead.
+ICON_INK_FRACTION = {
+    'accessibility': 0.81,
+    'appearance': 0.82,
+    'bluetooth': 0.86,
+    'desktopdock': 0.99,
+    'energy': 0.85,
+    'general': 0.84,
+    'network': 0.64,
+    'wifi': 0.96,
+}
+DEFAULT_INK_FRACTION = 0.85
+
+ICON_SLOT_PX = 20  # fixed footprint every icon sits in, so labels always start at the same x
+
 
 def _custom_icon_path(row_id: str):
     for ext in ('.svg', '.png'):
@@ -111,18 +130,26 @@ def _custom_icon_path(row_id: str):
     return None
 
 
+def _render_px_for_ink(row_id: str, target_ink_px: int) -> int:
+    frac = ICON_INK_FRACTION.get(row_id, DEFAULT_INK_FRACTION)
+    return round(target_ink_px / frac)
+
+
 def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
+    box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+    box.set_size_request(ICON_SLOT_PX, ICON_SLOT_PX)
+
     custom_path = _custom_icon_path(row_id)
     if custom_path:
         image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(20)
-        return image
+        image.set_pixel_size(_render_px_for_ink(row_id, target_ink_px=15))
+        box.append(image)
+        return box
 
-    box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
     box.add_css_class('sidebar-icon')
     box.add_css_class(ACCENT_CLASSES[color])
     image = Gtk.Image.new_from_icon_name(icon_name)
-    image.set_pixel_size(12)
+    image.set_pixel_size(13)
     box.append(image)
     return box
 
@@ -131,7 +158,7 @@ def make_placeholder_icon(row_id: str, icon_name: str) -> Gtk.Widget:
     custom_path = _custom_icon_path(row_id)
     if custom_path:
         image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(64)
+        image.set_pixel_size(_render_px_for_ink(row_id, target_ink_px=50))
         return image
     image = Gtk.Image.new_from_icon_name(icon_name)
     image.set_pixel_size(64)
@@ -188,7 +215,7 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         top_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=10,
-            margin_start=6, margin_end=6, margin_top=4, margin_bottom=8,
+            margin_start=4, margin_end=4, margin_top=4, margin_bottom=8,
         )
 
         search = Gtk.SearchEntry(placeholder_text='Search')
@@ -201,7 +228,7 @@ class SettingsWindow(Adw.ApplicationWindow):
         signin_button = Gtk.Button(css_classes=['flat', 'signin-row'])
         signin_content = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-            margin_start=4,
+            margin_start=4, margin_top=4, margin_bottom=4,
         )
         avatar = Adw.Avatar(size=32, text=account_name, show_initials=True)
         signin_content.append(avatar)
@@ -216,8 +243,8 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         scroller = Gtk.ScrolledWindow(vexpand=True)
         list_outer = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=10,
-            margin_start=6, margin_end=6, margin_bottom=12,
+            orientation=Gtk.Orientation.VERTICAL, spacing=6,
+            margin_start=4, margin_end=4, margin_bottom=12,
         )
 
         self._listboxes = []
@@ -228,7 +255,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 row = Gtk.ListBoxRow()
                 content = Gtk.Box(
                     orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-                    margin_start=4, margin_end=6, margin_top=3, margin_bottom=3,
+                    margin_start=0, margin_end=6, margin_top=3, margin_bottom=3,
                 )
                 content.append(make_sidebar_icon(row_id, icon_name, color))
                 content.append(Gtk.Label(label=title, xalign=0, css_classes=['nav-row-label']))
