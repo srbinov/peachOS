@@ -101,6 +101,12 @@ headerbar.flat {
     background-color: #34C759;
     border-radius: 999px;
 }
+.wifi-card {
+    background-color: @card_bg_color;
+    border-radius: 10px;
+    border: none;
+    box-shadow: none;
+}
 .network-row:hover {
     background-color: alpha(currentColor, 0.06);
 }
