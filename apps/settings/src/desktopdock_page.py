@@ -49,6 +49,39 @@ def _load_extension_settings(schema_id: str):
     return None
 
 
+PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dock-presets')
+
+
+def _load_preset(name: str) -> dict:
+    """Parse a `dconf dump`-format snapshot (key=GVariant-text per line,
+    ignoring the leading `[/]` group header) into {key: GLib.Variant}.
+    GLib.Variant.parse() with type=None correctly infers d/b/i/s/(dddd)
+    etc. from the text itself, so no per-key type table is needed."""
+    path = os.path.join(PRESET_DIR, f'{name}.dconf')
+    values = {}
+    if not os.path.isfile(path):
+        return values
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('['):
+                continue
+            key, _, value_text = line.partition('=')
+            values[key.strip()] = GLib.Variant.parse(None, value_text.strip())
+    return values
+
+
+def _apply_preset(settings: Gio.Settings, preset: dict):
+    """Every key in the schema gets touched -- set to the preset's value if
+    present, or settings.reset() (schema default) if not -- so the result
+    is fully deterministic regardless of whatever was customized before."""
+    for key in settings.list_keys():
+        if key in preset:
+            settings.set_value(key, preset[key])
+        else:
+            settings.reset(key)
+
+
 class SliderRow(Gtk.Box):
     def __init__(self, title: str, low_label: str, high_label: str, mid_label: str = None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True)
@@ -167,6 +200,12 @@ class DesktopDockPage(Gtk.Box):
         behavior_card.append(self._indicators_row)
         self.append(behavior_card)
 
+        reset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END)
+        reset_btn = Gtk.Button(label='Restore Defaults')
+        reset_btn.connect('clicked', self._on_restore_defaults)
+        reset_row.append(reset_btn)
+        self.append(reset_row)
+
     def _refresh_from_settings(self):
         self._syncing = True
         self._size_row.scale.set_value(self._settings.get_double('icon-size'))
@@ -214,3 +253,12 @@ class DesktopDockPage(Gtk.Box):
             INDICATOR_STYLE_ON if state else INDICATOR_STYLE_OFF,
         )
         return False
+
+    def _on_restore_defaults(self, _button):
+        interface_settings = Gio.Settings.new('org.gnome.desktop.interface')
+        is_dark = interface_settings.get_string('color-scheme') == 'prefer-dark'
+        preset = _load_preset('dark' if is_dark else 'light')
+        if not preset:
+            return
+        _apply_preset(self._settings, preset)
+        self._refresh_from_settings()
