@@ -3,7 +3,7 @@ import subprocess
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import TypeaheadDropdown, make_hero_header
+from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -51,11 +51,6 @@ def _format_region_label(locale_code: str) -> str:
 
 
 class DropdownRow(Gtk.Box):
-    """Region has ~25+ locales -- uses widgets.TypeaheadDropdown rather
-    than Gtk.DropDown's own enable-search, which filters options out of
-    view instead of just jumping the selection to the best match (see
-    general_datetime_page.py's DropdownRow for why)."""
-
     def __init__(self, title: str, subtitle: str = None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, css_classes=['network-row'])
         self.set_margin_start(14)
@@ -67,37 +62,44 @@ class DropdownRow(Gtk.Box):
         if subtitle:
             text_box.append(Gtk.Label(label=subtitle, xalign=0, wrap=True, css_classes=['caption', 'dim-label']))
         self.append(text_box)
-        self.dropdown = TypeaheadDropdown()
+        self.dropdown = Gtk.DropDown(enable_search=True)
+        # A DropDown's search silently matches nothing at all without an
+        # explicit expression telling it what to compare typed text
+        # against, and defaults to PREFIX match (only matches strings
+        # *starting with* the typed text) even once it has one -- see
+        # general_datetime_page.py's DropdownRow for how this was found.
+        self.dropdown.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, 'string'))
+        self.dropdown.set_search_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
+        # Pins the popup's list to a fixed height (see main.py's
+        # STYLE_CSS) so it doesn't resize -- and visibly jump/bounce to a
+        # different screen position -- as search narrows the row count.
+        self.dropdown.add_css_class('searchable-dropdown')
         self.append(self.dropdown)
         self._codes = []
-        self._labels = []
 
     def set_options(self, codes: list, labels: list, selected_code: str = None):
         self._codes = codes
-        self._labels = labels
-        selected_label = None
-        if selected_code and selected_code in codes:
-            selected_label = labels[codes.index(selected_code)]
-        elif selected_code:
-            # AccountsService and `locale -a` don't agree on locale string
-            # formatting (e.g. FormatsLocale='en_US.UTF-8' vs `locale -a`'s
-            # 'en_US.utf8') -- fall back to matching just the lang_COUNTRY
-            # base, ignoring the encoding suffix's spelling/casing.
-            base = selected_code.split('.')[0].lower()
-            for code, label in zip(codes, labels):
-                if code.split('.')[0].lower() == base:
-                    selected_label = label
-                    break
-        self.dropdown.set_options(labels, selected=selected_label)
+        self.dropdown.set_model(Gtk.StringList.new(labels))
+        if not selected_code:
+            return
+        if selected_code in codes:
+            self.dropdown.set_selected(codes.index(selected_code))
+            return
+        # AccountsService and `locale -a` don't agree on locale string
+        # formatting (e.g. FormatsLocale='en_US.UTF-8' vs `locale -a`'s
+        # 'en_US.utf8') -- fall back to matching just the lang_COUNTRY
+        # base, ignoring the encoding suffix's spelling/casing.
+        base = selected_code.split('.')[0].lower()
+        for i, code in enumerate(codes):
+            if code.split('.')[0].lower() == base:
+                self.dropdown.set_selected(i)
+                return
 
     def get_selected_code(self):
-        label = self.dropdown.get_selected()
-        if label in self._labels:
-            return self._codes[self._labels.index(label)]
-        return None
-
-    def connect_changed(self, callback):
-        self.dropdown.connect_changed(callback)
+        idx = self.dropdown.get_selected()
+        if idx == Gtk.INVALID_LIST_POSITION or idx >= len(self._codes):
+            return None
+        return self._codes[idx]
 
 
 class GeneralLanguagePage(Gtk.Box):
@@ -123,13 +125,13 @@ class GeneralLanguagePage(Gtk.Box):
 
         card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._language_row = DropdownRow('Language')
-        self._language_row.connect_changed(self._on_language_changed)
+        self._language_row.dropdown.connect('notify::selected', self._on_language_changed)
         card.append(self._language_row)
 
         self._region_row = DropdownRow(
             'Region', 'Affects the format of dates, times, numbers, and measurements.',
         )
-        self._region_row.connect_changed(self._on_region_changed)
+        self._region_row.dropdown.connect('notify::selected', self._on_region_changed)
         card.append(self._region_row)
         self.append(card)
 
@@ -210,7 +212,7 @@ class GeneralLanguagePage(Gtk.Box):
         self._status_label.set_label(message)
         self._status_label.set_visible(True)
 
-    def _on_language_changed(self, _label):
+    def _on_language_changed(self, dropdown, _pspec):
         if self._syncing or not self._bus:
             return
         code = self._language_row.get_selected_code()
@@ -224,7 +226,7 @@ class GeneralLanguagePage(Gtk.Box):
         except GLib.Error as e:
             self._show_error(f'Could not change language: {e.message}')
 
-    def _on_region_changed(self, _label):
+    def _on_region_changed(self, dropdown, _pspec):
         if self._syncing or not self._bus:
             return
         code = self._region_row.get_selected_code()

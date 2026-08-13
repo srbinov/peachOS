@@ -161,6 +161,16 @@ headerbar.flat {
     min-height: 20px;
     border-radius: 999px;
 }
+/* A search-enabled Gtk.DropDown's popup shrinks its list to fit however
+   many rows match the typed text, and GTK repositions the whole popover
+   to keep it on-screen every time that height changes -- from the
+   outside this reads as the popup jumping to a different spot on every
+   keystroke. Pinning the internal scrolledwindow to a fixed height keeps
+   the popover's own size (and position) constant regardless of how many
+   rows are currently showing. */
+dropdown.searchable-dropdown popover scrolledwindow {
+    min-height: 300px;
+}
 """
 
 
