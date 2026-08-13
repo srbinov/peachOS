@@ -1,17 +1,10 @@
 import os
 
-from gi.repository import Gio, GLib, Gtk
+from gi.repository import Gtk
 
 from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
-
-
-def _launch_control_center(*args: str):
-    try:
-        Gio.Subprocess.new(['gnome-control-center', *args], Gio.SubprocessFlags.NONE)
-    except GLib.Error:
-        pass  # gnome-control-center missing -- nothing sensible to fall back to
 
 
 class PlaceholderRow(Gtk.Box):
@@ -56,7 +49,7 @@ class GroupCard(Gtk.ListBox):
 
 
 class GeneralPage(Gtk.Box):
-    def __init__(self, on_open_about=None):
+    def __init__(self, on_open_about=None, on_open_datetime=None, on_open_language=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
@@ -64,6 +57,8 @@ class GeneralPage(Gtk.Box):
         self.set_margin_bottom(18)
 
         self._on_open_about = on_open_about
+        self._on_open_datetime = on_open_datetime
+        self._on_open_language = on_open_language
         self._build_ui()
 
     def _build_ui(self):
@@ -83,18 +78,13 @@ class GeneralPage(Gtk.Box):
             PlaceholderRow('Storage', os.path.join(ICON_DIR, 'general_storage.svg')),
         ]))
 
-        # Date & Time and Language & Region don't have a peachOS-native
-        # implementation yet, so rather than a fake placeholder these
-        # open GNOME's own panels directly -- same command the desktop's
-        # own gnome-datetime-panel.desktop / gnome-region-panel.desktop
-        # launchers use.
         self.append(GroupCard([
             PlaceholderRow(
                 'Date & Time', os.path.join(ICON_DIR, 'general_date_time.svg'),
-                on_click=lambda: _launch_control_center('system', 'datetime'),
+                on_click=self._on_open_datetime,
             ),
             PlaceholderRow(
                 'Language & Region', os.path.join(ICON_DIR, 'general_language_region.svg'),
-                on_click=lambda: _launch_control_center('system', 'region'),
+                on_click=self._on_open_language,
             ),
         ]))

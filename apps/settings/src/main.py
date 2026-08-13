@@ -19,6 +19,8 @@ from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_about_page import GeneralAboutPage
+from general_datetime_page import GeneralDateTimePage
+from general_language_page import GeneralLanguagePage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -49,6 +51,8 @@ SIDEBAR_SECTIONS = [
 # listed in SIDEBAR_SECTIONS, so they need their own title lookup.
 EXTRA_PAGE_TITLES = {
     'general_about': 'About',
+    'general_datetime': 'Date & Time',
+    'general_language': 'Language & Region',
 }
 
 ACCENT_CLASSES = {
@@ -277,6 +281,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'general':
                     self._pages[row_id] = GeneralPage(
                         on_open_about=lambda: self._go_to('general_about', record_history=True),
+                        on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
+                        on_open_language=lambda: self._go_to('general_language', record_history=True),
                     )
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
@@ -284,6 +290,12 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._pages['general_about'] = GeneralAboutPage()
         self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
+
+        self._pages['general_datetime'] = GeneralDateTimePage()
+        self._placeholder_stack.add_named(self._pages['general_datetime'], 'general_datetime')
+
+        self._pages['general_language'] = GeneralLanguagePage()
+        self._placeholder_stack.add_named(self._pages['general_language'], 'general_language')
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
         self._go_to(first_id, record_history=True)
