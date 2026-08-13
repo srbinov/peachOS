@@ -26,6 +26,7 @@ from accessibility_page import AccessibilityPage
 from accessibility_zoom_page import AccessibilityZoomPage
 from accessibility_display_page import AccessibilityDisplayPage
 from accessibility_audio_page import AccessibilityAudioPage
+from wallpaper_page import WallpaperPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -149,6 +150,13 @@ headerbar.flat {
    worth another round of fighting the theme's cascade -- removed. */
 .scheme-photo {
     border-radius: 5px;
+}
+.add-photo-tile {
+    border: 2px dashed alpha(currentColor, 0.3);
+    background-color: alpha(currentColor, 0.04);
+}
+.add-photo-tile image {
+    opacity: 0.5;
 }
 .scheme-ring {
     padding: 3px;
@@ -310,6 +318,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                         on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
                         on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
                     )
+                elif row_id == 'wallpaper':
+                    self._pages[row_id] = WallpaperPage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)

@@ -12,8 +12,8 @@ monospace-font-name='Inter Light 11 @wght=300'
 [org/gnome/desktop/background]
 color-shading-type='solid'
 picture-options='zoom'
-picture-uri='file:///usr/share/backgrounds/peachos/peachOS_Wallpaper.jpg'
-picture-uri-dark='file:///usr/share/backgrounds/peachos/peachOS_Wallpaper.jpg'
+picture-uri='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Light.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Dark.png'
 primary-color='#000000000000'
 secondary-color='#000000000000'
 

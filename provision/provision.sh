@@ -65,9 +65,9 @@ mkdir -p "$top_panel_dest"
 rsync -a --exclude '.git' "$top_panel_src/" "$top_panel_dest/"
 glib-compile-schemas "$top_panel_dest/schemas/"
 
-echo "==> Installing wallpaper -> /usr/share/backgrounds/peachos"
+echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
-cp "$REPO_DIR/assets/wallpapers/peachOS_Wallpaper.jpg" /usr/share/backgrounds/peachos/peachOS_Wallpaper.jpg
+cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/
 
 echo "==> Installing peachOS dconf system defaults"
 mkdir -p /etc/dconf/db/local.d
