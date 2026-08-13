@@ -3,7 +3,7 @@ import re
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import add_hover_highlight, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -83,6 +83,7 @@ class InfoRow(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
         self.append(Gtk.Label(label=key, xalign=0))
         self.append(Gtk.Label(label=value, xalign=1, hexpand=True, css_classes=['dim-label']))
 

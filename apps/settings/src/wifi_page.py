@@ -6,7 +6,7 @@ gi.require_version('NM', '1.0')
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk, NM
 
-from widgets import make_hero_header
+from widgets import add_hover_highlight, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -47,6 +47,7 @@ class NetworkRow(Gtk.Box):
         self.set_margin_end(8)
         self.set_margin_top(8)
         self.set_margin_bottom(8)
+        add_hover_highlight(self)
 
         check = Gtk.Image.new_from_icon_name('object-select-symbolic')
         check.set_opacity(1.0 if show_check else 0.0)

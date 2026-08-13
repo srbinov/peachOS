@@ -19,6 +19,7 @@ from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_about_page import GeneralAboutPage
+from widgets import add_hover_highlight
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -129,20 +130,19 @@ headerbar.flat {
 .segmented-toggle {
     padding: 8px 4px;
 }
-/* A plain Box (not a Button) has no baked-in hover state of its own --
-   these rows only look "clickable" because of this explicit :hover rule.
-   Earlier attempts read as partially-highlighted because the accent
-   color squares (.sidebar-icon) and controls (Switch/DropDown) paint
-   their own opaque backgrounds on top and were never meant to tint with
-   it -- the row itself lighting up edge-to-edge behind them is the
-   correct, full-container highlight. */
+/* :hover here is a manually-toggled class (see add_hover_highlight() in
+   widgets.py), not the CSS :hover pseudo-class -- for a Box containing
+   interactive children (Switch, DropDown) GTK4's real :hover state on
+   the container only ever covered part of the row, because it doesn't
+   reliably propagate up from whichever child the pointer happens to be
+   over. A motion controller on the row itself doesn't have that problem. */
 .network-row {
     border-radius: 8px;
 }
-.network-row:hover {
+.network-row.row-hover {
     background-color: alpha(currentColor, 0.06);
 }
-list.navigation-sidebar row:hover:not(:selected) {
+list.navigation-sidebar row.row-hover:not(:selected) {
     background-color: alpha(currentColor, 0.06);
 }
 .scheme-photo {
@@ -357,6 +357,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 content.append(Gtk.Label(label=title, xalign=0, css_classes=['nav-row-label']))
                 row.set_child(content)
                 row._row_id = row_id
+                add_hover_highlight(row)
                 listbox.append(row)
             listbox.connect('row-selected', self._on_sidebar_row_selected)
             list_outer.append(listbox)

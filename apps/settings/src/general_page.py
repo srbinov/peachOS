@@ -1,17 +1,25 @@
 import os
 
-from gi.repository import Gtk
+from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import add_hover_highlight, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 
+def _launch_control_center(*args: str):
+    try:
+        Gio.Subprocess.new(['gnome-control-center', *args], Gio.SubprocessFlags.NONE)
+    except GLib.Error:
+        pass  # gnome-control-center missing -- nothing sensible to fall back to
+
+
 class PlaceholderRow(Gtk.Box):
-    """An inert row: leading icon, title, trailing chevron. Used for
-    General sub-sections that aren't wired up to real backends yet -- same
-    visual language as the built-out tabs (ServiceRow in network_page.py)
-    so the placeholders don't look out of place next to working rows."""
+    """A row: leading icon, title, trailing chevron. Rows without an
+    on_click are inert placeholders for sub-sections that aren't wired up
+    yet; same visual language as the built-out tabs (ServiceRow in
+    network_page.py) so they don't look out of place next to working
+    rows."""
 
     def __init__(self, title: str, icon_file: str, on_click=None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
@@ -19,6 +27,7 @@ class PlaceholderRow(Gtk.Box):
         self.set_margin_end(8)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
 
         icon = Gtk.Image.new_from_file(icon_file)
         icon.set_pixel_size(28)
@@ -71,7 +80,18 @@ class GeneralPage(Gtk.Box):
             PlaceholderRow('Storage', os.path.join(ICON_DIR, 'general_storage.svg')),
         ]))
 
+        # Date & Time and Language & Region don't have a peachOS-native
+        # implementation yet, so rather than a fake placeholder these
+        # open GNOME's own panels directly -- same command the desktop's
+        # own gnome-datetime-panel.desktop / gnome-region-panel.desktop
+        # launchers use.
         self.append(GroupCard([
-            PlaceholderRow('Date & Time', os.path.join(ICON_DIR, 'general_date_time.svg')),
-            PlaceholderRow('Language & Region', os.path.join(ICON_DIR, 'general_language_region.svg')),
+            PlaceholderRow(
+                'Date & Time', os.path.join(ICON_DIR, 'general_date_time.svg'),
+                on_click=lambda: _launch_control_center('system', 'datetime'),
+            ),
+            PlaceholderRow(
+                'Language & Region', os.path.join(ICON_DIR, 'general_language_region.svg'),
+                on_click=lambda: _launch_control_center('system', 'region'),
+            ),
         ]))

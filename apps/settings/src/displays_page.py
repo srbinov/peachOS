@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import add_hover_highlight, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -171,6 +171,7 @@ class BrightnessRow(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
         self.append(Gtk.Image.new_from_icon_name('display-brightness-symbolic'))
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self.scale.set_draw_value(False)
@@ -188,6 +189,7 @@ class ToggleRow(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
         text_box.append(Gtk.Label(label=title, xalign=0))
         if subtitle:
@@ -204,6 +206,7 @@ class DropdownRow(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
         self.append(Gtk.Label(label=title, xalign=0, hexpand=True))
         self.dropdown = Gtk.DropDown.new_from_strings([label for label, _value in options] or [' '])
         self._values = [value for _label, value in options]
@@ -230,6 +233,7 @@ class TemperatureRow(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
+        add_hover_highlight(self)
         self.append(Gtk.Label(label='Color Temperature', xalign=0))
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1700, 4700, 50)
         self.scale.set_draw_value(False)
