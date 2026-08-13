@@ -2,6 +2,17 @@
 import os
 import sys
 
+# This VM has no working GL/EGL driver (every launch logs libEGL/MESA/ZINK
+# failures) -- GTK4's default GSK renderer still limps along after that,
+# but with broken damage-tracking: CSS state changes (like our row hover
+# highlight) intermittently paint over only part of a widget instead of
+# the whole thing, leaving stale pixels from a previous frame. Forcing the
+# plain Cairo renderer sidesteps GL/Vulkan/Zink entirely, which is what
+# actually fixed the "half the container" hover bug -- it was never a CSS
+# bug. Must be set before GTK picks a renderer, so this runs before the
+# gi.repository import below.
+os.environ.setdefault('GSK_RENDERER', 'cairo')
+
 import gi
 
 gi.require_version('Gtk', '4.0')
