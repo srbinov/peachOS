@@ -24,7 +24,7 @@ class AccessibilityDisplayPage(Gtk.Box):
 
     def _build_ui(self):
         self.append(make_hero_header(
-            os.path.join(ICON_DIR, 'accessibility.svg'), 'video-display-symbolic',
+            os.path.join(ICON_DIR, 'accessibility_display.svg'), 'video-display-symbolic',
             'Display', 'Adjust contrast, pointer size, and text size to make the screen easier to see.',
         ))
 

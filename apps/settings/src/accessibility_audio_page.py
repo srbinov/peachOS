@@ -28,7 +28,7 @@ class AccessibilityAudioPage(Gtk.Box):
 
     def _build_ui(self):
         self.append(make_hero_header(
-            os.path.join(ICON_DIR, 'accessibility.svg'), 'audio-volume-high-symbolic',
+            os.path.join(ICON_DIR, 'accessibility_audio.svg'), 'audio-volume-high-symbolic',
             'Audio', 'Use visual alerts instead of, or in addition to, alert sounds.',
         ))
 

@@ -24,7 +24,7 @@ class AccessibilityZoomPage(Gtk.Box):
 
     def _build_ui(self):
         self.append(make_hero_header(
-            os.path.join(ICON_DIR, 'accessibility.svg'), 'zoom-in-symbolic',
+            os.path.join(ICON_DIR, 'accessibility_zoom.svg'), 'zoom-in-symbolic',
             'Zoom', 'Use the pointer or keyboard shortcuts to zoom in on the screen.',
         ))
 
