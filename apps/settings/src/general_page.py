@@ -13,7 +13,7 @@ class PlaceholderRow(Gtk.Box):
     visual language as the built-out tabs (ServiceRow in network_page.py)
     so the placeholders don't look out of place next to working rows."""
 
-    def __init__(self, title: str, icon_file: str):
+    def __init__(self, title: str, icon_file: str, on_click=None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
         self.set_margin_start(12)
         self.set_margin_end(8)
@@ -27,6 +27,12 @@ class PlaceholderRow(Gtk.Box):
         self.append(Gtk.Label(label=title, xalign=0, hexpand=True, valign=Gtk.Align.CENTER))
         self.append(Gtk.Image.new_from_icon_name('go-next-symbolic'))
 
+        if on_click:
+            click = Gtk.GestureClick()
+            click.connect('released', lambda *_a: on_click())
+            self.add_controller(click)
+            self.set_cursor_from_name('pointer')
+
 
 class GroupCard(Gtk.Box):
     def __init__(self, rows: list):
@@ -38,13 +44,14 @@ class GroupCard(Gtk.Box):
 
 
 class GeneralPage(Gtk.Box):
-    def __init__(self):
+    def __init__(self, on_open_about=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
         self.set_margin_bottom(18)
 
+        self._on_open_about = on_open_about
         self._build_ui()
 
     def _build_ui(self):
@@ -59,7 +66,7 @@ class GeneralPage(Gtk.Box):
         # Passwords, Login Items & Extensions) were dropped rather than
         # faked with placeholder icons.
         self.append(GroupCard([
-            PlaceholderRow('About', os.path.join(ICON_DIR, 'general_about.svg')),
+            PlaceholderRow('About', os.path.join(ICON_DIR, 'general_about.svg'), on_click=self._on_open_about),
             PlaceholderRow('Software Update', os.path.join(ICON_DIR, 'general_software_update.svg')),
             PlaceholderRow('Storage', os.path.join(ICON_DIR, 'general_storage.svg')),
         ]))

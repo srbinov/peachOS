@@ -18,6 +18,7 @@ from appearance_page import AppearancePage
 from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
+from general_about_page import GeneralAboutPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -42,6 +43,13 @@ SIDEBAR_SECTIONS = [
         ('notifications', 'Notifications', 'preferences-system-notifications-symbolic', '#FF3B30'),
     ],
 ]
+
+# Sub-pages reached by drilling into a row (e.g. General -> About) rather
+# than a sidebar click. They live in the same content stack but aren't
+# listed in SIDEBAR_SECTIONS, so they need their own title lookup.
+EXTRA_PAGE_TITLES = {
+    'general_about': 'About',
+}
 
 ACCENT_CLASSES = {
     '#0A84FF': 'accent-blue',
@@ -267,10 +275,17 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'displays':
                     self._pages[row_id] = DisplaysPage()
                 elif row_id == 'general':
-                    self._pages[row_id] = GeneralPage()
+                    self._pages[row_id] = GeneralPage(
+                        on_open_about=lambda: self._go_to('general_about', record_history=True),
+                    )
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
+
+        self._pages['general_about'] = GeneralAboutPage(
+            on_back=lambda: self._go_to('general', record_history=True),
+        )
+        self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
         self._go_to(first_id, record_history=True)
@@ -395,15 +410,31 @@ class SettingsWindow(Adw.ApplicationWindow):
                 other.select_row(None)
         self._go_to(row._row_id, record_history=True)
 
+    def _is_sidebar_page(self, row_id: str) -> bool:
+        return any(rid == row_id for section in SIDEBAR_SECTIONS for rid, *_ in section)
+
     def _go_to(self, row_id: str, record_history: bool):
+        # Drilling into a detail page (e.g. General -> About) slides left,
+        # like macOS's own settings; returning to a sidebar page slides
+        # back right. Switching between two sidebar pages just crossfades.
+        old_id = self._placeholder_stack.get_visible_child_name()
+        if not self._is_sidebar_page(row_id):
+            transition = Gtk.StackTransitionType.SLIDE_LEFT
+        elif old_id and not self._is_sidebar_page(old_id):
+            transition = Gtk.StackTransitionType.SLIDE_RIGHT
+        else:
+            transition = Gtk.StackTransitionType.CROSSFADE
+        self._placeholder_stack.set_transition_type(transition)
         self._placeholder_stack.set_visible_child_name(row_id)
+
         for section, listbox in zip(SIDEBAR_SECTIONS, self._listboxes):
             for idx, (rid, *_rest) in enumerate(section):
                 if rid == row_id:
                     listbox.select_row(listbox.get_row_at_index(idx))
 
         title = next(
-            title for section in SIDEBAR_SECTIONS for rid, title, *_ in section if rid == row_id
+            (title for section in SIDEBAR_SECTIONS for rid, title, *_ in section if rid == row_id),
+            EXTRA_PAGE_TITLES.get(row_id, ''),
         )
         self._content_title_label.set_label(title)
 
