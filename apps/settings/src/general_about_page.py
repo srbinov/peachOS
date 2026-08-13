@@ -125,9 +125,7 @@ class GeneralAboutPage(Gtk.Box):
         ]
         details = [(key, value) for key, value in details if value]
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=['wifi-card'])
-        for i, (key, value) in enumerate(details):
-            if i > 0:
-                card.append(Gtk.Separator(margin_start=14))
+        card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        for key, value in details:
             card.append(InfoRow(key, value))
         self.append(card)

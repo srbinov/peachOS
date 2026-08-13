@@ -151,10 +151,10 @@ class WifiPage(Gtk.Box):
         # Known network
         self._known_label = Gtk.Label(label='Known Network', xalign=0, css_classes=['heading'], visible=False)
         self.append(self._known_label)
-        self._known_frame = Gtk.Box(css_classes=['wifi-card'], visible=False)
-        self._known_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._known_frame.append(self._known_list)
-        self.append(self._known_frame)
+        self._known_list = Gtk.ListBox(
+            css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE, visible=False,
+        )
+        self.append(self._known_list)
 
         # Other networks
         other_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -165,10 +165,8 @@ class WifiPage(Gtk.Box):
 
         self._other_header = other_header
         self._other_scroller = Gtk.ScrolledWindow(vexpand=True)
-        self._other_frame = Gtk.Box(css_classes=['wifi-card'])
-        self._other_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._other_frame.append(self._other_list)
-        self._other_scroller.set_child(self._other_frame)
+        self._other_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self._other_scroller.set_child(self._other_list)
         self.append(self._other_scroller)
 
         self._status_label = Gtk.Label(
@@ -197,7 +195,7 @@ class WifiPage(Gtk.Box):
             self._status_label.set_label('No Wi-Fi hardware detected on this computer.')
             self._status_label.set_visible(True)
             self._toggle.set_sensitive(False)
-            self._other_frame.set_visible(False)
+            self._other_list.set_visible(False)
             self._other_scroller.set_visible(False)
             self._other_header.set_visible(False)
             return
@@ -269,15 +267,15 @@ class WifiPage(Gtk.Box):
 
         if not enabled:
             self._known_label.set_visible(False)
-            self._known_frame.set_visible(False)
-            self._other_frame.set_visible(False)
+            self._known_list.set_visible(False)
+            self._other_list.set_visible(False)
             self._other_scroller.set_visible(False)
             self._other_header.set_visible(False)
             return
 
         self._other_scroller.set_visible(True)
         self._other_header.set_visible(True)
-        self._other_frame.set_visible(True)
+        self._other_list.set_visible(True)
 
         known_conns = [
             c for c in self._client.get_connections()
@@ -301,7 +299,7 @@ class WifiPage(Gtk.Box):
                 if matching_conn:
                     row = NetworkRow(ssid, _ap_is_secured(ap), ap.get_strength(), show_check=True)
                     self._known_list.append(row)
-                    self._known_frame.set_visible(True)
+                    self._known_list.set_visible(True)
                     self._known_label.set_visible(True)
                     known_shown = True
                 continue
@@ -314,7 +312,7 @@ class WifiPage(Gtk.Box):
 
         if not known_shown:
             self._known_label.set_visible(False)
-            self._known_frame.set_visible(False)
+            self._known_list.set_visible(False)
 
     # ---- Connecting -------------------------------------------------------
 

@@ -42,12 +42,16 @@ class PlaceholderRow(Gtk.Box):
             self.set_cursor_from_name('pointer')
 
 
-class GroupCard(Gtk.Box):
+class GroupCard(Gtk.ListBox):
+    """A real Gtk.ListBox, not a plain Box -- 'boxed-list' is the same
+    style class GNOME's own settings rows use, and GtkListBoxRow gets
+    proper :hover/:active handling straight from the theme (the exact
+    same mechanism that already makes the sidebar's own rows highlight
+    correctly), instead of us trying to reproduce it by hand."""
+
     def __init__(self, rows: list):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=['wifi-card'])
-        for i, row in enumerate(rows):
-            if i > 0:
-                self.append(Gtk.Separator(margin_start=50))
+        super().__init__(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        for row in rows:
             self.append(row)
 
 

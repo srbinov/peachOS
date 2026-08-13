@@ -285,21 +285,20 @@ class DisplaysPage(Gtk.Box):
         header.append(Gtk.Label(label='Built-in Display', css_classes=['title-4']))
         self.append(header)
 
-        self._monitor_card = monitor_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        self._monitor_card = monitor_card = Gtk.ListBox(
+            css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE,
+        )
         self._orientation_row = DropdownRow('Orientation', ORIENTATIONS)
         self._orientation_row.dropdown.connect('notify::selected', self._on_orientation_changed)
         monitor_card.append(self._orientation_row)
-        monitor_card.append(Gtk.Separator())
 
         self._resolution_row = DropdownRow('Resolution', [])
         self._resolution_row.dropdown.connect('notify::selected', self._on_resolution_changed)
         monitor_card.append(self._resolution_row)
-        monitor_card.append(Gtk.Separator())
 
         self._refresh_rate_row = DropdownRow('Refresh Rate', [])
         self._refresh_rate_row.dropdown.connect('notify::selected', self._on_refresh_rate_changed)
         monitor_card.append(self._refresh_rate_row)
-        monitor_card.append(Gtk.Separator())
 
         self._scale_row = DropdownRow('Scale', [])
         self._scale_row.dropdown.connect('notify::selected', self._on_display_scale_changed)
@@ -323,11 +322,10 @@ class DisplaysPage(Gtk.Box):
         scaling_card.append(self._scaling_row)
         self.append(scaling_card)
 
-        brightness_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        brightness_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._brightness_row = BrightnessRow()
         self._brightness_row.scale.connect('value-changed', self._on_brightness_changed)
         brightness_card.append(self._brightness_row)
-        brightness_card.append(Gtk.Separator())
 
         self._auto_brightness_row = ToggleRow('Automatically adjust brightness')
         self._auto_brightness_row.switch.connect('state-set', self._on_auto_brightness_toggled)
@@ -342,7 +340,7 @@ class DisplaysPage(Gtk.Box):
         self.append(self._brightness_status_label)
 
         self.append(Gtk.Label(label='Night Light', xalign=0, css_classes=['heading'], margin_start=4))
-        night_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        night_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
 
         self._night_light_row = ToggleRow(
             'Night Light',
@@ -350,12 +348,10 @@ class DisplaysPage(Gtk.Box):
         )
         self._night_light_row.switch.connect('state-set', self._on_night_light_toggled)
         night_card.append(self._night_light_row)
-        night_card.append(Gtk.Separator())
 
         self._schedule_row = DropdownRow('Schedule', [('Sunset to Sunrise', True), ('Manual', False)])
         self._schedule_row.dropdown.connect('notify::selected', self._on_schedule_changed)
         night_card.append(self._schedule_row)
-        night_card.append(Gtk.Separator())
 
         self._temperature_row = TemperatureRow()
         self._temperature_row.scale.connect('value-changed', self._on_temperature_changed)

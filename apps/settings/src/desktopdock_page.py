@@ -227,27 +227,24 @@ class DesktopDockPage(Gtk.Box):
         self._size_row.scale.connect('value-changed', self._on_size_changed)
         self._magnify_row.scale.connect('value-changed', self._on_magnify_changed)
 
-        position_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        position_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._position_row = DropdownRow('Dock position on screen', DOCK_LOCATIONS)
         self._position_row.dropdown.connect('notify::selected', self._on_position_changed)
         position_card.append(self._position_row)
-        position_card.append(Gtk.Separator())
 
         self._genie_row = DropdownRow('Minimized window animation', [('Genie Effect', True), ('None', False)])
         self._genie_row.dropdown.connect('notify::selected', self._on_genie_changed)
         position_card.append(self._genie_row)
         self.append(position_card)
 
-        behavior_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        behavior_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._autohide_row = ToggleRow('Automatically hide and show the Dock')
         self._autohide_row.switch.connect('state-set', self._on_autohide_toggled)
         behavior_card.append(self._autohide_row)
-        behavior_card.append(Gtk.Separator())
 
         self._animate_open_row = ToggleRow('Animate opening applications')
         self._animate_open_row.switch.connect('state-set', self._on_animate_open_toggled)
         behavior_card.append(self._animate_open_row)
-        behavior_card.append(Gtk.Separator())
 
         self._indicators_row = ToggleRow('Show indicators for open applications')
         self._indicators_row.switch.connect('state-set', self._on_indicators_toggled)
@@ -255,11 +252,10 @@ class DesktopDockPage(Gtk.Box):
         self.append(behavior_card)
 
         self.append(Gtk.Label(label='Custom Colors', xalign=0, css_classes=['heading'], margin_start=4))
-        colors_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+        colors_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._bg_color_row = ColorRow('Background Color')
         self._bg_color_row.button.connect('notify::rgba', self._on_bg_color_changed)
         colors_card.append(self._bg_color_row)
-        colors_card.append(Gtk.Separator())
         self._border_color_row = ColorRow('Border Color')
         self._border_color_row.button.connect('notify::rgba', self._on_border_color_changed)
         colors_card.append(self._border_color_row)

@@ -84,19 +84,16 @@ class BatteryPage(Gtk.Box):
         header.append(title_box)
         self.append(header)
 
-        settings_frame = Gtk.Box(css_classes=['wifi-card'])
-        settings_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        settings_frame.append(settings_list)
+        settings_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
 
         self._low_power_switch = Gtk.Switch(valign=Gtk.Align.CENTER, sensitive=False)
         self._low_power_switch.connect('state-set', self._on_low_power_toggled)
         settings_list.append(InfoRow('Low Power Mode', self._low_power_switch))
-        settings_list.append(Gtk.Separator())
 
         self._health_label = Gtk.Label(label='—', css_classes=['dim-label'])
         settings_list.append(InfoRow('Battery Health', self._health_label))
 
-        self.append(settings_frame)
+        self.append(settings_list)
 
         toggle_row = Gtk.Box(css_classes=['linked'], halign=Gtk.Align.FILL, homogeneous=True)
         btn_24h = Gtk.ToggleButton(label='Last 24 Hours', active=True, css_classes=['segmented-toggle'])

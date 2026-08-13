@@ -75,15 +75,11 @@ class NetworkPage(Gtk.Box):
             'Network', 'Manage the network interfaces and services connected to this computer.',
         ))
 
-        self._devices_frame = Gtk.Box(css_classes=['wifi-card'])
-        self._devices_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._devices_frame.append(self._devices_list)
-        self.append(self._devices_frame)
+        self._devices_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self.append(self._devices_list)
 
-        self._firewall_frame = Gtk.Box(css_classes=['wifi-card'])
-        self._firewall_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._firewall_frame.append(self._firewall_list)
-        self.append(self._firewall_frame)
+        self._firewall_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self.append(self._firewall_list)
 
         self._status_label = Gtk.Label(
             label='Loading network services…', wrap=True,
@@ -114,7 +110,7 @@ class NetworkPage(Gtk.Box):
             if d.get_device_type() not in (NM.DeviceType.LOOPBACK, NM.DeviceType.GENERIC)
         ]
 
-        self._devices_frame.set_visible(bool(devices))
+        self._devices_list.set_visible(bool(devices))
         self._status_label.set_visible(not devices)
         if not devices:
             self._status_label.set_label('No network interfaces detected.')

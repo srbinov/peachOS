@@ -103,10 +103,10 @@ class BluetoothPage(Gtk.Box):
 
         self._my_label = Gtk.Label(label='My Devices', xalign=0, css_classes=['heading'], visible=False)
         self.append(self._my_label)
-        self._my_frame = Gtk.Box(css_classes=['wifi-card'], visible=False)
-        self._my_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._my_frame.append(self._my_list)
-        self.append(self._my_frame)
+        self._my_list = Gtk.ListBox(
+            css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE, visible=False,
+        )
+        self.append(self._my_list)
 
         self._nearby_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self._nearby_header.append(Gtk.Label(label='Nearby Devices', xalign=0, hexpand=True, css_classes=['heading']))
@@ -115,10 +115,8 @@ class BluetoothPage(Gtk.Box):
         self.append(self._nearby_header)
 
         self._nearby_scroller = Gtk.ScrolledWindow(vexpand=True)
-        self._nearby_frame = Gtk.Box(css_classes=['wifi-card'])
-        self._nearby_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._nearby_frame.append(self._nearby_list)
-        self._nearby_scroller.set_child(self._nearby_frame)
+        self._nearby_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self._nearby_scroller.set_child(self._nearby_list)
         self.append(self._nearby_scroller)
 
         self._status_label = Gtk.Label(
@@ -166,9 +164,9 @@ class BluetoothPage(Gtk.Box):
             self._status_label.set_label('No Bluetooth adapter detected on this computer.')
             self._status_label.set_visible(True)
             self._toggle.set_sensitive(False)
-            self._my_frame.set_visible(False)
+            self._my_list.set_visible(False)
             self._my_label.set_visible(False)
-            self._nearby_frame.set_visible(False)
+            self._nearby_list.set_visible(False)
             self._nearby_scroller.set_visible(False)
             self._nearby_header.set_visible(False)
             self._discoverable_label.set_visible(False)
@@ -184,9 +182,9 @@ class BluetoothPage(Gtk.Box):
             self._status_label.set_label('No Bluetooth adapter detected on this computer.')
             self._status_label.set_visible(True)
             self._toggle.set_sensitive(False)
-            self._my_frame.set_visible(False)
+            self._my_list.set_visible(False)
             self._my_label.set_visible(False)
-            self._nearby_frame.set_visible(False)
+            self._nearby_list.set_visible(False)
             self._nearby_scroller.set_visible(False)
             self._nearby_header.set_visible(False)
             self._discoverable_label.set_visible(False)
@@ -197,7 +195,7 @@ class BluetoothPage(Gtk.Box):
         self._discoverable_label.set_visible(True)
         self._nearby_scroller.set_visible(True)
         self._nearby_header.set_visible(True)
-        self._nearby_frame.set_visible(True)
+        self._nearby_list.set_visible(True)
 
         powered = objects[adapter_path][ADAPTER_IFACE].get('Powered', False)
         self._toggle.set_sensitive(True)
@@ -230,7 +228,7 @@ class BluetoothPage(Gtk.Box):
                 self._nearby_list.append(DeviceRow(name, icon_name))
 
         self._my_label.set_visible(my_shown)
-        self._my_frame.set_visible(my_shown)
+        self._my_list.set_visible(my_shown)
 
         if powered:
             self._scan_spinner.start()
