@@ -38,6 +38,12 @@ class DropdownRow(Gtk.Box):
         self.append(Gtk.Label(label=title, xalign=0, hexpand=True))
         self.dropdown = Gtk.DropDown.new_from_strings(options)
         self.dropdown.set_enable_search(enable_search)
+        if enable_search:
+            # Default match mode is PREFIX, which only matches strings
+            # starting with the typed text -- useless for something like
+            # "America/Denver" where the useful search term is the city,
+            # not the leading "America/". SUBSTRING matches anywhere.
+            self.dropdown.set_search_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.append(self.dropdown)
 
     def set_options(self, options: list, selected: str = None):

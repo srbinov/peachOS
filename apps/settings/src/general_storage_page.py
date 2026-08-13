@@ -195,8 +195,11 @@ class GeneralStoragePage(Gtk.Box):
         )
 
         header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        # "Peachintosh HD" -- the peachOS equivalent of macOS's own
+        # "Macintosh HD" boot-volume label. Like its namesake, this is a
+        # volume name, not the hostname -- intentionally not GLib.get_host_name().
         header_row.append(Gtk.Label(
-            label=GLib.get_host_name() or 'This Computer', xalign=0, hexpand=True, css_classes=['heading'],
+            label='Peachintosh HD', xalign=0, hexpand=True, css_classes=['heading'],
         ))
         self._usage_label = Gtk.Label(label='Calculating…', xalign=1, css_classes=['dim-label'])
         header_row.append(self._usage_label)
