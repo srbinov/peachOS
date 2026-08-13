@@ -88,28 +88,19 @@ class InfoRow(Gtk.Box):
 
 
 class GeneralAboutPage(Gtk.Box):
-    def __init__(self, on_back=None):
+    def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
         self.set_margin_bottom(18)
-        self._on_back = on_back
         self._build_ui()
 
     def _build_ui(self):
-        if self._on_back:
-            back_btn = Gtk.Button(css_classes=['flat'], halign=Gtk.Align.START)
-            back_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-            back_content.append(Gtk.Image.new_from_icon_name('go-previous-symbolic'))
-            back_content.append(Gtk.Label(label='General'))
-            back_btn.set_child(back_content)
-            back_btn.connect('clicked', lambda *_a: self._on_back())
-            self.append(back_btn)
-
         self.append(make_hero_header(
             os.path.join(ICON_DIR, 'laptop.svg'), 'computer-symbolic',
-            'About', 'An overview of the hardware and software running this Mac.',
+            'About', 'An overview of the hardware and software running this computer.',
+            icon_size=88,
         ))
 
         os_release = _read_os_release()

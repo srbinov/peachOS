@@ -3,7 +3,8 @@ import os
 from gi.repository import Gtk
 
 
-def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, description: str) -> Gtk.Widget:
+def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, description: str,
+                      icon_size: int = 64) -> Gtk.Widget:
     """The big-icon/title/description card that sits at the top of every
     tab, matching the reference "General" page layout. Shared across all
     page modules rather than duplicated per-file."""
@@ -17,7 +18,7 @@ def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, descri
         icon = Gtk.Image.new_from_file(icon_path)
     else:
         icon = Gtk.Image.new_from_icon_name(fallback_icon_name)
-    icon.set_pixel_size(64)
+    icon.set_pixel_size(icon_size)
     inner.append(icon)
 
     inner.append(Gtk.Label(label=title, css_classes=['title-1']))

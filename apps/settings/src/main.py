@@ -129,11 +129,22 @@ headerbar.flat {
 .segmented-toggle {
     padding: 8px 4px;
 }
-/* .network-row used to have a :hover background here, but it only ever
-   painted a partial region of the row (not the whole container) across
-   every tab that uses it, and reliably fixing GTK's hover-state coverage
-   for a Box containing interactive children (switches, dropdowns) wasn't
-   worth another round of fighting the theme's cascade -- removed. */
+/* A plain Box (not a Button) has no baked-in hover state of its own --
+   these rows only look "clickable" because of this explicit :hover rule.
+   Earlier attempts read as partially-highlighted because the accent
+   color squares (.sidebar-icon) and controls (Switch/DropDown) paint
+   their own opaque backgrounds on top and were never meant to tint with
+   it -- the row itself lighting up edge-to-edge behind them is the
+   correct, full-container highlight. */
+.network-row {
+    border-radius: 8px;
+}
+.network-row:hover {
+    background-color: alpha(currentColor, 0.06);
+}
+list.navigation-sidebar row:hover:not(:selected) {
+    background-color: alpha(currentColor, 0.06);
+}
 .scheme-photo {
     border-radius: 5px;
 }
@@ -282,9 +293,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
 
-        self._pages['general_about'] = GeneralAboutPage(
-            on_back=lambda: self._go_to('general', record_history=True),
-        )
+        self._pages['general_about'] = GeneralAboutPage()
         self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
