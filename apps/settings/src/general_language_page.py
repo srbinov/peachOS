@@ -63,6 +63,13 @@ class DropdownRow(Gtk.Box):
             text_box.append(Gtk.Label(label=subtitle, xalign=0, wrap=True, css_classes=['caption', 'dim-label']))
         self.append(text_box)
         self.dropdown = Gtk.DropDown(enable_search=True)
+        # A DropDown's search silently matches nothing at all without an
+        # explicit expression telling it what to compare typed text
+        # against, and defaults to PREFIX match (only matches strings
+        # *starting with* the typed text) even once it has one -- see
+        # general_datetime_page.py's DropdownRow for how this was found.
+        self.dropdown.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, 'string'))
+        self.dropdown.set_search_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.append(self.dropdown)
         self._codes = []
 

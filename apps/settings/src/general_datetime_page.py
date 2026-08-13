@@ -44,6 +44,13 @@ class DropdownRow(Gtk.Box):
             # "America/Denver" where the useful search term is the city,
             # not the leading "America/". SUBSTRING matches anywhere.
             self.dropdown.set_search_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
+            # new_from_strings() never sets an expression, so the search
+            # filter has no idea what string to compare against and
+            # silently matches nothing at all -- confirmed by walking the
+            # popover's real GtkListView model after typing into its
+            # search entry: 4 items in, 4 items still shown, until this
+            # expression is set explicitly.
+            self.dropdown.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, 'string'))
         self.append(self.dropdown)
 
     def set_options(self, options: list, selected: str = None):
