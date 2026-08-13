@@ -2,17 +2,6 @@
 import os
 import sys
 
-# This VM has no working GL/EGL driver (every launch logs libEGL/MESA/ZINK
-# failures) -- GTK4's default GSK renderer still limps along after that,
-# but with broken damage-tracking: CSS state changes (like our row hover
-# highlight) intermittently paint over only part of a widget instead of
-# the whole thing, leaving stale pixels from a previous frame. Forcing the
-# plain Cairo renderer sidesteps GL/Vulkan/Zink entirely, which is what
-# actually fixed the "half the container" hover bug -- it was never a CSS
-# bug. Must be set before GTK picks a renderer, so this runs before the
-# gi.repository import below.
-os.environ.setdefault('GSK_RENDERER', 'cairo')
-
 import gi
 
 gi.require_version('Gtk', '4.0')
@@ -30,7 +19,6 @@ from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_about_page import GeneralAboutPage
-from widgets import add_hover_highlight
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -141,21 +129,11 @@ headerbar.flat {
 .segmented-toggle {
     padding: 8px 4px;
 }
-/* :hover here is a manually-toggled class (see add_hover_highlight() in
-   widgets.py), not the CSS :hover pseudo-class -- for a Box containing
-   interactive children (Switch, DropDown) GTK4's real :hover state on
-   the container only ever covered part of the row, because it doesn't
-   reliably propagate up from whichever child the pointer happens to be
-   over. A motion controller on the row itself doesn't have that problem. */
-.network-row {
-    border-radius: 8px;
-}
-.network-row.row-hover {
-    background-color: alpha(currentColor, 0.06);
-}
-list.navigation-sidebar row.row-hover:not(:selected) {
-    background-color: alpha(currentColor, 0.06);
-}
+/* .network-row used to have a :hover background here, but it only ever
+   painted a partial region of the row (not the whole container) across
+   every tab that uses it, and reliably fixing GTK's hover-state coverage
+   for a Box containing interactive children (switches, dropdowns) wasn't
+   worth another round of fighting the theme's cascade -- removed. */
 .scheme-photo {
     border-radius: 5px;
 }
@@ -368,7 +346,6 @@ class SettingsWindow(Adw.ApplicationWindow):
                 content.append(Gtk.Label(label=title, xalign=0, css_classes=['nav-row-label']))
                 row.set_child(content)
                 row._row_id = row_id
-                add_hover_highlight(row)
                 listbox.append(row)
             listbox.connect('row-selected', self._on_sidebar_row_selected)
             list_outer.append(listbox)

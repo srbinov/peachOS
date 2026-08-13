@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import add_hover_highlight, make_hero_header
+from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -27,7 +27,6 @@ class PlaceholderRow(Gtk.Box):
         self.set_margin_end(8)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
-        add_hover_highlight(self)
 
         icon = Gtk.Image.new_from_file(icon_file)
         icon.set_pixel_size(28)
