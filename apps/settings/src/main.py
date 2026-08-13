@@ -19,6 +19,7 @@ from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_about_page import GeneralAboutPage
+from general_storage_page import GeneralStoragePage
 from general_datetime_page import GeneralDateTimePage
 from general_language_page import GeneralLanguagePage
 
@@ -51,6 +52,7 @@ SIDEBAR_SECTIONS = [
 # listed in SIDEBAR_SECTIONS, so they need their own title lookup.
 EXTRA_PAGE_TITLES = {
     'general_about': 'About',
+    'general_storage': 'Storage',
     'general_datetime': 'Date & Time',
     'general_language': 'Language & Region',
 }
@@ -281,6 +283,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'general':
                     self._pages[row_id] = GeneralPage(
                         on_open_about=lambda: self._go_to('general_about', record_history=True),
+                        on_open_storage=lambda: self._go_to('general_storage', record_history=True),
                         on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
                         on_open_language=lambda: self._go_to('general_language', record_history=True),
                     )
@@ -290,6 +293,9 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._pages['general_about'] = GeneralAboutPage()
         self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
+
+        self._pages['general_storage'] = GeneralStoragePage()
+        self._placeholder_stack.add_named(self._pages['general_storage'], 'general_storage')
 
         self._pages['general_datetime'] = GeneralDateTimePage()
         self._placeholder_stack.add_named(self._pages['general_datetime'], 'general_datetime')

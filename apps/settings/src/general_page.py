@@ -49,7 +49,7 @@ class GroupCard(Gtk.ListBox):
 
 
 class GeneralPage(Gtk.Box):
-    def __init__(self, on_open_about=None, on_open_datetime=None, on_open_language=None):
+    def __init__(self, on_open_about=None, on_open_storage=None, on_open_datetime=None, on_open_language=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
@@ -57,6 +57,7 @@ class GeneralPage(Gtk.Box):
         self.set_margin_bottom(18)
 
         self._on_open_about = on_open_about
+        self._on_open_storage = on_open_storage
         self._on_open_datetime = on_open_datetime
         self._on_open_language = on_open_language
         self._build_ui()
@@ -75,7 +76,10 @@ class GeneralPage(Gtk.Box):
         self.append(GroupCard([
             PlaceholderRow('About', os.path.join(ICON_DIR, 'general_about.svg'), on_click=self._on_open_about),
             PlaceholderRow('Software Update', os.path.join(ICON_DIR, 'general_software_update.svg')),
-            PlaceholderRow('Storage', os.path.join(ICON_DIR, 'general_storage.svg')),
+            PlaceholderRow(
+                'Storage', os.path.join(ICON_DIR, 'general_storage.svg'),
+                on_click=self._on_open_storage,
+            ),
         ]))
 
         self.append(GroupCard([
