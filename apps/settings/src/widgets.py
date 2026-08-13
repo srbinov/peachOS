@@ -95,28 +95,37 @@ class DropdownRow(Gtk.Box):
 
 
 class IconPlaceholderRow(Gtk.Box):
-    """A row for a top-level settings list: a symbolic icon in a colored
-    square (used wherever no custom SVG icon exists yet -- e.g. every row
-    on the new Accessibility page), a title, and either a trailing
-    chevron (drills into a sub-page) or a trailing switch (a single
-    on/off setting with no sub-page worth having)."""
+    """A row for a top-level settings list: a leading icon, a title, and
+    either a trailing chevron (drills into a sub-page) or a trailing
+    switch (a single on/off setting with no sub-page worth having).
 
-    def __init__(self, title: str, icon_name: str, accent_class: str, on_click=None, switch: Gtk.Switch = None):
+    icon_file (a real, full-color SVG) is preferred when given and it
+    exists on disk; otherwise falls back to icon_name rendered as a
+    symbolic glyph in a colored square, for rows that don't have a
+    custom icon yet."""
+
+    def __init__(self, title: str, icon_name: str, accent_class: str, on_click=None, switch: Gtk.Switch = None,
+                 icon_file: str = None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
         self.set_margin_start(12)
         self.set_margin_end(8)
         self.set_margin_top(10)
         self.set_margin_bottom(10)
 
-        icon_box = Gtk.Box(
-            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
-            css_classes=['sidebar-icon', accent_class],
-        )
-        icon_box.set_size_request(28, 28)
-        icon = Gtk.Image.new_from_icon_name(icon_name)
-        icon.set_pixel_size(15)
-        icon_box.append(icon)
-        self.append(icon_box)
+        if icon_file and os.path.isfile(icon_file):
+            icon = Gtk.Image.new_from_file(icon_file)
+            icon.set_pixel_size(28)
+            self.append(icon)
+        else:
+            icon_box = Gtk.Box(
+                halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
+                css_classes=['sidebar-icon', accent_class],
+            )
+            icon_box.set_size_request(28, 28)
+            icon = Gtk.Image.new_from_icon_name(icon_name)
+            icon.set_pixel_size(15)
+            icon_box.append(icon)
+            self.append(icon_box)
 
         self.append(Gtk.Label(label=title, xalign=0, hexpand=True, valign=Gtk.Align.CENTER))
 

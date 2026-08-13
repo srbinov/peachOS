@@ -26,8 +26,6 @@ from accessibility_page import AccessibilityPage
 from accessibility_zoom_page import AccessibilityZoomPage
 from accessibility_display_page import AccessibilityDisplayPage
 from accessibility_audio_page import AccessibilityAudioPage
-from accessibility_pointer_page import AccessibilityPointerPage
-from accessibility_keyboard_page import AccessibilityKeyboardPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -64,8 +62,6 @@ EXTRA_PAGE_TITLES = {
     'accessibility_zoom': 'Zoom',
     'accessibility_display': 'Display',
     'accessibility_audio': 'Audio',
-    'accessibility_pointer': 'Pointer Control',
-    'accessibility_keyboard': 'Keyboard',
 }
 
 ACCENT_CLASSES = {
@@ -313,8 +309,6 @@ class SettingsWindow(Adw.ApplicationWindow):
                         on_open_zoom=lambda: self._go_to('accessibility_zoom', record_history=True),
                         on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
                         on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
-                        on_open_pointer=lambda: self._go_to('accessibility_pointer', record_history=True),
-                        on_open_keyboard=lambda: self._go_to('accessibility_keyboard', record_history=True),
                     )
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
@@ -340,12 +334,6 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._pages['accessibility_audio'] = AccessibilityAudioPage()
         self._placeholder_stack.add_named(self._pages['accessibility_audio'], 'accessibility_audio')
-
-        self._pages['accessibility_pointer'] = AccessibilityPointerPage()
-        self._placeholder_stack.add_named(self._pages['accessibility_pointer'], 'accessibility_pointer')
-
-        self._pages['accessibility_keyboard'] = AccessibilityKeyboardPage()
-        self._placeholder_stack.add_named(self._pages['accessibility_keyboard'], 'accessibility_keyboard')
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
         self._go_to(first_id, record_history=True)
