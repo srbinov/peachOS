@@ -7,7 +7,7 @@ def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, descri
     """The big-icon/title/description card that sits at the top of every
     tab, matching the reference "General" page layout. Shared across all
     page modules rather than duplicated per-file."""
-    card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.VERTICAL)
+    card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
     inner = Gtk.Box(
         orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER,
         margin_top=22, margin_bottom=22, margin_start=24, margin_end=24,
