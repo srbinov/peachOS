@@ -97,20 +97,25 @@ class WallpaperTile(Gtk.Box):
 
 
 class AddPhotoTile(Gtk.Box):
-    """Wrapped in the same ring_box as WallpaperTile (just permanently
-    unselected) purely so its natural width matches -- WallpaperTile
-    itself is untouched here, nothing about how it sizes or renders
-    changes."""
+    """Deliberately does NOT reuse WallpaperTile's ring_box (a second
+    .scheme-ring instance triggered a live-rendering glitch on the
+    *existing* wallpaper tiles in this VM, even though this tile's own
+    code was otherwise correct -- see peachos_ring_inset_gotcha memory).
+    Matches its footprint to a ring-wrapped photo (112x63 + 5px margin
+    each side, mirroring .scheme-ring's 3px padding + 2px border) with
+    plain margins on the existing box instead -- no new widget, no new
+    CSS class instance, nothing that touches WallpaperTile at all."""
 
     TILE_SIZE = WallpaperTile.TILE_SIZE
 
     def __init__(self, on_click):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         w, h = self.TILE_SIZE
-        ring_box = Gtk.Box(css_classes=['scheme-ring'])
         box = Gtk.Box(
             css_classes=['scheme-photo', 'add-photo-tile'],
+            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
             width_request=w, height_request=h,
+            margin_start=5, margin_end=5, margin_top=5, margin_bottom=5,
         )
         plus_icon = Gtk.Image.new_from_icon_name('list-add-symbolic')
         plus_icon.set_halign(Gtk.Align.CENTER)
@@ -118,8 +123,7 @@ class AddPhotoTile(Gtk.Box):
         plus_icon.set_hexpand(True)
         plus_icon.set_vexpand(True)
         box.append(plus_icon)
-        ring_box.append(box)
-        self.append(ring_box)
+        self.append(box)
         self.append(Gtk.Label(label='Add Photo…', css_classes=['caption']))
 
         click = Gtk.GestureClick()
