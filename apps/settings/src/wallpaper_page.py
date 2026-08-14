@@ -67,26 +67,12 @@ class WallpaperTile(Gtk.Box):
     ToggleButton, for the same reasons documented there."""
 
     TILE_SIZE = (112, 63)
-    # .scheme-ring's own CSS: 3px padding + 2px border, each side -- the
-    # ring_box wrapping the photo is genuinely this much wider than the
-    # photo itself. An outer width_request of just TILE_SIZE[0] pinned
-    # the tile *below* what the ring needs, clipping the right edge of
-    # the photo instead of just centering it -- this constant is what
-    # fixes that without guessing.
-    RING_INSET = 10
 
     def __init__(self, label: str, preview_path: str, on_click):
-        super().__init__(
-            orientation=Gtk.Orientation.VERTICAL, spacing=4,
-            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0] + self.RING_INSET,
-        )
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         self._selected = False
-        self._ring_provider = Gtk.CssProvider()
 
         self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
-        self.ring_box.get_style_context().add_provider(
-            self._ring_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(preview_path, *self.TILE_SIZE)
@@ -94,7 +80,7 @@ class WallpaperTile(Gtk.Box):
         self.ring_box.append(photo_wrap)
         self.append(self.ring_box)
 
-        self.append(Gtk.Label(label=label, css_classes=['caption'], max_width_chars=14, ellipsize=3))
+        self.append(Gtk.Label(label=label, css_classes=['caption'], max_width_chars=16, ellipsize=3))
 
         click = Gtk.GestureClick()
         click.connect('released', lambda *_a: on_click(self))
@@ -102,49 +88,28 @@ class WallpaperTile(Gtk.Box):
         self.set_cursor_from_name('pointer')
 
     def set_selected(self, selected: bool, ring_hex: str):
-        # _refresh_selection() re-calls this for every tile on every
-        # picture-uri/picture-uri-dark/accent-color change -- reusing one
-        # provider per tile (created once in __init__) instead of adding
-        # a new one on every call avoids stacking an ever-growing pile of
-        # redundant CSS providers onto the same live widget.
         self._selected = selected
         if selected:
             self.ring_box.add_css_class('selected')
-            self._ring_provider.load_from_data(f'box.selected {{ border-color: {ring_hex}; }}'.encode())
+            _apply_css(self.ring_box, f'box.selected {{ border-color: {ring_hex}; }}')
         else:
             self.ring_box.remove_css_class('selected')
 
 
 class AddPhotoTile(Gtk.Box):
-    """Same ring_box/photo_wrap structure as WallpaperTile (just with a
-    permanently-empty, unselectable ring), including the matching
-    RING_INSET-widened width_request -- both matter for lining up with
-    the wallpaper tiles above it (see WallpaperTile.RING_INSET)."""
-
     TILE_SIZE = WallpaperTile.TILE_SIZE
-    RING_INSET = WallpaperTile.RING_INSET
 
     def __init__(self, on_click):
-        super().__init__(
-            orientation=Gtk.Orientation.VERTICAL, spacing=4,
-            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0] + self.RING_INSET,
-        )
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         w, h = self.TILE_SIZE
-        ring_box = Gtk.Box(css_classes=['scheme-ring'])
         box = Gtk.Box(
             css_classes=['scheme-photo', 'add-photo-tile'],
             halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
             width_request=w, height_request=h,
         )
-        plus_icon = Gtk.Image.new_from_icon_name('list-add-symbolic')
-        plus_icon.set_halign(Gtk.Align.CENTER)
-        plus_icon.set_valign(Gtk.Align.CENTER)
-        plus_icon.set_hexpand(True)
-        plus_icon.set_vexpand(True)
-        box.append(plus_icon)
-        ring_box.append(box)
-        self.append(ring_box)
-        self.append(Gtk.Label(label='Add Photo…', css_classes=['caption'], max_width_chars=14, ellipsize=3))
+        box.append(Gtk.Image.new_from_icon_name('list-add-symbolic'))
+        self.append(box)
+        self.append(Gtk.Label(label='Add Photo…', css_classes=['caption']))
 
         click = Gtk.GestureClick()
         click.connect('released', lambda *_a: on_click())
