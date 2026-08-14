@@ -67,11 +67,18 @@ class WallpaperTile(Gtk.Box):
     ToggleButton, for the same reasons documented there."""
 
     TILE_SIZE = (112, 63)
+    # .scheme-ring's own CSS: 3px padding + 2px border, each side -- the
+    # ring_box wrapping the photo is genuinely this much wider than the
+    # photo itself. An outer width_request of just TILE_SIZE[0] pinned
+    # the tile *below* what the ring needs, clipping the right edge of
+    # the photo instead of just centering it -- this constant is what
+    # fixes that without guessing.
+    RING_INSET = 10
 
     def __init__(self, label: str, preview_path: str, on_click):
         super().__init__(
             orientation=Gtk.Orientation.VERTICAL, spacing=4,
-            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0],
+            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0] + self.RING_INSET,
         )
         self._selected = False
 
@@ -101,17 +108,17 @@ class WallpaperTile(Gtk.Box):
 
 class AddPhotoTile(Gtk.Box):
     """Same ring_box/photo_wrap structure as WallpaperTile (just with a
-    permanently-empty, unselectable ring) so its visible box lines up
-    exactly with every wallpaper tile above it -- without the ring_box's
-    padding this box's edges sat ~5px further out than the photo inside
-    a WallpaperTile's ring, reading as misaligned between the two rows."""
+    permanently-empty, unselectable ring), including the matching
+    RING_INSET-widened width_request -- both matter for lining up with
+    the wallpaper tiles above it (see WallpaperTile.RING_INSET)."""
 
     TILE_SIZE = WallpaperTile.TILE_SIZE
+    RING_INSET = WallpaperTile.RING_INSET
 
     def __init__(self, on_click):
         super().__init__(
             orientation=Gtk.Orientation.VERTICAL, spacing=4,
-            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0],
+            halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0] + self.RING_INSET,
         )
         w, h = self.TILE_SIZE
         ring_box = Gtk.Box(css_classes=['scheme-ring'])
@@ -120,7 +127,12 @@ class AddPhotoTile(Gtk.Box):
             halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
             width_request=w, height_request=h,
         )
-        box.append(Gtk.Image.new_from_icon_name('list-add-symbolic'))
+        plus_icon = Gtk.Image.new_from_icon_name('list-add-symbolic')
+        plus_icon.set_halign(Gtk.Align.CENTER)
+        plus_icon.set_valign(Gtk.Align.CENTER)
+        plus_icon.set_hexpand(True)
+        plus_icon.set_vexpand(True)
+        box.append(plus_icon)
         ring_box.append(box)
         self.append(ring_box)
         self.append(Gtk.Label(label='Add Photo…', css_classes=['caption'], max_width_chars=14, ellipsize=3))
