@@ -2,6 +2,19 @@
 import os
 import sys
 
+# This VM has no working GL/EGL driver (every launch logs libEGL/MESA/ZINK
+# failures). Confirmed via offscreen gtk4-rendernode-tool renders that a
+# live CSS-class-driven state change (a wallpaper/scheme tile's selection
+# ring) is correct in the actual rendered scene graph -- including under
+# a rapid 8-click stress test bouncing between tiles -- yet still shows
+# visibly corrupted (partially blank) tiles in the real windowed app.
+# That gap only makes sense as a live-compositor damage-tracking bug in
+# GSK's default renderer on this VM's broken GL stack, not a bug in our
+# widget code. GSK_RENDERER=cairo sidesteps GL/Vulkan/Zink entirely.
+# Must be set before GTK picks a renderer, so this runs before the
+# gi.repository import below.
+os.environ.setdefault('GSK_RENDERER', 'cairo')
+
 import gi
 
 gi.require_version('Gtk', '4.0')

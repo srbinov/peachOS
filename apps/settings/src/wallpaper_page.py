@@ -81,8 +81,12 @@ class WallpaperTile(Gtk.Box):
             halign=Gtk.Align.CENTER, width_request=self.TILE_SIZE[0] + self.RING_INSET,
         )
         self._selected = False
+        self._ring_provider = Gtk.CssProvider()
 
         self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
+        self.ring_box.get_style_context().add_provider(
+            self._ring_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(preview_path, *self.TILE_SIZE)
@@ -98,10 +102,15 @@ class WallpaperTile(Gtk.Box):
         self.set_cursor_from_name('pointer')
 
     def set_selected(self, selected: bool, ring_hex: str):
+        # _refresh_selection() re-calls this for every tile on every
+        # picture-uri/picture-uri-dark/accent-color change -- reusing one
+        # provider per tile (created once in __init__) instead of adding
+        # a new one on every call avoids stacking an ever-growing pile of
+        # redundant CSS providers onto the same live widget.
         self._selected = selected
         if selected:
             self.ring_box.add_css_class('selected')
-            _apply_css(self.ring_box, f'box.selected {{ border-color: {ring_hex}; }}')
+            self._ring_provider.load_from_data(f'box.selected {{ border-color: {ring_hex}; }}'.encode())
         else:
             self.ring_box.remove_css_class('selected')
 
