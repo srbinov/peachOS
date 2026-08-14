@@ -97,18 +97,29 @@ class WallpaperTile(Gtk.Box):
 
 
 class AddPhotoTile(Gtk.Box):
+    """Wrapped in the same ring_box as WallpaperTile (just permanently
+    unselected) purely so its natural width matches -- WallpaperTile
+    itself is untouched here, nothing about how it sizes or renders
+    changes."""
+
     TILE_SIZE = WallpaperTile.TILE_SIZE
 
     def __init__(self, on_click):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         w, h = self.TILE_SIZE
+        ring_box = Gtk.Box(css_classes=['scheme-ring'])
         box = Gtk.Box(
             css_classes=['scheme-photo', 'add-photo-tile'],
-            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
             width_request=w, height_request=h,
         )
-        box.append(Gtk.Image.new_from_icon_name('list-add-symbolic'))
-        self.append(box)
+        plus_icon = Gtk.Image.new_from_icon_name('list-add-symbolic')
+        plus_icon.set_halign(Gtk.Align.CENTER)
+        plus_icon.set_valign(Gtk.Align.CENTER)
+        plus_icon.set_hexpand(True)
+        plus_icon.set_vexpand(True)
+        box.append(plus_icon)
+        ring_box.append(box)
+        self.append(ring_box)
         self.append(Gtk.Label(label='Add Photo…', css_classes=['caption']))
 
         click = Gtk.GestureClick()
