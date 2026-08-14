@@ -245,7 +245,7 @@ def make_placeholder_icon(row_id: str, icon_name: str) -> Gtk.Widget:
 class SettingsWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.set_default_size(820, 600)
+        self.set_default_size(867, 646)
         # A real minimum, not a stand-in for "whatever the tallest tab's
         # content needs" -- that job now belongs to the ScrolledWindow
         # around _placeholder_stack below. Without it, every card added to
@@ -253,7 +253,13 @@ class SettingsWindow(Adw.ApplicationWindow):
         # forced minimum height higher, to the point the window couldn't
         # be shrunk at all and, once taller than the work area, had
         # nowhere to go but under the dock.
-        self.set_size_request(680, 420)
+        # 867x646 is a deliberately-chosen floor, not a leftover default --
+        # it's the exact size the user had the window dragged to when they
+        # asked for it to become the minimum (read live via this app's own
+        # AT-SPI window extents, since Wayland has no X-style window-geometry
+        # query tool: org.a11y.atspi.Component.GetExtents on the app's
+        # 'window'-role accessible child).
+        self.set_size_request(867, 646)
         self.set_title('System Settings')
 
         self._history = []
