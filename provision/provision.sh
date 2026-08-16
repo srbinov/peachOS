@@ -57,14 +57,6 @@ for ext_dir in "$REPO_DIR"/extensions/*/; do
     fi
 done
 
-echo "==> Installing macOS-style top panel extension (macos-top-panel@local.dev)"
-top_panel_src="$REPO_DIR/macOS-TopBar-Gnome"
-top_panel_dest="/usr/share/gnome-shell/extensions/macos-top-panel@local.dev"
-rm -rf "$top_panel_dest"
-mkdir -p "$top_panel_dest"
-rsync -a --exclude '.git' "$top_panel_src/" "$top_panel_dest/"
-glib-compile-schemas "$top_panel_dest/schemas/"
-
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/
