@@ -33,6 +33,15 @@ echo "==> Installing build dependencies"
 apt-get update -qq
 apt-get install -y --no-install-recommends git rsync dconf-cli libglib2.0-bin
 
+# peachySearch (apps/ulauncher) runtime deps: python3-gi-cairo fixes a real "Couldn't find
+# foreign struct converter for 'cairo.Context'" crash on every draw (PyGObject's cairo
+# integration isn't in the base gi package), python3-xlib is a hard dependency of the app
+# itself, and wl-clipboard backs Clipboard mode -- GTK3's own GDK Wayland clipboard backend
+# doesn't round-trip data at all in this environment (reads AND writes silently fail), so
+# Clipboard mode shells out to wl-copy/wl-paste instead of using Gtk.Clipboard directly.
+echo "==> Installing peachySearch (ulauncher) runtime dependencies"
+apt-get install -y --no-install-recommends python3-gi-cairo python3-xlib wl-clipboard
+
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"
