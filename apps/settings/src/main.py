@@ -26,6 +26,8 @@ from accessibility_page import AccessibilityPage
 from accessibility_zoom_page import AccessibilityZoomPage
 from accessibility_display_page import AccessibilityDisplayPage
 from accessibility_audio_page import AccessibilityAudioPage
+from menubar_page import MenuBarPage
+from spotlight_page import SpotlightPage
 from wallpaper_page import WallpaperPage
 
 APP_ID = 'org.peachos.Settings'
@@ -46,7 +48,7 @@ SIDEBAR_SECTIONS = [
         ('menubar', 'Menu Bar', 'open-menu-symbolic', '#1C1C1E'),
         ('desktopdock', 'Desktop & Dock', 'view-dual-symbolic', '#0A84FF'),
         ('displays', 'Displays', 'video-display-symbolic', '#0A84FF'),
-        ('spotlight', 'Spotlight', 'system-search-symbolic', '#48484A'),
+        ('spotlight', 'peachySearch', 'system-search-symbolic', '#48484A'),
         ('wallpaper', 'Wallpaper', 'image-x-generic-symbolic', '#32ADE6'),
         ('notifications', 'Notifications', 'preferences-system-notifications-symbolic', '#FF3B30'),
     ],
@@ -324,6 +326,10 @@ class SettingsWindow(Adw.ApplicationWindow):
                         on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
                         on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
                     )
+                elif row_id == 'spotlight':
+                    self._pages[row_id] = SpotlightPage()
+                elif row_id == 'menubar':
+                    self._pages[row_id] = MenuBarPage()
                 elif row_id == 'wallpaper':
                     self._pages[row_id] = WallpaperPage()
                 else:
