@@ -49,6 +49,13 @@ apt-get install -y --no-install-recommends python3-gi-cairo python3-xlib wl-clip
 echo "==> Installing Settings app (Internet Accounts) runtime dependencies"
 apt-get install -y --no-install-recommends gir1.2-goa-1.0
 
+# peachos-applauncher.desktop's Exec= just pokes macOS-TopBar-Gnome's own AppLauncherOverlay
+# (lib/appLauncher.js) over D-Bus to toggle the Launchpad-style grid -- no separate binary,
+# this is purely a Dock entry point for something the top-bar extension already implements.
+echo "==> Installing peachOS App Launcher (Launchpad) desktop entry"
+cp "$REPO_DIR/apps/applauncher/peachos-applauncher.desktop" /usr/share/applications/
+update-desktop-database /usr/share/applications
+
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"

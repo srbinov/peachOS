@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Apps
+Comment=Show all your apps
+Icon=view-app-grid-symbolic
+Exec=gdbus call --session --dest org.peachos.AppLauncher --object-path /org/peachos/AppLauncher --method org.peachos.AppLauncher.Toggle
+Terminal=false
+NoDisplay=false
+Categories=System;
+X-GNOME-SingleWindow=false
