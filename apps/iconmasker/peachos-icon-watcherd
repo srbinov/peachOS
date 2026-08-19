@@ -25,8 +25,11 @@ gi.require_version('GLib', '2.0')
 gi.require_version('Gio', '2.0')
 from gi.repository import GLib, Gio
 
-from peachos_icon_mask import load_pixbuf_as_pil, needs_masking, generate_squircle_icon
-from peachos_icon_resolve import resolve_icon
+from peachos_icon_mask import (
+    load_pixbuf_as_pil, needs_masking, generate_squircle_icon,
+    needs_padding_only, pad_icon_to_target,
+)
+from peachos_icon_resolve import resolve_icon, CATEGORY_OWN, CATEGORY_THEME
 
 WATCH_DIRS = [
     '/usr/share/applications',
@@ -36,6 +39,7 @@ WATCH_DIRS = [
 OUTPUT_DIR = Path('/usr/share/icons/peachos-auto')
 DEBOUNCE_SECONDS = 3
 ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
+ORIGINAL_ICON_LINE_RE = re.compile(r'^X-PeachOS-OriginalIcon=(.*)$')
 
 
 def slug_for(desktop_path):
@@ -50,6 +54,7 @@ def slug_for(desktop_path):
 
 def read_icon_and_type(desktop_path):
     icon = None
+    original_icon = None
     is_application = False
     no_display = False
     try:
@@ -71,23 +76,29 @@ def read_icon_and_type(desktop_path):
                 elif line.startswith('NoDisplay=true'):
                     no_display = True
                 else:
+                    m = ORIGINAL_ICON_LINE_RE.match(line)
+                    if m:
+                        original_icon = m.group(1).strip()
+                        continue
                     m = ICON_LINE_RE.match(line)
                     if m and icon is None:
                         icon = m.group(1).strip()
     except OSError:
-        return None, False, False
-    return icon, is_application, no_display
+        return None, None, False, False
+    return icon, original_icon, is_application, no_display
 
 
-def rewrite_icon_line(desktop_path, new_icon_path):
+def rewrite_icon_line(desktop_path, new_icon_path, original_icon_value):
     try:
         lines = Path(desktop_path).read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
     except OSError as e:
         print(f'  ! could not read {desktop_path}: {e}')
         return False
 
-    replaced = False
+    icon_replaced = False
+    original_present = False
     in_entry = False
+    entry_end = len(lines)
     for i, line in enumerate(lines):
         stripped = line.rstrip('\n')
         if stripped == '[Desktop Entry]':
@@ -95,15 +106,25 @@ def rewrite_icon_line(desktop_path, new_icon_path):
             continue
         if stripped.startswith('[') and stripped != '[Desktop Entry]':
             if in_entry:
+                entry_end = i
                 break
             continue
-        if in_entry and ICON_LINE_RE.match(stripped):
+        if not in_entry:
+            continue
+        if ORIGINAL_ICON_LINE_RE.match(stripped):
+            original_present = True
+        elif ICON_LINE_RE.match(stripped):
             lines[i] = f'Icon={new_icon_path}\n'
-            replaced = True
-            break
+            icon_replaced = True
 
-    if not replaced:
+    if not icon_replaced:
         return False
+
+    # Preserve the pre-masking icon reference (name or path) so a missing generated file
+    # can be regenerated from the real source later, instead of being stuck pointing at
+    # nothing forever -- self-healing needs a way back to the original.
+    if not original_present:
+        lines.insert(entry_end, f'X-PeachOS-OriginalIcon={original_icon_value}\n')
 
     try:
         Path(desktop_path).write_text(''.join(lines), encoding='utf-8')
@@ -114,16 +135,20 @@ def rewrite_icon_line(desktop_path, new_icon_path):
 
 
 def process_desktop_file(desktop_path):
-    icon_value, is_application, no_display = read_icon_and_type(desktop_path)
+    icon_value, original_icon, is_application, no_display = read_icon_and_type(desktop_path)
     if not is_application or no_display or not icon_value:
         return False
 
     out_path = OUTPUT_DIR / f'{slug_for(desktop_path)}.png'
     if icon_value == str(out_path):
-        return False  # already our own generated icon
+        if out_path.exists():
+            return False  # already our own generated icon, and it's actually there
+        if not original_icon:
+            return False  # generated file went missing and we have no way back to source
+        icon_value = original_icon  # self-heal: regenerate from the real source icon
 
-    source_path, is_curated = resolve_icon(icon_value)
-    if source_path is None or is_curated:
+    source_path, category = resolve_icon(icon_value)
+    if source_path is None or category == CATEGORY_OWN:
         return False
 
     try:
@@ -132,18 +157,24 @@ def process_desktop_file(desktop_path):
         print(f'  ! could not load icon for {desktop_path} ({source_path}): {e}')
         return False
 
-    if not needs_masking(img):
-        return False
+    if category == CATEGORY_THEME:
+        if not needs_padding_only(img):
+            return False
+        action, generator = 'padded', pad_icon_to_target
+    else:
+        if not needs_masking(img):
+            return False
+        action, generator = 'masked', generate_squircle_icon
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        generate_squircle_icon(str(source_path), str(out_path))
+        generator(str(source_path), str(out_path))
     except Exception as e:
-        print(f'  ! masking failed for {desktop_path} ({source_path}): {e}')
+        print(f'  ! {action} failed for {desktop_path} ({source_path}): {e}')
         return False
 
-    if rewrite_icon_line(desktop_path, out_path):
-        print(f'  masked {desktop_path.name if isinstance(desktop_path, Path) else desktop_path} -> {out_path}')
+    if rewrite_icon_line(desktop_path, out_path, icon_value):
+        print(f'  {action} {desktop_path.name if isinstance(desktop_path, Path) else desktop_path} -> {out_path}')
         return True
     return False
 
