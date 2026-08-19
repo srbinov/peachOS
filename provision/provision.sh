@@ -42,6 +42,13 @@ apt-get install -y --no-install-recommends git rsync dconf-cli libglib2.0-bin
 echo "==> Installing peachySearch (ulauncher) runtime dependencies"
 apt-get install -y --no-install-recommends python3-gi-cairo python3-xlib wl-clipboard
 
+# Settings app (apps/settings) runtime dep: gir1.2-goa-1.0 gives the Internet Accounts tab
+# real GNOME Online Accounts bindings -- gnome-online-accounts itself (the goa-daemon and
+# its D-Bus service) ships by default, but its GObject-Introspection typelib is a separate
+# package that doesn't get pulled in automatically.
+echo "==> Installing Settings app (Internet Accounts) runtime dependencies"
+apt-get install -y --no-install-recommends gir1.2-goa-1.0
+
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"

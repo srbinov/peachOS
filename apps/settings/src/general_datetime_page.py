@@ -126,14 +126,23 @@ class GeneralDateTimePage(Gtk.Box):
         self.append(self._status_label)
 
         self._interface_settings = Gio.Settings.new('org.gnome.desktop.interface')
+        # The top-bar clock (macOS-TopBar-Gnome) has its own separate 24-hour setting --
+        # clock-24-hour in its own extension schema, normally only reachable through the
+        # Menu Bar tab's "Clock Options" popover -- rather than the standard
+        # org.gnome.desktop.interface clock-format this page already used. They're two
+        # independent settings with no relationship by default; this keeps them mirrored
+        # in both directions, so this toggle and the Menu Bar tab's checkbox are really
+        # just two views onto the same state, and either one changing (from here, from
+        # there, or from anywhere else that touches either schema) updates both.
+        self._panel_settings = Gio.Settings.new('org.gnome.shell.extensions.macos-top-panel')
+
         clock_format = self._interface_settings.get_string('clock-format')
         self._clock_format_row.switch.set_active(clock_format == '24h')
-        self._interface_settings.connect(
-            'changed::clock-format',
-            lambda *_a: self._clock_format_row.switch.set_active(
-                self._interface_settings.get_string('clock-format') == '24h',
-            ),
-        )
+        self._interface_settings.connect('changed::clock-format', self._on_interface_clock_format_changed)
+        self._panel_settings.connect('changed::clock-24-hour', self._on_panel_clock_format_changed)
+        # Bring the panel setting in line with whatever this page is about to display,
+        # so both start in sync rather than only converging the next time either changes.
+        self._panel_settings.set_boolean('clock-24-hour', clock_format == '24h')
 
         self._clock_id = GLib.timeout_add_seconds(1, self._tick)
         self._tick()
@@ -222,4 +231,21 @@ class GeneralDateTimePage(Gtk.Box):
 
     def _on_clock_format_toggled(self, switch, state):
         self._interface_settings.set_string('clock-format', '24h' if state else '12h')
+        if self._panel_settings.get_boolean('clock-24-hour') != state:
+            self._panel_settings.set_boolean('clock-24-hour', state)
         return False
+
+    def _on_interface_clock_format_changed(self, *_args):
+        is_24h = self._interface_settings.get_string('clock-format') == '24h'
+        self._clock_format_row.switch.set_active(is_24h)
+        if self._panel_settings.get_boolean('clock-24-hour') != is_24h:
+            self._panel_settings.set_boolean('clock-24-hour', is_24h)
+
+    def _on_panel_clock_format_changed(self, *_args):
+        # Fires when the Menu Bar tab's "24-Hour Time" checkbox changes clock-24-hour
+        # directly -- mirrors that back into clock-format (and this switch), the same
+        # sync this page's own toggle does in the other direction.
+        is_24h = self._panel_settings.get_boolean('clock-24-hour')
+        self._clock_format_row.switch.set_active(is_24h)
+        if (self._interface_settings.get_string('clock-format') == '24h') != is_24h:
+            self._interface_settings.set_string('clock-format', '24h' if is_24h else '12h')

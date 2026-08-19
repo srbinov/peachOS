@@ -23,7 +23,8 @@ CONNECTED_STATES = {NM.DeviceState.ACTIVATED}
 
 
 class ServiceRow(Gtk.Box):
-    def __init__(self, title: str, icon_name: str, subtitle: str, connected: bool, icon_file: str = None):
+    def __init__(self, title: str, icon_name: str, subtitle: str, connected: bool, icon_file: str = None,
+                 on_click=None):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
         self.set_margin_start(12)
         self.set_margin_end(8)
@@ -56,15 +57,22 @@ class ServiceRow(Gtk.Box):
 
         self.append(Gtk.Image.new_from_icon_name('go-next-symbolic'))
 
+        if on_click:
+            self.set_cursor_from_name('pointer')
+            click = Gtk.GestureClick()
+            click.connect('released', lambda *_a: on_click())
+            self.add_controller(click)
+
 
 class NetworkPage(Gtk.Box):
-    def __init__(self):
+    def __init__(self, on_open_wifi=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
         self.set_margin_bottom(18)
 
+        self._on_open_wifi = on_open_wifi
         self._client = None
         self._build_ui()
         NM.Client.new_async(None, self._on_client_ready)
@@ -118,14 +126,23 @@ class NetworkPage(Gtk.Box):
             for device in devices:
                 dtype = device.get_device_type()
                 icon_name = DEVICE_TYPE_ICON.get(dtype, 'network-wired-symbolic')
-                icon_file = os.path.join(ICON_DIR, 'wifi.svg')
+                # Was hardcoded to wifi.svg for every device regardless of type, which made
+                # a plain ethernet connection (all this VM has -- confirmed via `nmcli device
+                # status`, no real WiFi hardware here) *look* like a WiFi row. That's a real,
+                # separate bug from -- but the direct cause of -- "clicking it doesn't go
+                # anywhere": the row was never actually a WIFI-typed device, so the
+                # WIFI-only on_click below was correctly leaving it non-clickable the whole
+                # time; it just looked clickable because of this wrong icon.
+                icon_file = os.path.join(ICON_DIR, 'wifi.svg' if dtype == NM.DeviceType.WIFI else 'network.svg')
                 title = device.get_iface() or device.get_type_description() or 'Network'
                 active_conn = device.get_active_connection()
                 if active_conn:
                     title = active_conn.get_id() or title
                 connected = device.get_state() in CONNECTED_STATES
                 subtitle = 'Connected' if connected else 'Not Connected'
-                self._devices_list.append(ServiceRow(title, icon_name, subtitle, connected, icon_file=icon_file))
+                on_click = self._on_open_wifi if dtype == NM.DeviceType.WIFI else None
+                self._devices_list.append(ServiceRow(
+                    title, icon_name, subtitle, connected, icon_file=icon_file, on_click=on_click))
 
         while (child := self._firewall_list.get_first_child()) is not None:
             self._firewall_list.remove(child)

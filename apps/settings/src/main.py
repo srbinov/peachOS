@@ -2,6 +2,22 @@
 import os
 import sys
 
+# sound_page.py needs Gvc (PulseAudio device enumeration) for a real Output/Input list.
+# Its typelib exists system-wide, but the shared library it references
+# (/usr/lib/gnome-shell/libgvc.so) is gnome-shell's own private copy, not on the linker's
+# default search path -- and critically, setting GI_TYPELIB_PATH/LD_LIBRARY_PATH via
+# os.environ *after* the interpreter has already started doesn't help, because dlopen()'s
+# search already resolved by the time gi.require_version('Gvc', ...) runs. Re-executing this
+# same script with the corrected environment, before any gi import happens at all, is the
+# actual fix -- verified directly (setting os.environ mid-process still failed to find
+# libgvc.so; re-exec with the env pre-set did not).
+if os.environ.get('_PEACHOS_GVC_ENV') != '1':
+    env = dict(os.environ)
+    env['GI_TYPELIB_PATH'] = '/usr/lib/gnome-shell:' + env.get('GI_TYPELIB_PATH', '')
+    env['LD_LIBRARY_PATH'] = '/usr/lib/gnome-shell:' + env.get('LD_LIBRARY_PATH', '')
+    env['_PEACHOS_GVC_ENV'] = '1'
+    os.execvpe(sys.executable, [sys.executable] + sys.argv, env)
+
 import gi
 
 gi.require_version('Gtk', '4.0')
@@ -19,6 +35,7 @@ from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_about_page import GeneralAboutPage
+from general_softwareupdate_page import GeneralSoftwareUpdatePage
 from general_storage_page import GeneralStoragePage
 from general_datetime_page import GeneralDateTimePage
 from general_language_page import GeneralLanguagePage
@@ -29,6 +46,18 @@ from accessibility_audio_page import AccessibilityAudioPage
 from menubar_page import MenuBarPage
 from spotlight_page import SpotlightPage
 from wallpaper_page import WallpaperPage
+from notifications_page import NotificationsPage
+from sound_page import SoundPage
+from screentime_page import ScreenTimePage
+from privacy_page import PrivacyPage
+from lockscreen_page import LockScreenPage
+from touchid_page import TouchIDPage
+from users_page import UsersPage
+from internetaccounts_page import InternetAccountsPage
+from keyboard_page import KeyboardPage
+from mouse_page import MousePage
+from touchpad_page import TouchpadPage
+from printers_page import PrintersPage
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -51,6 +80,17 @@ SIDEBAR_SECTIONS = [
         ('spotlight', 'peachySearch', 'system-search-symbolic', '#48484A'),
         ('wallpaper', 'Wallpaper', 'image-x-generic-symbolic', '#32ADE6'),
         ('notifications', 'Notifications', 'preferences-system-notifications-symbolic', '#FF3B30'),
+        ('sound', 'Sound', 'audio-speakers-symbolic', '#FF3B30'),
+        ('screentime', 'Screen Time', 'preferences-system-time-symbolic', '#0A84FF'),
+        ('lockscreen', 'Lock Screen', 'changes-prevent-symbolic', '#1C1C1E'),
+        ('privacy', 'Privacy & Security', 'preferences-system-privacy-symbolic', '#5AC8FA'),
+        ('touchid', 'Touch ID & Password', 'fingerprint-symbolic', '#FF3B30'),
+        ('users', 'Users & Groups', 'system-users-symbolic', '#0A84FF'),
+        ('internetaccounts', 'Internet Accounts', 'goa-account-symbolic', '#0A84FF'),
+        ('keyboard', 'Keyboard', 'input-keyboard-symbolic', '#8E8E93'),
+        ('mouse', 'Mouse', 'input-mouse-symbolic', '#8E8E93'),
+        ('touchpad', 'Trackpad', 'input-touchpad-symbolic', '#8E8E93'),
+        ('printers', 'Printers & Scanners', 'printer-symbolic', '#8E8E93'),
     ],
 ]
 
@@ -59,6 +99,7 @@ SIDEBAR_SECTIONS = [
 # listed in SIDEBAR_SECTIONS, so they need their own title lookup.
 EXTRA_PAGE_TITLES = {
     'general_about': 'About',
+    'general_softwareupdate': 'Software Update',
     'general_storage': 'Storage',
     'general_datetime': 'Date & Time',
     'general_language': 'Language & Region',
@@ -86,10 +127,10 @@ STYLE_CSS = b"""
     color: white;
 }
 .nav-row-label {
-    font-size: 13px;
+    font-size: 14px;
 }
 list.navigation-sidebar row {
-    margin: 0px 4px;
+    margin: 0px 4px 0px 2px;
     padding: 0px;
     border-radius: 5px;
     min-height: 26px;
@@ -200,9 +241,9 @@ ICON_DIR = os.path.join(DATA_DIR, 'icons')
 # viewBox to a tight, centered square around its actual artwork, so every
 # icon in data/icons/ is now uniformly ~94% ink. That means a single flat
 # pixel_size now gives consistent size *and* centering for all of them.
-SIDEBAR_ICON_PX = 18
+SIDEBAR_ICON_PX = 20  # +10% from 18
 PLACEHOLDER_ICON_PX = 60
-ICON_SLOT_PX = 22  # fixed footprint every icon sits in, so labels always start at the same x
+ICON_SLOT_PX = 24  # +10% from 22, fixed footprint every icon sits in, so labels always start at the same x
 
 
 def _custom_icon_path(row_id: str):
@@ -227,7 +268,7 @@ def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
     box.add_css_class('sidebar-icon')
     box.add_css_class(ACCENT_CLASSES[color])
     image = Gtk.Image.new_from_icon_name(icon_name)
-    image.set_pixel_size(14)
+    image.set_pixel_size(15)  # +10% from 14
     box.append(image)
     return box
 
@@ -304,7 +345,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'bluetooth':
                     self._pages[row_id] = BluetoothPage()
                 elif row_id == 'network':
-                    self._pages[row_id] = NetworkPage()
+                    self._pages[row_id] = NetworkPage(
+                        on_open_wifi=lambda: self._go_to('wifi', record_history=True))
                 elif row_id == 'energy':
                     self._pages[row_id] = BatteryPage()
                 elif row_id == 'appearance':
@@ -316,6 +358,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'general':
                     self._pages[row_id] = GeneralPage(
                         on_open_about=lambda: self._go_to('general_about', record_history=True),
+                        on_open_software_update=lambda: self._go_to('general_softwareupdate', record_history=True),
                         on_open_storage=lambda: self._go_to('general_storage', record_history=True),
                         on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
                         on_open_language=lambda: self._go_to('general_language', record_history=True),
@@ -332,12 +375,39 @@ class SettingsWindow(Adw.ApplicationWindow):
                     self._pages[row_id] = MenuBarPage()
                 elif row_id == 'wallpaper':
                     self._pages[row_id] = WallpaperPage()
+                elif row_id == 'notifications':
+                    self._pages[row_id] = NotificationsPage()
+                elif row_id == 'sound':
+                    self._pages[row_id] = SoundPage()
+                elif row_id == 'screentime':
+                    self._pages[row_id] = ScreenTimePage()
+                elif row_id == 'privacy':
+                    self._pages[row_id] = PrivacyPage()
+                elif row_id == 'lockscreen':
+                    self._pages[row_id] = LockScreenPage()
+                elif row_id == 'touchid':
+                    self._pages[row_id] = TouchIDPage()
+                elif row_id == 'users':
+                    self._pages[row_id] = UsersPage()
+                elif row_id == 'internetaccounts':
+                    self._pages[row_id] = InternetAccountsPage()
+                elif row_id == 'keyboard':
+                    self._pages[row_id] = KeyboardPage()
+                elif row_id == 'mouse':
+                    self._pages[row_id] = MousePage()
+                elif row_id == 'touchpad':
+                    self._pages[row_id] = TouchpadPage()
+                elif row_id == 'printers':
+                    self._pages[row_id] = PrintersPage()
                 else:
                     self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
                 self._placeholder_stack.add_named(self._pages[row_id], row_id)
 
         self._pages['general_about'] = GeneralAboutPage()
         self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
+
+        self._pages['general_softwareupdate'] = GeneralSoftwareUpdatePage()
+        self._placeholder_stack.add_named(self._pages['general_softwareupdate'], 'general_softwareupdate')
 
         self._pages['general_storage'] = GeneralStoragePage()
         self._placeholder_stack.add_named(self._pages['general_storage'], 'general_storage')
