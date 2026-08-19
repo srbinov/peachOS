@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.peachos.appearance" path="/org/peachos/appearance/">
+    <key name="icon-style" type="s">
+      <default>'default'</default>
+      <summary>App icon appearance style</summary>
+      <description>
+        Which macOS-Tahoe-style icon treatment to apply system-wide: default,
+        dark, clear, or tinted. Only 'default' and 'dark' are implemented so
+        far -- peachos-icon-appearance rejects any other value.
+      </description>
+    </key>
+  </schema>
+</schemalist>

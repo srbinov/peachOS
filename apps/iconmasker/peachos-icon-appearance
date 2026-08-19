@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Apply or revert peachOS's dark icon-appearance mode, system-wide.
+
+Usage: peachos-icon-appearance <default|dark>
+
+Runs as root (invoked via pkexec from the Settings app). Only touches the
+Icon= line peachos-icon-watcherd already settled on -- this runs as a
+separate pass *after* that daemon's own squircle-masking, transforming
+whatever the current (already-correct-shape) icon is into a dark variant,
+never re-deriving shape/backdrop from scratch.
+"""
+import glob
+import hashlib
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from peachos_icon_dark import apply_dark_mode, is_already_dark
+from peachos_icon_mask import load_pixbuf_as_pil
+from peachos_icon_resolve import resolve_icon
+
+WATCH_DIRS = [
+    '/usr/share/applications',
+    '/var/lib/snapd/desktop/applications',
+] + glob.glob('/home/*/.local/share/applications')
+
+DARK_OUTPUT_DIR = Path('/usr/share/icons/peachos-dark')
+ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
+LIGHT_ICON_LINE_RE = re.compile(r'^X-PeachOS-LightIcon=(.*)$')
+
+
+def slug_for(desktop_path):
+    stem = re.sub(r'[^A-Za-z0-9_.-]', '_', Path(desktop_path).stem)
+    digest = hashlib.sha1(str(desktop_path).encode()).hexdigest()[:8]
+    return f'{stem}-{digest}'
+
+
+def read_meta(desktop_path):
+    icon = light_icon = None
+    is_application = False
+    no_display = False
+    try:
+        text = Path(desktop_path).read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return None, None, False, False
+    in_entry = False
+    for line in text.splitlines():
+        if line == '[Desktop Entry]':
+            in_entry = True
+            continue
+        if line.startswith('[') and line != '[Desktop Entry]':
+            if in_entry:
+                break
+            continue
+        if not in_entry:
+            continue
+        if line.startswith('Type=Application'):
+            is_application = True
+        elif line.startswith('NoDisplay=true'):
+            no_display = True
+        elif (m := LIGHT_ICON_LINE_RE.match(line)):
+            light_icon = m.group(1).strip()
+        elif (m := ICON_LINE_RE.match(line)) and icon is None:
+            icon = m.group(1).strip()
+    return icon, light_icon, is_application, no_display
+
+
+def rewrite(desktop_path, new_icon, light_icon_value=None):
+    lines = Path(desktop_path).read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
+    icon_replaced = light_present = False
+    in_entry = False
+    entry_end = len(lines)
+    for i, line in enumerate(lines):
+        stripped = line.rstrip('\n')
+        if stripped == '[Desktop Entry]':
+            in_entry = True
+            continue
+        if stripped.startswith('[') and stripped != '[Desktop Entry]':
+            if in_entry:
+                entry_end = i
+                break
+            continue
+        if not in_entry:
+            continue
+        if LIGHT_ICON_LINE_RE.match(stripped):
+            light_present = True
+        elif ICON_LINE_RE.match(stripped):
+            lines[i] = f'Icon={new_icon}\n'
+            icon_replaced = True
+    if not icon_replaced:
+        return False
+    if light_icon_value is not None and not light_present:
+        lines.insert(entry_end, f'X-PeachOS-LightIcon={light_icon_value}\n')
+    Path(desktop_path).write_text(''.join(lines), encoding='utf-8')
+    return True
+
+
+def apply_dark():
+    DARK_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    changed_dbs = set()
+    for d in WATCH_DIRS:
+        for desktop_path in Path(d).glob('*.desktop'):
+            icon, light_icon, is_app, no_display = read_meta(desktop_path)
+            if not is_app or no_display or not icon:
+                continue
+            out_path = DARK_OUTPUT_DIR / f'{slug_for(desktop_path)}.png'
+            if icon == str(out_path) and out_path.exists():
+                continue  # already dark
+
+            source_path, _category = resolve_icon(icon)
+            if source_path is None:
+                continue
+            try:
+                img = load_pixbuf_as_pil(str(source_path))
+            except Exception as e:
+                print(f'  ! could not open {desktop_path} ({source_path}): {e}')
+                continue
+            if is_already_dark(img):
+                continue  # already majority-black, nothing to invert
+
+            try:
+                apply_dark_mode(img, out_path)
+            except Exception as e:
+                print(f'  ! dark-mode transform failed for {desktop_path}: {e}')
+                continue
+
+            if rewrite(desktop_path, out_path, light_icon_value=icon):
+                print(f'  dark {desktop_path.name} -> {out_path}')
+                changed_dbs.add(str(desktop_path.parent))
+    for d in changed_dbs:
+        subprocess.run(['update-desktop-database', d], check=False)
+
+
+def apply_default():
+    changed_dbs = set()
+    for d in WATCH_DIRS:
+        for desktop_path in Path(d).glob('*.desktop'):
+            icon, light_icon, is_app, no_display = read_meta(desktop_path)
+            if not is_app or not light_icon or icon == light_icon:
+                continue
+            if rewrite(desktop_path, light_icon):
+                print(f'  restored {desktop_path.name} -> {light_icon}')
+                changed_dbs.add(str(desktop_path.parent))
+    for d in changed_dbs:
+        subprocess.run(['update-desktop-database', d], check=False)
+
+
+def main():
+    if len(sys.argv) != 2 or sys.argv[1] not in ('default', 'dark'):
+        print('usage: peachos-icon-appearance <default|dark>', file=sys.stderr)
+        sys.exit(1)
+    if sys.argv[1] == 'dark':
+        apply_dark()
+    else:
+        apply_default()
+
+
+if __name__ == '__main__':
+    main()

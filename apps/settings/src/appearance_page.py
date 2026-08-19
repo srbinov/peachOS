@@ -4,11 +4,12 @@ import gi
 
 gi.require_version('GdkPixbuf', '2.0')
 
-from gi.repository import Gdk, GdkPixbuf, Gio, Gtk
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk
 
 from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
+ICON_APPEARANCE_SCRIPT = '/usr/lib/peachos/iconmasker/peachos-icon-appearance'
 
 
 def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
@@ -121,6 +122,58 @@ class ColorSwatch(Gtk.Box):
             self.remove_css_class('selected')
 
 
+ICON_STYLE_TILE_SIZE = (56, 56)
+
+# Only Default and Dark actually transform icons -- Clear and Tinted are shown (matching
+# the real macOS row) but wired up to nothing yet.
+ICON_STYLES = [
+    ('default', 'Default', 'appearance_default.png', True),
+    ('dark', 'Dark', 'appearance_dark.png', True),
+    ('clear', 'Clear', 'appearance_clear.png', False),
+    ('tinted', 'Tinted', 'appearance_tinted.png', False),
+]
+
+
+class IconStyleOption(Gtk.Box):
+    """Same tile+label+selection-ring shape as SchemeOption, but square and
+    with a disabled state for Clear/Tinted (not implemented yet -- shown
+    but inert, rather than hidden, so the full row reads as intentional)."""
+
+    def __init__(self, label: str, icon_filename: str, enabled: bool, on_click):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
+        self._selected = False
+        self.enabled = enabled
+
+        self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
+        photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
+        photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
+        picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *ICON_STYLE_TILE_SIZE)
+        photo_wrap.append(picture)
+        self.ring_box.append(photo_wrap)
+        self.append(self.ring_box)
+
+        self.append(Gtk.Label(label=label, css_classes=['caption'] + ([] if enabled else ['dim-label'])))
+
+        if enabled:
+            click = Gtk.GestureClick()
+            click.connect('released', lambda *_a: on_click(self))
+            self.add_controller(click)
+            self.set_cursor_from_name('pointer')
+        else:
+            self.ring_box.set_opacity(0.45)
+
+    def get_selected(self) -> bool:
+        return self._selected
+
+    def set_selected(self, selected: bool, ring_hex: str):
+        self._selected = selected
+        if selected:
+            self.ring_box.add_css_class('selected')
+            _apply_css(self.ring_box, f'box.selected {{ border-color: {ring_hex}; }}')
+        else:
+            self.ring_box.remove_css_class('selected')
+
+
 class AppearancePage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -130,12 +183,16 @@ class AppearancePage(Gtk.Box):
         self.set_margin_bottom(18)
 
         self._settings = Gio.Settings.new('org.gnome.desktop.interface')
+        self._appearance_settings = Gio.Settings.new('org.peachos.appearance')
+        self._icon_style_busy = False
 
         self._build_ui()
 
         self._settings.connect('changed::color-scheme', lambda *_: self._refresh_all_selection())
         self._settings.connect('changed::accent-color', lambda *_: self._refresh_all_selection())
+        self._appearance_settings.connect('changed::icon-style', lambda *_: self._refresh_icon_style_selection())
         self._refresh_all_selection()
+        self._refresh_icon_style_selection()
 
     def _build_ui(self):
         self.append(make_hero_header(
@@ -185,6 +242,26 @@ class AppearancePage(Gtk.Box):
         theme_card.append(swatch_row)
         self.append(theme_card)
 
+        # Second card under the same "Theme" heading, matching the real Settings layout
+        # (Icon & widget style sits with Folder color, not with Color/Text highlight color).
+        icon_style_card = Gtk.Box(css_classes=['wifi-card'], orientation=Gtk.Orientation.HORIZONTAL)
+        icon_style_card.append(Gtk.Label(
+            label='Icon & widget style', xalign=0, hexpand=True, valign=Gtk.Align.CENTER,
+            margin_start=14, margin_top=14, margin_bottom=14,
+        ))
+
+        icon_style_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER,
+            margin_end=14, margin_top=12, margin_bottom=12,
+        )
+        self._icon_style_options = {}
+        for style_id, label, icon_filename, enabled in ICON_STYLES:
+            option = IconStyleOption(label, icon_filename, enabled, on_click=self._on_icon_style_clicked)
+            self._icon_style_options[style_id] = option
+            icon_style_row.append(option)
+        icon_style_card.append(icon_style_row)
+        self.append(icon_style_card)
+
     # ---- Appearance (color-scheme) -------------------------------------
 
     def _on_scheme_clicked(self, option):
@@ -213,3 +290,53 @@ class AppearancePage(Gtk.Box):
         for name, swatch in self._swatches.items():
             swatch.set_selected(name == active, swatch_ring_hex)
         self._refresh_scheme_selection()
+
+    # ---- Icon & widget style ---------------------------------------------
+
+    def _on_icon_style_clicked(self, option):
+        if self._icon_style_busy:
+            return
+        style_id = next(sid for sid, opt in self._icon_style_options.items() if opt is option)
+        if self._appearance_settings.get_string('icon-style') == style_id:
+            return
+
+        self._icon_style_busy = True
+        for opt in self._icon_style_options.values():
+            opt.set_opacity(0.6 if opt.enabled else 0.45)
+
+        proc = Gio.Subprocess.new(
+            ['pkexec', ICON_APPEARANCE_SCRIPT, style_id],
+            Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE,
+        )
+
+        def on_done(source, result):
+            self._icon_style_busy = False
+            for opt in self._icon_style_options.values():
+                opt.set_opacity(1.0)
+            try:
+                ok, _stdout, stderr = source.communicate_utf8_finish(result)
+                success = ok and source.get_exit_status() == 0
+            except GLib.Error as e:
+                success, stderr = False, str(e)
+
+            if success:
+                self._appearance_settings.set_string('icon-style', style_id)
+                self._refresh_icon_style_selection()
+            elif stderr and stderr.strip():
+                # pkexec prints nothing and exits 126/127 on a cancelled/dismissed auth
+                # prompt -- that's not an error worth interrupting the user over, only
+                # show a dialog when the script itself actually reported a real failure.
+                dialog = Adw.AlertDialog(
+                    heading='Couldn’t change icon appearance',
+                    body=stderr.strip(),
+                )
+                dialog.add_response('ok', 'OK')
+                dialog.present(self.get_root())
+
+        proc.communicate_utf8_async(None, None, on_done)
+
+    def _refresh_icon_style_selection(self):
+        active = self._appearance_settings.get_string('icon-style')
+        ring_hex = ACCENT_HEX.get(self._settings.get_string('accent-color'), '#0461BE')
+        for style_id, option in self._icon_style_options.items():
+            option.set_selected(style_id == active, ring_hex)
