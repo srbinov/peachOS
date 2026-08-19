@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""peachOS icon masker daemon.
+
+Watches every place apps drop .desktop launchers (apt, snap, and per-user
+installs) and rewrites any icon that doesn't already look like a proper
+macOS-style squircle into one that does, via peachos_icon_mask. Curated
+MacTahoe-theme icons are left completely alone -- this only ever touches
+icons MacTahoe doesn't already provide.
+
+Runs as a root system service (no display available), so all file lookups
+are plain filesystem operations -- no Gtk.IconTheme/Gdk.Display involved.
+"""
+import glob
+import hashlib
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import gi
+
+gi.require_version('GLib', '2.0')
+gi.require_version('Gio', '2.0')
+from gi.repository import GLib, Gio
+
+from peachos_icon_mask import load_pixbuf_as_pil, needs_masking, generate_squircle_icon
+from peachos_icon_resolve import resolve_icon
+
+WATCH_DIRS = [
+    '/usr/share/applications',
+    '/var/lib/snapd/desktop/applications',
+] + glob.glob('/home/*/.local/share/applications')
+
+OUTPUT_DIR = Path('/usr/share/icons/peachos-auto')
+DEBOUNCE_SECONDS = 3
+ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
+
+
+def slug_for(desktop_path):
+    """Unique per full path, not just basename -- the same desktop-id can
+    legitimately exist in more than one watched directory (e.g. a snap's
+    own snapd-managed .desktop plus a peachOS override of the same name),
+    and those must never collide on the same generated icon file."""
+    stem = re.sub(r'[^A-Za-z0-9_.-]', '_', Path(desktop_path).stem)
+    digest = hashlib.sha1(str(desktop_path).encode()).hexdigest()[:8]
+    return f'{stem}-{digest}'
+
+
+def read_icon_and_type(desktop_path):
+    icon = None
+    is_application = False
+    no_display = False
+    try:
+        with open(desktop_path, encoding='utf-8', errors='replace') as f:
+            in_entry = False
+            for line in f:
+                line = line.rstrip('\n')
+                if line == '[Desktop Entry]':
+                    in_entry = True
+                    continue
+                if line.startswith('[') and line != '[Desktop Entry]':
+                    if in_entry:
+                        break
+                    continue
+                if not in_entry:
+                    continue
+                if line.startswith('Type=Application'):
+                    is_application = True
+                elif line.startswith('NoDisplay=true'):
+                    no_display = True
+                else:
+                    m = ICON_LINE_RE.match(line)
+                    if m and icon is None:
+                        icon = m.group(1).strip()
+    except OSError:
+        return None, False, False
+    return icon, is_application, no_display
+
+
+def rewrite_icon_line(desktop_path, new_icon_path):
+    try:
+        lines = Path(desktop_path).read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
+    except OSError as e:
+        print(f'  ! could not read {desktop_path}: {e}')
+        return False
+
+    replaced = False
+    in_entry = False
+    for i, line in enumerate(lines):
+        stripped = line.rstrip('\n')
+        if stripped == '[Desktop Entry]':
+            in_entry = True
+            continue
+        if stripped.startswith('[') and stripped != '[Desktop Entry]':
+            if in_entry:
+                break
+            continue
+        if in_entry and ICON_LINE_RE.match(stripped):
+            lines[i] = f'Icon={new_icon_path}\n'
+            replaced = True
+            break
+
+    if not replaced:
+        return False
+
+    try:
+        Path(desktop_path).write_text(''.join(lines), encoding='utf-8')
+    except OSError as e:
+        print(f'  ! could not write {desktop_path}: {e}')
+        return False
+    return True
+
+
+def process_desktop_file(desktop_path):
+    icon_value, is_application, no_display = read_icon_and_type(desktop_path)
+    if not is_application or no_display or not icon_value:
+        return False
+
+    out_path = OUTPUT_DIR / f'{slug_for(desktop_path)}.png'
+    if icon_value == str(out_path):
+        return False  # already our own generated icon
+
+    source_path, is_curated = resolve_icon(icon_value)
+    if source_path is None or is_curated:
+        return False
+
+    try:
+        img = load_pixbuf_as_pil(str(source_path))
+    except Exception as e:
+        print(f'  ! could not load icon for {desktop_path} ({source_path}): {e}')
+        return False
+
+    if not needs_masking(img):
+        return False
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        generate_squircle_icon(str(source_path), str(out_path))
+    except Exception as e:
+        print(f'  ! masking failed for {desktop_path} ({source_path}): {e}')
+        return False
+
+    if rewrite_icon_line(desktop_path, out_path):
+        print(f'  masked {desktop_path.name if isinstance(desktop_path, Path) else desktop_path} -> {out_path}')
+        return True
+    return False
+
+
+def sweep(paths):
+    changed_dbs = set()
+    for p in paths:
+        p = Path(p)
+        if p.suffix != '.desktop' or not p.exists():
+            continue
+        if process_desktop_file(p):
+            changed_dbs.add(str(p.parent))
+    for d in changed_dbs:
+        subprocess.run(['update-desktop-database', d], check=False)
+
+
+def full_sweep():
+    print('peachos-icon-watcherd: startup sweep')
+    all_desktop_files = []
+    for d in WATCH_DIRS:
+        all_desktop_files.extend(Path(d).glob('*.desktop'))
+    sweep(all_desktop_files)
+    print(f'peachos-icon-watcherd: startup sweep done ({len(all_desktop_files)} desktop files checked)')
+
+
+class Watcher:
+    def __init__(self):
+        self._monitors = []
+        self._pending = set()
+        self._timeout_id = None
+
+        for d in WATCH_DIRS:
+            gfile = Gio.File.new_for_path(d)
+            if not gfile.query_exists(None):
+                continue
+            monitor = gfile.monitor_directory(Gio.FileMonitorFlags.NONE, None)
+            monitor.connect('changed', self._on_changed)
+            self._monitors.append(monitor)
+
+    def _on_changed(self, _monitor, gfile, _other, event_type):
+        if event_type not in (
+            Gio.FileMonitorEvent.CREATED,
+            Gio.FileMonitorEvent.CHANGES_DONE_HINT,
+            Gio.FileMonitorEvent.MOVED_IN,
+        ):
+            return
+        path = gfile.get_path()
+        if not path or not path.endswith('.desktop'):
+            return
+        self._pending.add(path)
+        if self._timeout_id:
+            GLib.source_remove(self._timeout_id)
+        self._timeout_id = GLib.timeout_add_seconds(DEBOUNCE_SECONDS, self._flush)
+
+    def _flush(self):
+        self._timeout_id = None
+        paths, self._pending = self._pending, set()
+        if paths:
+            sweep(paths)
+        return GLib.SOURCE_REMOVE
+
+
+def main():
+    full_sweep()
+    watcher = Watcher()
+    loop = GLib.MainLoop()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == '__main__':
+    main()

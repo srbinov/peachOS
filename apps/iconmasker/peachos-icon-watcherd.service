@@ -1,0 +1,20 @@
+[Unit]
+Description=peachOS app icon masker (squircle-fies uncurated app icons)
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/peachos/iconmasker/peachos-icon-watcherd
+Restart=on-failure
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+
+ProtectSystem=strict
+ReadWritePaths=/usr/share/icons/peachos-auto /usr/share/applications /var/lib/snapd/desktop/applications /home
+ProtectHome=false
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

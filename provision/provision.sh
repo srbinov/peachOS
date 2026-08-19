@@ -49,6 +49,25 @@ apt-get install -y --no-install-recommends python3-gi-cairo python3-xlib wl-clip
 echo "==> Installing Settings app (Internet Accounts) runtime dependencies"
 apt-get install -y --no-install-recommends gir1.2-goa-1.0
 
+# Icon masker daemon: watches every place apps drop .desktop launchers (apt, snap, per-user)
+# and squircle-fies any icon that isn't already styled like one -- python3-gi backs the
+# headless Gio.FileMonitor watcher, python3-pil does the actual image compositing/masking,
+# and rsvg-convert (librsvg2-bin) rasterizes SVG sources. Deliberately NOT using
+# GdkPixbuf/glycin for this: glycin's sandboxed loader shells out through bubblewrap + D-Bus
+# per image, which reliably hangs when run from this systemd-hardened service (ProtectSystem
+# vs. bwrap's own sandboxing don't mix) and stalls hard on any icon living under /snap.
+echo "==> Installing icon masker daemon dependencies"
+apt-get install -y --no-install-recommends python3-gi python3-pil librsvg2-bin
+
+echo "==> Installing peachOS icon masker daemon -> /usr/lib/peachos/iconmasker"
+install -d /usr/lib/peachos/iconmasker
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_mask.py" /usr/lib/peachos/iconmasker/peachos_icon_mask.py
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_resolve.py" /usr/lib/peachos/iconmasker/peachos_icon_resolve.py
+install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-watcherd" /usr/lib/peachos/iconmasker/peachos-icon-watcherd
+install -d /usr/share/icons/peachos-auto
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos-icon-watcherd.service" /etc/systemd/system/peachos-icon-watcherd.service
+systemctl enable peachos-icon-watcherd.service
+
 # iCloud apps (Mail/Contacts/Calendar/Photos/Drive/Notes/Reminders/Pages/Numbers/Keynote/
 # Find/Maps/TV) are built from source here rather than pulled from the Snap Store -- the
 # published Store package (Marcus Tomlinson's upstream) is missing Maps and TV, which only
