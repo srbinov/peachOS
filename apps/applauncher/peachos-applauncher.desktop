@@ -2,7 +2,7 @@
 Type=Application
 Name=Apps
 Comment=Show all your apps
-Icon=view-app-grid-symbolic
+Icon=/usr/share/icons/peachos/apps.svg
 Exec=gdbus call --session --dest org.peachos.AppLauncher --object-path /org/peachos/AppLauncher --method org.peachos.AppLauncher.Toggle
 Terminal=false
 NoDisplay=false
