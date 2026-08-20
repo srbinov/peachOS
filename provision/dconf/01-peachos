@@ -88,7 +88,13 @@ switcher-background-color=(0.20784313725490197, 0.51764705882352946, 0.894117647
 animation-bounce-height=0.75
 animation-magnify=0.29999999999999999
 animation-rise=0.25
-animation-spread=0.75
+# animation-spread (below) is the real lever for inter-icon spacing in the resting (non-hover)
+# layout -- dock.js computes iconSizeSpaced = iconSize + 2 + 8 * animation_spread, so this
+# directly sets the gap between icons. dock-padding (further down) only pads the dock's own
+# background PILL, not the icons within it -- a wrong first guess, reverted back to the
+# schema default once the real lever was found. Reduced by iterative user request (0.75 ->
+# 0.48 -> 0.384 -> 0.25 -> 0.15 -> 0.05, confirmed) down to near-zero spacing between icons.
+animation-spread=0.050000000000000003
 apps-icon=false
 autohide-dash=false
 autohide-speed=0.5
@@ -98,9 +104,7 @@ border-color=(0.74333333969116211, 0.71112221479415894, 0.71112221479415894, 1.0
 border-radius=3.0
 border-thickness=1
 customize-label=true
-# dock-padding (below) is two successive 20% cuts off the schema default (0.5 -> 0.4 -> 0.32)
-# -- tighter spacing between dock icons than dash2dock-lite's own default, per explicit request.
-dock-padding=0.32
+dock-padding=0.5
 downloads-icon=true
 edge-distance=0.56725146198830401
 icon-border-radius=3.0

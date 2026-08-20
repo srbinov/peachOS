@@ -140,22 +140,20 @@ class ColorSwatch(Gtk.Box):
             self.remove_css_class('selected')
 
 
-ICON_STYLE_TILE_SIZE = (56, 56)
+ICON_STYLE_TILE_SIZE = (45, 45)  # 20% down from the original 56x56, per explicit request
 
-# Only Default and Dark actually transform icons -- Clear and Tinted are shown (matching
-# the real macOS row) but wired up to nothing yet.
 ICON_STYLES = [
-    ('default', 'Default', 'appearance_default.png', True),
-    ('dark', 'Dark', 'appearance_dark.png', True),
-    ('clear', 'Clear', 'appearance_clear.png', False),
-    ('tinted', 'Tinted', 'appearance_tinted.png', False),
+    ('default', 'Default', 'appearance_default.svg', True),
+    ('dark', 'Dark', 'appearance_dark.svg', True),
+    ('clear', 'Clear', 'appearance_clear.svg', True),
 ]
 
 
 class IconStyleOption(Gtk.Box):
-    """Same tile+label+selection-ring shape as SchemeOption, but square and
-    with a disabled state for Clear/Tinted (not implemented yet -- shown
-    but inert, rather than hidden, so the full row reads as intentional)."""
+    """Same tile+label+selection-ring shape as SchemeOption, but square.
+    Still supports a disabled state (unused now that all four styles are
+    implemented) so a future not-yet-ready style can be shown inert rather
+    than hidden."""
 
     def __init__(self, label: str, icon_filename: str, enabled: bool, on_click):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
@@ -318,6 +316,13 @@ class AppearancePage(Gtk.Box):
         if self._appearance_settings.get_string('icon-style') == style_id:
             return
 
+        def on_success():
+            self._appearance_settings.set_string('icon-style', style_id)
+            self._refresh_icon_style_selection()
+
+        self._run_icon_appearance(style_id, on_success)
+
+    def _run_icon_appearance(self, style_id, on_success):
         self._icon_style_busy = True
         for opt in self._icon_style_options.values():
             opt.set_opacity(0.6 if opt.enabled else 0.45)
@@ -365,8 +370,7 @@ class AppearancePage(Gtk.Box):
             GLib.timeout_add(1200, lambda: _call_dock_order_guard('Restore') or GLib.SOURCE_REMOVE)
 
             if success:
-                self._appearance_settings.set_string('icon-style', style_id)
-                self._refresh_icon_style_selection()
+                on_success()
             elif stderr and stderr.strip():
                 dialog = Adw.AlertDialog(
                     heading='Couldn’t change icon appearance',

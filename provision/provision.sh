@@ -77,8 +77,9 @@ systemctl enable peachos-icon-watcherd.service
 # and system-wide writes here were also what caused two real bugs (fighting the watcher
 # daemon over the same files, and GNOME Shell's own app-picker-layout state getting
 # corrupted by the resulting burst of changes).
-echo "==> Installing peachOS icon appearance (dark mode) tool -> /usr/lib/peachos/iconmasker"
+echo "==> Installing peachOS icon appearance (dark/clear mode) tool -> /usr/lib/peachos/iconmasker"
 install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_dark.py" /usr/lib/peachos/iconmasker/peachos_icon_dark.py
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_clear.py" /usr/lib/peachos/iconmasker/peachos_icon_clear.py
 install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-appearance" /usr/lib/peachos/iconmasker/peachos-icon-appearance
 install -Dm644 "$REPO_DIR/apps/settings/data/schemas/org.peachos.appearance.gschema.xml" /usr/share/glib-2.0/schemas/org.peachos.appearance.gschema.xml
 glib-compile-schemas /usr/share/glib-2.0/schemas/

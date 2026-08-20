@@ -116,11 +116,11 @@ def needs_padding_only(img):
     return fill_w > THEME_OVERSIZED_THRESHOLD or fill_h > THEME_OVERSIZED_THRESHOLD
 
 
-def pad_icon_to_target(source_path, out_path, canvas=CANVAS):
-    """Shrink + center an already-good (curated) icon to match peachOS's
-    fill convention. No masking, no recoloring, no backdrop -- the icon is
-    already the right shape and color, it's just drawn too close to its own
-    edges compared to everything else."""
+def pad_icon_image(source_path, canvas=CANVAS):
+    """Same normalization pad_icon_to_target() writes to disk, returned as
+    an in-memory Image instead -- lets callers (e.g. dark/clear mode
+    generation) run further transforms on top of the correctly-sized result
+    without a round-trip through a temp file."""
     src = load_pixbuf_as_pil(source_path, canvas)
     bbox = src.split()[3].getbbox() or (0, 0, canvas, canvas)
     content = src.crop(bbox)
@@ -133,7 +133,15 @@ def pad_icon_to_target(source_path, out_path, canvas=CANVAS):
 
     out = Image.new('RGBA', (canvas, canvas), (0, 0, 0, 0))
     out.paste(content, ((canvas - content.width) // 2, (canvas - content.height) // 2), content)
-    out.save(out_path, 'PNG')
+    return out
+
+
+def pad_icon_to_target(source_path, out_path, canvas=CANVAS):
+    """Shrink + center an already-good (curated) icon to match peachOS's
+    fill convention. No masking, no recoloring, no backdrop -- the icon is
+    already the right shape and color, it's just drawn too close to its own
+    edges compared to everything else."""
+    pad_icon_image(source_path, canvas).save(out_path, 'PNG')
 
 
 def _squircle_mask(size, radius):
@@ -187,7 +195,9 @@ def _is_full_bleed(img):
     return (w / CANVAS) > 0.85 and (h / CANVAS) > 0.85
 
 
-def generate_squircle_icon(source_path, out_path, canvas=CANVAS):
+def squircle_icon_image(source_path, canvas=CANVAS):
+    """Same normalization generate_squircle_icon() writes to disk, returned
+    as an in-memory Image instead -- see pad_icon_image() for why."""
     src = load_pixbuf_as_pil(source_path, canvas)
 
     content_size = int(canvas * CONTENT_FILL)
@@ -216,7 +226,11 @@ def generate_squircle_icon(source_path, out_path, canvas=CANVAS):
     out = Image.new('RGBA', (canvas, canvas), (0, 0, 0, 0))
     offset = (canvas - content_size) // 2
     out.paste(content, (offset, offset), content)
-    out.save(out_path, 'PNG')
+    return out
+
+
+def generate_squircle_icon(source_path, out_path, canvas=CANVAS):
+    squircle_icon_image(source_path, canvas).save(out_path, 'PNG')
 
 
 if __name__ == '__main__':

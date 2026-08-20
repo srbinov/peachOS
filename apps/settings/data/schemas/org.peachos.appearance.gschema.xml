@@ -6,8 +6,7 @@
       <summary>App icon appearance style</summary>
       <description>
         Which macOS-Tahoe-style icon treatment to apply system-wide: default,
-        dark, clear, or tinted. Only 'default' and 'dark' are implemented so
-        far -- peachos-icon-appearance rejects any other value.
+        dark, or clear.
       </description>
     </key>
   </schema>

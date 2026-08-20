@@ -71,14 +71,18 @@ def resolve_curated_dark(source_path):
     return p if p.exists() else None
 
 
-def _is_user_dark_icon_dir(path):
-    """Matches ~<any user>/.local/share/icons/peachos-dark/*, where
-    peachos-icon-appearance (now unprivileged, no system-wide writes) puts
-    its generated dark PNGs. Walks .parent rather than assuming a fixed
-    prefix, since this resolver runs as root inside peachos-icon-watcherd
-    and has to recognize the pattern under any user's home directory."""
+USER_APPEARANCE_ICON_DIRS = {'peachos-dark', 'peachos-clear'}
+
+
+def _is_user_appearance_icon_dir(path):
+    """Matches ~<any user>/.local/share/icons/peachos-<style>/*, where
+    peachos-icon-appearance (unprivileged, no system-wide writes) puts its
+    generated dark/clear PNGs. Walks .parent rather than assuming a
+    fixed prefix, since this resolver runs as root inside
+    peachos-icon-watcherd and has to recognize the pattern under any user's
+    home directory."""
     d = path.parent
-    return (d.name == 'peachos-dark' and d.parent.name == 'icons'
+    return (d.name in USER_APPEARANCE_ICON_DIRS and d.parent.name == 'icons'
             and d.parent.parent.name == 'share' and d.parent.parent.parent.name == '.local')
 
 
@@ -89,7 +93,7 @@ def _categorize(path):
     for d in THEME_DIRS:
         if d in path.parents:
             return CATEGORY_THEME
-    if _is_user_dark_icon_dir(path):
+    if _is_user_appearance_icon_dir(path):
         return CATEGORY_OWN
     return None
 

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Apply or revert peachOS's dark icon-appearance mode, for the current user.
+"""Apply or revert peachOS's icon-appearance mode, for the current user.
 
-Usage: peachos-icon-appearance <default|dark>
+Usage: peachos-icon-appearance <default|dark|clear>
 
 Runs unprivileged, as a plain user-session tool (no pkexec, no root) --
 icon appearance is a personal preference, not a system policy, so it's
 implemented as XDG user-level overrides:
 
-  ~/.local/share/applications/<id>.desktop   (full copy of the system
-                                               .desktop, only Icon= changed)
-  ~/.local/share/icons/peachos-dark/*.png    (the generated/curated dark PNGs)
+  ~/.local/share/applications/<id>.desktop     (full copy of the system
+                                                 .desktop, only Icon= changed)
+  ~/.local/share/icons/peachos-<style>/*.png   (the generated/curated PNGs)
 
 XDG desktop-file resolution already gives a user's own ~/.local/share
 directory priority over /usr/share, so this needs zero coordination with
 peachos-icon-watcherd (the system-wide light-mode masking daemon) beyond
-peachos_icon_resolve.py knowing to leave this directory alone -- and
+peachos_icon_resolve.py knowing to leave these directories alone -- and
 critically, the system .desktop files themselves are never touched, which
 is what actually caused the real bugs the previous (system-wide, root)
 version of this hit: fighting the watcher daemon over the same files, and
@@ -24,7 +24,11 @@ burst of changes to files it watches closely.
 'default' mode is just deleting our own override files -- instant, no
 image processing needed, since it makes the original system .desktop
 (which peachos-icon-watcherd keeps correctly light-mode-masked) visible
-again automatically.
+again automatically. Switching directly between two non-default styles
+(e.g. dark -> clear) needs no separate "clear old style" step either --
+every candidate's override file is fully regenerated and overwritten each
+run, it just points at a freshly generated PNG under a different style
+subdirectory.
 """
 import concurrent.futures
 import glob
@@ -36,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from peachos_icon_clear import apply_clear_mode
 from peachos_icon_dark import apply_dark_mode, is_already_dark
 from peachos_icon_mask import load_pixbuf_as_pil
 from peachos_icon_resolve import resolve_icon, resolve_curated_dark
@@ -43,10 +48,11 @@ from peachos_icon_resolve import resolve_icon, resolve_curated_dark
 SYSTEM_DIRS = ['/usr/share/applications', '/var/lib/snapd/desktop/applications']
 
 USER_APPS_DIR = Path.home() / '.local/share/applications'
-USER_DARK_ICON_DIR = Path.home() / '.local/share/icons/peachos-dark'
+USER_ICON_DIR = Path.home() / '.local/share/icons'
 
 ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
-OVERRIDE_MARKER = 'X-PeachOS-DarkOverride=true\n'
+OVERRIDE_MARKER = 'X-PeachOS-AppearanceOverride=true\n'
+LEGACY_OVERRIDE_MARKER = 'X-PeachOS-DarkOverride=true\n'  # pre-'clear' marker, still on disk
 MAX_WORKERS = 8
 
 
@@ -84,26 +90,31 @@ def read_meta(desktop_path):
     return icon, is_application, no_display
 
 
-def _make_dark_icon(desktop_path, icon):
-    """Runs in a worker thread: resolve + generate the dark PNG. No filesystem
-    writes to the .desktop file here -- that happens back on the main thread,
-    once all the (slow, parallel) image work is done."""
+def _make_icon(style, icon_dir, desktop_path, icon):
+    """Runs in a worker thread: resolve + generate the PNG for the given
+    style. No filesystem writes to the .desktop file here -- that happens
+    back on the main thread, once all the (slow, parallel) image work is
+    done."""
     source_path, _category = resolve_icon(icon)
     if source_path is None:
         return None, f'could not resolve icon {icon!r}'
 
-    out_path = USER_DARK_ICON_DIR / f'{slug_for(desktop_path)}.png'
-    curated_dark_source = resolve_curated_dark(source_path)
+    out_path = icon_dir / f'{slug_for(desktop_path)}.png'
     try:
-        if curated_dark_source is not None:
-            img = load_pixbuf_as_pil(str(curated_dark_source))
-            img.save(out_path, 'PNG')
-            return out_path, 'curated'
+        if style == 'dark':
+            curated_dark_source = resolve_curated_dark(source_path)
+            if curated_dark_source is not None:
+                img = load_pixbuf_as_pil(str(curated_dark_source))
+                img.save(out_path, 'PNG')
+                return out_path, 'curated'
+            img = load_pixbuf_as_pil(str(source_path))
+            if is_already_dark(img):
+                return None, None  # already reads fine in dark mode, nothing to do
+            apply_dark_mode(img, out_path)
+            return out_path, 'generated'
 
         img = load_pixbuf_as_pil(str(source_path))
-        if is_already_dark(img):
-            return None, None  # already reads fine in dark mode, nothing to do
-        apply_dark_mode(img, out_path)
+        apply_clear_mode(img, out_path)
         return out_path, 'generated'
     except Exception as e:
         return None, str(e)
@@ -140,8 +151,9 @@ def _write_override(desktop_path, out_path):
     return None
 
 
-def apply_dark():
-    USER_DARK_ICON_DIR.mkdir(parents=True, exist_ok=True)
+def apply_style(style):
+    icon_dir = USER_ICON_DIR / f'peachos-{style}'
+    icon_dir.mkdir(parents=True, exist_ok=True)
     USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
 
     # SYSTEM_DIRS is in priority order (matches $XDG_DATA_DIRS): a desktop ID present in more
@@ -150,9 +162,7 @@ def apply_dark():
     # copy they shadow at /var/lib/snapd/desktop/applications -- must only ever be processed
     # from its highest-priority (first-seen) location. Processing both independently used to
     # race two threads against the same output filename, and whichever happened to finish
-    # last silently won -- sometimes the shadowed original, producing the wrong icon (or, for
-    # Firefox specifically, an icon that's nearly invisible once dark-transformed, since the
-    # plain snapd flame logo has no curated dark variant and isn't shaped like the override).
+    # last silently won -- sometimes the shadowed original, producing the wrong icon.
     seen_names = set()
     candidates = []
     for d in SYSTEM_DIRS:
@@ -166,7 +176,10 @@ def apply_dark():
             candidates.append((desktop_path, icon))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(_make_dark_icon, dp, icon): (dp, icon) for dp, icon in candidates}
+        futures = {
+            pool.submit(_make_icon, style, icon_dir, dp, icon): (dp, icon)
+            for dp, icon in candidates
+        }
         for future in concurrent.futures.as_completed(futures):
             desktop_path, icon = futures[future]
             out_path, status = future.result()
@@ -178,7 +191,7 @@ def apply_dark():
             if err:
                 print(f'  ! {desktop_path.name}: {err}')
             else:
-                print(f'  dark({status}) {desktop_path.name} -> {out_path}')
+                print(f'  {style}({status}) {desktop_path.name} -> {out_path}')
 
     subprocess.run(['update-desktop-database', str(USER_APPS_DIR)], check=False)
 
@@ -189,24 +202,28 @@ def apply_default():
     removed = 0
     for f in USER_APPS_DIR.glob('*.desktop'):
         try:
-            if OVERRIDE_MARKER.strip() in f.read_text(encoding='utf-8', errors='replace'):
+            text = f.read_text(encoding='utf-8', errors='replace')
+            if OVERRIDE_MARKER.strip() in text or LEGACY_OVERRIDE_MARKER.strip() in text:
                 f.unlink()
                 removed += 1
         except OSError:
             continue
     if removed:
-        print(f'  removed {removed} dark-mode override(s)')
+        print(f'  removed {removed} icon-appearance override(s)')
     subprocess.run(['update-desktop-database', str(USER_APPS_DIR)], check=False)
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ('default', 'dark'):
-        print('usage: peachos-icon-appearance <default|dark>', file=sys.stderr)
+    styles = ('default', 'dark', 'clear')
+    if len(sys.argv) != 2 or sys.argv[1] not in styles:
+        print(f'usage: peachos-icon-appearance <{"|".join(styles)}>', file=sys.stderr)
         sys.exit(1)
-    if sys.argv[1] == 'dark':
-        apply_dark()
-    else:
+
+    style = sys.argv[1]
+    if style == 'default':
         apply_default()
+    else:
+        apply_style(style)
 
 
 if __name__ == '__main__':
