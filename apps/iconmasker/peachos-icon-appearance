@@ -144,9 +144,22 @@ def apply_dark():
     USER_DARK_ICON_DIR.mkdir(parents=True, exist_ok=True)
     USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # SYSTEM_DIRS is in priority order (matches $XDG_DATA_DIRS): a desktop ID present in more
+    # than one dir -- e.g. firefox_firefox.desktop and snap-store_snap-store.desktop exist
+    # both as peachOS's own /usr/share/applications override AND as the original snapd-managed
+    # copy they shadow at /var/lib/snapd/desktop/applications -- must only ever be processed
+    # from its highest-priority (first-seen) location. Processing both independently used to
+    # race two threads against the same output filename, and whichever happened to finish
+    # last silently won -- sometimes the shadowed original, producing the wrong icon (or, for
+    # Firefox specifically, an icon that's nearly invisible once dark-transformed, since the
+    # plain snapd flame logo has no curated dark variant and isn't shaped like the override).
+    seen_names = set()
     candidates = []
     for d in SYSTEM_DIRS:
         for desktop_path in Path(d).glob('*.desktop'):
+            if desktop_path.name in seen_names:
+                continue
+            seen_names.add(desktop_path.name)
             icon, is_app, no_display = read_meta(desktop_path)
             if not is_app or no_display or not icon:
                 continue
