@@ -173,11 +173,17 @@ echo "==> Installing peachOS app-icon rebrands (Files -> Peachy, Firefox -> Orch
 install -Dm644 "$REPO_DIR/assets/app-icons/peachy.svg" /usr/share/icons/peachos/peachy.svg
 install -Dm644 "$REPO_DIR/assets/app-icons/orchard_icon.svg" /usr/share/icons/peachos/orchard_icon.svg
 install -Dm644 "$REPO_DIR/assets/app-icons/apps.svg" /usr/share/icons/peachos/apps.svg
+install -Dm644 "$REPO_DIR/assets/app-icons/app_center_icon.svg" /usr/share/icons/peachos/app_center_icon.svg
+install -Dm644 "$REPO_DIR/assets/app-icons/terminal_icon.svg" /usr/share/icons/peachos/terminal_icon.svg
 
 sed -i \
     -e 's/^Name=Files$/Name=Peachy/' \
     -e 's/^Icon=org.gnome.Nautilus$/Icon=\/usr\/share\/icons\/peachos\/peachy.svg/' \
     /usr/share/applications/org.gnome.Nautilus.desktop
+
+sed -i \
+    -e 's/^Icon=org.gnome.Ptyxis$/Icon=\/usr\/share\/icons\/peachos\/terminal_icon.svg/' \
+    /usr/share/applications/org.gnome.Ptyxis.desktop
 
 cat > /usr/share/applications/firefox_firefox.desktop <<'EOF'
 [Desktop Entry]
@@ -207,6 +213,24 @@ Name=New Private Window
 [Desktop Action open-profile-manager]
 Exec=/snap/bin/firefox --ProfileManager
 Name=Open Profile Manager
+EOF
+
+# App Center is also snapd-managed (/var/lib/snapd/desktop/applications), same override
+# reasoning as Firefox above.
+cat > /usr/share/applications/snap-store_snap-store.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=App Center
+GenericName=App Center
+Comment=Install, remove, and update apps
+Icon=/usr/share/icons/peachos/app_center_icon.svg
+Exec=snap-store %U
+Terminal=false
+StartupNotify=true
+Categories=System;Utility;PackageManager;SoftwareManagement;Network;Settings;
+Keywords=Ubuntu;Applications;Apps;Store;Software;Snaps;
+MimeType=x-scheme-handler/snap;application/vnd.debian.binary-package;
 EOF
 
 # peachos-applauncher.desktop's Exec= just pokes macOS-TopBar-Gnome's own AppLauncherOverlay
