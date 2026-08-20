@@ -98,9 +98,9 @@ border-color=(0.74333333969116211, 0.71112221479415894, 0.71112221479415894, 1.0
 border-radius=3.0
 border-thickness=1
 customize-label=true
-# dock-padding (below) is 20% below the schema default (0.5) -- tighter spacing between dock
-# icons than dash2dock-lite's own default, per explicit request.
-dock-padding=0.4
+# dock-padding (below) is two successive 20% cuts off the schema default (0.5 -> 0.4 -> 0.32)
+# -- tighter spacing between dock icons than dash2dock-lite's own default, per explicit request.
+dock-padding=0.32
 downloads-icon=true
 edge-distance=0.56725146198830401
 icon-border-radius=3.0
