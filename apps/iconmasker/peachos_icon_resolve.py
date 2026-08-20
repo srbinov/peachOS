@@ -15,9 +15,18 @@ ICONS_ROOT = Path('/usr/share/icons')
 # Absolute-path icon dirs peachOS itself hand-picks -- pixel-perfect real Apple assets,
 # never touched at all, regardless of fill ratio (Mail sits at 81% canvas fill with real
 # margin baked in, Numbers/Notes fill edge-to-edge at ~100% -- both are correct as shipped).
+#
+# peachos-dark and peachos-darkmode-src are peachos-icon-appearance's own output/source dirs
+# for dark-mode icons -- MUST be treated as curated here too, or this resolver (shared by
+# peachos-icon-watcherd, the live light-mode masking daemon) sees a dark icon's Icon= change
+# as an unfamiliar path needing its own masking pass, and immediately overwrites the dark
+# variant with a fresh light one. That's a real bug this hit: switching to Dark mode would
+# get silently half-reverted by the watcher within its next few-second debounce window.
 OWN_DIRS = [
     ICONS_ROOT / 'icloud-for-linux',
     ICONS_ROOT / 'peachos',
+    ICONS_ROOT / 'peachos-dark',
+    ICONS_ROOT / 'peachos-darkmode-src',
 ]
 
 # MacTahoe is curated art (never needs re-masking/re-coloring/re-shaping) but its own SVGs
@@ -32,6 +41,34 @@ THEME_DIRS = [
 
 CATEGORY_OWN = 'own'
 CATEGORY_THEME = 'theme'
+
+# Real hand-authored dark variants (not our algorithm) for the icons peachOS ships hand-picked
+# light versions of. Checked by resolving the SAME slug the light icon's own filename uses, so
+# this stays correct even if a future MacTahoe/theme swap changes the light icon's exact path.
+DARKMODE_SRC_DIR = ICONS_ROOT / 'peachos-darkmode-src'
+CURATED_DARK_SLUGS = {
+    ICONS_ROOT / 'icloud-for-linux' / 'mail.svg': 'mail',
+    ICONS_ROOT / 'icloud-for-linux' / 'keynote.svg': 'keynote',
+    ICONS_ROOT / 'icloud-for-linux' / 'contacts.svg': 'contacts',
+    ICONS_ROOT / 'icloud-for-linux' / 'reminders.svg': 'reminders',
+    ICONS_ROOT / 'icloud-for-linux' / 'numbers.svg': 'numbers',
+    ICONS_ROOT / 'icloud-for-linux' / 'photos.svg': 'photos',
+    ICONS_ROOT / 'icloud-for-linux' / 'pages.svg': 'pages',
+    ICONS_ROOT / 'icloud-for-linux' / 'maps.svg': 'maps',
+    ICONS_ROOT / 'icloud-for-linux' / 'find.svg': 'find',
+    ICONS_ROOT / 'peachos' / 'app_center_icon.svg': 'app_center_icon',
+    ICONS_ROOT / 'peachos' / 'apps.svg': 'apps',
+}
+
+
+def resolve_curated_dark(source_path):
+    """Returns the Path to a hand-authored dark variant of this exact light
+    icon, or None if this icon doesn't have one."""
+    slug = CURATED_DARK_SLUGS.get(Path(source_path).resolve())
+    if slug is None:
+        return None
+    p = DARKMODE_SRC_DIR / f'{slug}.svg'
+    return p if p.exists() else None
 
 
 def _categorize(path):

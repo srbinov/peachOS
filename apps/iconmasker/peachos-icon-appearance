@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from peachos_icon_dark import apply_dark_mode, is_already_dark
 from peachos_icon_mask import load_pixbuf_as_pil
-from peachos_icon_resolve import resolve_icon
+from peachos_icon_resolve import resolve_icon, resolve_curated_dark
 
 WATCH_DIRS = [
     '/usr/share/applications',
@@ -113,6 +113,19 @@ def apply_dark():
             source_path, _category = resolve_icon(icon)
             if source_path is None:
                 continue
+            curated_dark_source = resolve_curated_dark(source_path)
+            if curated_dark_source is not None:
+                try:
+                    img = load_pixbuf_as_pil(str(curated_dark_source))
+                    img.save(out_path, 'PNG')
+                except Exception as e:
+                    print(f'  ! curated dark icon failed for {desktop_path} ({curated_dark_source}): {e}')
+                    continue
+                if rewrite(desktop_path, out_path, light_icon_value=icon):
+                    print(f'  dark(curated) {desktop_path.name} -> {out_path}')
+                    changed_dbs.add(str(desktop_path.parent))
+                continue
+
             try:
                 img = load_pixbuf_as_pil(str(source_path))
             except Exception as e:

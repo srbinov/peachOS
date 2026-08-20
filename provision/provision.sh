@@ -80,6 +80,14 @@ install -Dm644 "$REPO_DIR/apps/iconmasker/org.peachos.icon-appearance.policy" /u
 install -Dm644 "$REPO_DIR/apps/settings/data/schemas/org.peachos.appearance.gschema.xml" /usr/share/glib-2.0/schemas/org.peachos.appearance.gschema.xml
 glib-compile-schemas /usr/share/glib-2.0/schemas/
 
+# Hand-authored dark variants for the icons peachOS ships hand-picked light versions of --
+# used as-is instead of running them through the majority/minority algorithm above, which is
+# only ever an approximation of what a real designer would do.
+install -d /usr/share/icons/peachos-darkmode-src
+for f in "$REPO_DIR"/assets/app-icons/darkmode/*.svg; do
+    install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
+done
+
 # iCloud apps (Mail/Contacts/Calendar/Photos/Drive/Notes/Reminders/Pages/Numbers/Keynote/
 # Find/Maps/TV) are built from source here rather than pulled from the Snap Store -- the
 # published Store package (Marcus Tomlinson's upstream) is missing Maps and TV, which only

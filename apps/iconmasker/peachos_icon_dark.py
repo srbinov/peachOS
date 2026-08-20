@@ -1,30 +1,34 @@
 """Dark-mode icon transform.
 
-Two treatments, chosen per-icon:
+Derived from comparing real Apple light/dark icon pairs (Mail, Keynote,
+Numbers, Pages, App Center vs. Contacts, Reminders, Photos, Find My, the
+Apps grid) side by side. The deciding factor turned out to be simple: what
+color is the icon's outer *card* -- sampled from a thin band near the
+opaque silhouette's edge, which is reliably the backdrop and not whatever
+glyph sits on top of it, regardless of how much of the total pixel area
+that glyph covers (this matters: Find My's green rings cover *more* pixels
+than its white card, so whole-image majority-by-pixel-count picked the
+wrong "backdrop" and inverted the icon -- sampling just the edge doesn't
+have that problem).
 
-1. Majority/minority swap (simple, mostly-two-tone icons -- Mail, Peachy,
-   most app icons). Classify every opaque pixel as white, black, or
-   chromatic; whichever bucket has the most pixels is the "majority":
-     - chromatic majority (the common case): majority -> dark gray,
-       white minority -> the icon's original majority color, black
-       minority -> white (so fine detail drawn in black, like Peachy's
-       eyes/mouth, stays visible against the new dark backdrop instead of
-       blending into whatever the white minority became).
-     - white/black majority (already-achromatic icon): swap white <-> dark
-       gray directly.
-   "Dark gray" rather than pure black throughout -- matches real macOS
-   dark surfaces (~#1c1c1e) and reads as noticeably softer than a harsh
-   true-black fill.
+- Colored card (Mail's blue, Keynote's blue, Numbers' green, Pages'
+  orange, App Center's blue): card color -> dark gray, white glyph ->
+  becomes the original card color, black minority -> white (so detail
+  drawn in black stays visible against the new dark card instead of
+  disappearing into whatever the white minority became).
+- White/light card (Contacts, Reminders, Photos, Find My, the Apps grid):
+  card -> dark gray, but any already-colorful content is left completely
+  untouched -- not recolored, not even dimmed. Apple's own dark Photos
+  and Find My icons prove this: the rainbow flower and the green radar
+  rings are pixel-for-pixel as vivid in dark mode as in light mode, only
+  the white backdrop actually changed.
+- No clean single edge color at all (Maps -- the edge itself is a mosaic
+  of different map-tile hues, not one card color): gentle uniform darken,
+  since there's no single color to swap to and recoloring would just
+  smear everything into a muddy average.
 
-2. Gentle darken (busy, many-hued icons -- Maps, Find My, anything
-   photographic/illustrative where there's no single clean majority
-   color to swap to). Detected via hue spread: if the chromatic pixels
-   don't cluster around one hue, recoloring would just smear them into a
-   muddy average. Instead, leave every hue alone and only pull down
-   brightness uniformly.
-
-Icons that are ALREADY majority-dark are left alone entirely either way --
-they already read fine in dark mode, nothing to invert.
+Icons that are ALREADY majority-dark are left alone entirely -- they
+already read fine in dark mode, nothing to invert.
 """
 import numpy as np
 from PIL import Image
@@ -36,11 +40,9 @@ ALREADY_DARK_MAJORITY_THRESHOLD = 0.5  # majority-black share of opaque pixels n
 
 DARK_TARGET = np.array([0.11, 0.11, 0.12])  # ~#1c1c1e, real macOS dark-surface gray, not pure black
 
-BUSY_HUE_VARIANCE_THRESHOLD = 0.15  # circular variance above this -> "too many colors", darken-only
-                                     # (measured: clean two-tone icons sit at ~0.002-0.006, Maps/Find
-                                     # My/Photos-style multi-hue icons at 0.23+ -- wide margin either side)
-BUSY_MIN_CHROMATIC_SHARE = 0.15     # only worth computing hue spread if there's a real chromatic body
-MAJORITY_RUNNERUP_RATIO_THRESHOLD = 0.8  # top two buckets nearly tied -> no clean majority to swap to
+EDGE_BAND_FRACTION = 0.08           # how much of the icon's own size counts as "near the edge"
+EDGE_MAJORITY_RATIO_THRESHOLD = 0.6  # top edge-bucket needs at least this share to count as decisive
+BUSY_HUE_VARIANCE_THRESHOLD = 0.15  # edge itself is multi-hued (no single card color) -> darken-only
 GENTLE_DARKEN_FACTOR = 0.35         # value-channel multiplier for the busy-icon path -- needs to be
                                      # low enough that a white backdrop actually reads as dark, not
                                      # medium gray (0.42 landed at ~107/255, still too bright)
@@ -92,35 +94,48 @@ def is_already_dark(img):
     return (black_mask.sum() / n_opaque) >= ALREADY_DARK_MAJORITY_THRESHOLD
 
 
-def _is_busy(rgb, opaque, white_mask, black_mask, chromatic_mask):
-    """Many-hued icon (map, photo, illustration) vs a clean two-tone one --
-    or, separately, an icon with no clear majority at all (e.g. a gradient
-    logo whose highlights cover nearly as much area as its base color).
-    Either way, a two-color swap has nothing solid to grab onto."""
-    n_opaque = opaque.sum()
-    if n_opaque == 0:
-        return False
+def _edge_band_mask(opaque):
+    """A thin ring just inside the opaque silhouette's own bounding box --
+    reliably the card/backdrop, not whatever glyph sits in the middle,
+    regardless of how much total area that glyph covers."""
+    ys, xs = np.where(opaque)
+    if ys.size == 0:
+        return np.zeros_like(opaque)
+    y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    band = max(2, int(min(x1 - x0, y1 - y0) * EDGE_BAND_FRACTION))
 
-    if chromatic_mask.sum() / n_opaque >= BUSY_MIN_CHROMATIC_SHARE:
-        hues = _hue_array(rgb)[chromatic_mask]
+    yy, xx = np.mgrid[0:opaque.shape[0], 0:opaque.shape[1]]
+    near_edge = ((xx - x0) < band) | ((x1 - xx) < band) | ((yy - y0) < band) | ((y1 - yy) < band)
+    return opaque & near_edge
+
+
+def _card_type(rgb, white_mask, black_mask, chromatic_mask, edge_mask):
+    """Returns ('white'|'black'|'chromatic'|'busy', edge pixel masks)."""
+    edge_white = white_mask & edge_mask
+    edge_black = black_mask & edge_mask
+    edge_chromatic = chromatic_mask & edge_mask
+
+    counts = {'white': edge_white.sum(), 'black': edge_black.sum(), 'chromatic': edge_chromatic.sum()}
+    total = sum(counts.values())
+    if total == 0:
+        return 'busy'
+
+    majority = max(counts, key=counts.get)
+    if counts[majority] / total < EDGE_MAJORITY_RATIO_THRESHOLD:
+        return 'busy'
+
+    if majority == 'chromatic':
+        hues = _hue_array(rgb)[edge_chromatic]
         _, sat = _hsv_arrays(rgb)
-        weights = sat[chromatic_mask]
-        # Weight by saturation: near-gray pixels have numerically unstable hue (tiny RGB
-        # noise swings the angle wildly) that would otherwise inflate variance for icons
-        # that are really just one accent color plus a lot of gray/near-white body.
-        angles = hues * 2 * np.pi
+        weights = sat[edge_chromatic]
         weight_sum = weights.sum()
         if weight_sum > 0:
+            angles = hues * 2 * np.pi
             resultant = np.hypot((np.cos(angles) * weights).sum(), (np.sin(angles) * weights).sum()) / weight_sum
-            circular_variance = 1 - resultant
-            if circular_variance > BUSY_HUE_VARIANCE_THRESHOLD:
-                return True
+            if (1 - resultant) > BUSY_HUE_VARIANCE_THRESHOLD:
+                return 'busy'
 
-    counts = sorted([white_mask.sum(), black_mask.sum(), chromatic_mask.sum()], reverse=True)
-    if counts[0] > 0 and counts[1] / counts[0] > MAJORITY_RUNNERUP_RATIO_THRESHOLD:
-        return True
-
-    return False
+    return majority
 
 
 def _gentle_darken(rgb):
@@ -130,32 +145,33 @@ def _gentle_darken(rgb):
 
 
 def apply_dark_mode(source_path_or_image, out_path=None):
-    """Apply the dark-mode transform (majority/minority swap, or gentle
-    darken for busy multi-hued icons). Accepts a path or an already-open
-    PIL Image; returns the resulting Image (and also saves it if out_path
-    is given)."""
+    """Apply the dark-mode transform. Accepts a path or an already-open PIL
+    Image; returns the resulting Image (and also saves it if out_path is
+    given)."""
     img = source_path_or_image if isinstance(source_path_or_image, Image.Image) else Image.open(source_path_or_image)
     arr, opaque, white_mask, black_mask, chromatic_mask = _classify(img)
+    rgb = arr[..., :3]
+    edge_mask = _edge_band_mask(opaque)
+    card = _card_type(rgb, white_mask, black_mask, chromatic_mask, edge_mask)
 
-    if _is_busy(arr[..., :3], opaque, white_mask, black_mask, chromatic_mask):
-        out_rgb = _gentle_darken(arr[..., :3])
-    else:
-        n_white, n_black, n_chromatic = white_mask.sum(), black_mask.sum(), chromatic_mask.sum()
-        buckets = {'white': n_white, 'black': n_black, 'chromatic': n_chromatic}
-        majority = max(buckets, key=buckets.get)
-
-        out_rgb = arr[..., :3].copy()
-        if majority == 'chromatic':
-            maj_color = arr[chromatic_mask][:, :3].mean(axis=0) if n_chromatic else DARK_TARGET
-            out_rgb[chromatic_mask] = DARK_TARGET
-            out_rgb[white_mask] = maj_color
-            out_rgb[black_mask] = np.array([1.0, 1.0, 1.0])
-        elif majority == 'white':
-            out_rgb[white_mask] = DARK_TARGET
-            out_rgb[black_mask] = 1.0
-        else:  # majority == 'black' -- shouldn't normally reach here (caller should check is_already_dark first)
-            out_rgb[black_mask] = 1.0
-            out_rgb[white_mask] = DARK_TARGET
+    if card == 'busy':
+        out_rgb = _gentle_darken(rgb)
+    elif card == 'chromatic':
+        edge_chromatic = chromatic_mask & edge_mask
+        card_color = rgb[edge_chromatic].mean(axis=0) if edge_chromatic.any() else DARK_TARGET
+        out_rgb = rgb.copy()
+        out_rgb[chromatic_mask] = DARK_TARGET
+        out_rgb[white_mask] = card_color
+        out_rgb[black_mask] = np.array([1.0, 1.0, 1.0])
+    elif card == 'white':
+        out_rgb = rgb.copy()
+        out_rgb[white_mask] = DARK_TARGET
+        out_rgb[black_mask] = 1.0
+        # chromatic content is deliberately left untouched -- see module docstring
+    else:  # card == 'black' -- shouldn't normally reach here (caller should check is_already_dark first)
+        out_rgb = rgb.copy()
+        out_rgb[black_mask] = 1.0
+        out_rgb[white_mask] = DARK_TARGET
 
     out = np.concatenate([out_rgb, arr[..., 3:4]], axis=-1)
     out = np.clip(out * 255, 0, 255).astype(np.uint8)
