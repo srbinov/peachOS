@@ -11,6 +11,24 @@ from widgets import make_hero_header
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 ICON_APPEARANCE_SCRIPT = '/usr/lib/peachos/iconmasker/peachos-icon-appearance'
 
+DOCK_ORDER_GUARD_BUS_NAME = 'org.peachos.DockOrderGuard'
+DOCK_ORDER_GUARD_OBJECT_PATH = '/org/peachos/DockOrderGuard'
+
+
+def _call_dock_order_guard(method_name: str):
+    """Fire-and-forget call into lib/dockOrderGuard.js (see that file for why this has to
+    round-trip into the Shell process). Silently does nothing if the extension isn't loaded
+    (e.g. running this page outside a real peachOS session) -- this is a nice-to-have
+    ordering guard, not something worth surfacing an error dialog over."""
+    try:
+        proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+            DOCK_ORDER_GUARD_BUS_NAME, DOCK_ORDER_GUARD_OBJECT_PATH, DOCK_ORDER_GUARD_BUS_NAME, None,
+        )
+        proxy.call_sync(method_name, None, Gio.DBusCallFlags.NONE, 500, None)
+    except GLib.Error:
+        pass
+
 
 def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
     """Pre-rasterize to the *exact* target pixel size rather than asking
@@ -304,8 +322,28 @@ class AppearancePage(Gtk.Box):
         for opt in self._icon_style_options.values():
             opt.set_opacity(0.6 if opt.enabled else 0.45)
 
+        # peachos-icon-appearance only ever adds/removes files under ~/.local/share -- no
+        # system-wide writes, so no pkexec/auth prompt needed for what's really just a
+        # personal preference. Snapshotting the shell's own app-grid layout and restoring it
+        # after is a belt-and-suspenders guard: GNOME Shell has been observed resetting
+        # app-picker-layout on its own when a burst of desktop-file changes come through, and
+        # icon appearance changing should never reshuffle anyone's app grid.
+        shell_settings = Gio.Settings.new('org.gnome.shell')
+        layout_snapshot = shell_settings.get_value('app-picker-layout')
+        favorites_snapshot = shell_settings.get_strv('favorite-apps')
+
+        # Separately: GNOME's own dash.js _redisplay() admits in its own source comment that
+        # its diffing algorithm assumes only one item moves at a time, and touching several at
+        # once (exactly what changing every app's icon does) can make it "remove all the
+        # launchers and add them back in a new order" -- a real Shell limitation, not a
+        # gsettings issue, so app-picker-layout/favorite-apps staying byte-identical doesn't
+        # stop it. dockOrderGuard (lib/dockOrderGuard.js in the extension) snapshots the dock's
+        # actual on-screen actor order before, and forces it back after -- that has to happen
+        # inside the Shell process, where those actors live, hence the D-Bus round-trip here.
+        _call_dock_order_guard('Snapshot')
+
         proc = Gio.Subprocess.new(
-            ['pkexec', ICON_APPEARANCE_SCRIPT, style_id],
+            [ICON_APPEARANCE_SCRIPT, style_id],
             Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE,
         )
 
@@ -319,13 +357,17 @@ class AppearancePage(Gtk.Box):
             except GLib.Error as e:
                 success, stderr = False, str(e)
 
+            shell_settings.set_value('app-picker-layout', layout_snapshot)
+            shell_settings.set_strv('favorite-apps', favorites_snapshot)
+            # Give Shell's own (mis-ordering) redisplay pass time to actually happen before we
+            # force the real order back -- restoring too early would just get overwritten by a
+            # redisplay that hadn't run yet.
+            GLib.timeout_add(1200, lambda: _call_dock_order_guard('Restore') or GLib.SOURCE_REMOVE)
+
             if success:
                 self._appearance_settings.set_string('icon-style', style_id)
                 self._refresh_icon_style_selection()
             elif stderr and stderr.strip():
-                # pkexec prints nothing and exits 126/127 on a cancelled/dismissed auth
-                # prompt -- that's not an error worth interrupting the user over, only
-                # show a dialog when the script itself actually reported a real failure.
                 dialog = Adw.AlertDialog(
                     heading='Couldn’t change icon appearance',
                     body=stderr.strip(),

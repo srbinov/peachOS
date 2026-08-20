@@ -1,14 +1,32 @@
 #!/usr/bin/env python3
-"""Apply or revert peachOS's dark icon-appearance mode, system-wide.
+"""Apply or revert peachOS's dark icon-appearance mode, for the current user.
 
 Usage: peachos-icon-appearance <default|dark>
 
-Runs as root (invoked via pkexec from the Settings app). Only touches the
-Icon= line peachos-icon-watcherd already settled on -- this runs as a
-separate pass *after* that daemon's own squircle-masking, transforming
-whatever the current (already-correct-shape) icon is into a dark variant,
-never re-deriving shape/backdrop from scratch.
+Runs unprivileged, as a plain user-session tool (no pkexec, no root) --
+icon appearance is a personal preference, not a system policy, so it's
+implemented as XDG user-level overrides:
+
+  ~/.local/share/applications/<id>.desktop   (full copy of the system
+                                               .desktop, only Icon= changed)
+  ~/.local/share/icons/peachos-dark/*.png    (the generated/curated dark PNGs)
+
+XDG desktop-file resolution already gives a user's own ~/.local/share
+directory priority over /usr/share, so this needs zero coordination with
+peachos-icon-watcherd (the system-wide light-mode masking daemon) beyond
+peachos_icon_resolve.py knowing to leave this directory alone -- and
+critically, the system .desktop files themselves are never touched, which
+is what actually caused the real bugs the previous (system-wide, root)
+version of this hit: fighting the watcher daemon over the same files, and
+GNOME Shell's app-picker-layout state getting corrupted by the resulting
+burst of changes to files it watches closely.
+
+'default' mode is just deleting our own override files -- instant, no
+image processing needed, since it makes the original system .desktop
+(which peachos-icon-watcherd keeps correctly light-mode-masked) visible
+again automatically.
 """
+import concurrent.futures
 import glob
 import hashlib
 import re
@@ -22,14 +40,14 @@ from peachos_icon_dark import apply_dark_mode, is_already_dark
 from peachos_icon_mask import load_pixbuf_as_pil
 from peachos_icon_resolve import resolve_icon, resolve_curated_dark
 
-WATCH_DIRS = [
-    '/usr/share/applications',
-    '/var/lib/snapd/desktop/applications',
-] + glob.glob('/home/*/.local/share/applications')
+SYSTEM_DIRS = ['/usr/share/applications', '/var/lib/snapd/desktop/applications']
 
-DARK_OUTPUT_DIR = Path('/usr/share/icons/peachos-dark')
+USER_APPS_DIR = Path.home() / '.local/share/applications'
+USER_DARK_ICON_DIR = Path.home() / '.local/share/icons/peachos-dark'
+
 ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
-LIGHT_ICON_LINE_RE = re.compile(r'^X-PeachOS-LightIcon=(.*)$')
+OVERRIDE_MARKER = 'X-PeachOS-DarkOverride=true\n'
+MAX_WORKERS = 8
 
 
 def slug_for(desktop_path):
@@ -39,13 +57,13 @@ def slug_for(desktop_path):
 
 
 def read_meta(desktop_path):
-    icon = light_icon = None
+    icon = None
     is_application = False
     no_display = False
     try:
         text = Path(desktop_path).read_text(encoding='utf-8', errors='replace')
     except OSError:
-        return None, None, False, False
+        return None, False, False
     in_entry = False
     for line in text.splitlines():
         if line == '[Desktop Entry]':
@@ -61,16 +79,43 @@ def read_meta(desktop_path):
             is_application = True
         elif line.startswith('NoDisplay=true'):
             no_display = True
-        elif (m := LIGHT_ICON_LINE_RE.match(line)):
-            light_icon = m.group(1).strip()
         elif (m := ICON_LINE_RE.match(line)) and icon is None:
             icon = m.group(1).strip()
-    return icon, light_icon, is_application, no_display
+    return icon, is_application, no_display
 
 
-def rewrite(desktop_path, new_icon, light_icon_value=None):
-    lines = Path(desktop_path).read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
-    icon_replaced = light_present = False
+def _make_dark_icon(desktop_path, icon):
+    """Runs in a worker thread: resolve + generate the dark PNG. No filesystem
+    writes to the .desktop file here -- that happens back on the main thread,
+    once all the (slow, parallel) image work is done."""
+    source_path, _category = resolve_icon(icon)
+    if source_path is None:
+        return None, f'could not resolve icon {icon!r}'
+
+    out_path = USER_DARK_ICON_DIR / f'{slug_for(desktop_path)}.png'
+    curated_dark_source = resolve_curated_dark(source_path)
+    try:
+        if curated_dark_source is not None:
+            img = load_pixbuf_as_pil(str(curated_dark_source))
+            img.save(out_path, 'PNG')
+            return out_path, 'curated'
+
+        img = load_pixbuf_as_pil(str(source_path))
+        if is_already_dark(img):
+            return None, None  # already reads fine in dark mode, nothing to do
+        apply_dark_mode(img, out_path)
+        return out_path, 'generated'
+    except Exception as e:
+        return None, str(e)
+
+
+def _write_override(desktop_path, out_path):
+    try:
+        lines = desktop_path.read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
+    except OSError as e:
+        return f'could not read {desktop_path}: {e}'
+
+    replaced = False
     in_entry = False
     entry_end = len(lines)
     for i, line in enumerate(lines):
@@ -83,82 +128,62 @@ def rewrite(desktop_path, new_icon, light_icon_value=None):
                 entry_end = i
                 break
             continue
-        if not in_entry:
-            continue
-        if LIGHT_ICON_LINE_RE.match(stripped):
-            light_present = True
-        elif ICON_LINE_RE.match(stripped):
-            lines[i] = f'Icon={new_icon}\n'
-            icon_replaced = True
-    if not icon_replaced:
-        return False
-    if light_icon_value is not None and not light_present:
-        lines.insert(entry_end, f'X-PeachOS-LightIcon={light_icon_value}\n')
-    Path(desktop_path).write_text(''.join(lines), encoding='utf-8')
-    return True
+        if in_entry and ICON_LINE_RE.match(stripped):
+            lines[i] = f'Icon={out_path}\n'
+            replaced = True
+    if not replaced:
+        return f'no Icon= line in {desktop_path}'
+    lines.insert(entry_end, OVERRIDE_MARKER)
+
+    USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
+    (USER_APPS_DIR / desktop_path.name).write_text(''.join(lines), encoding='utf-8')
+    return None
 
 
 def apply_dark():
-    DARK_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    changed_dbs = set()
-    for d in WATCH_DIRS:
+    USER_DARK_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
+
+    candidates = []
+    for d in SYSTEM_DIRS:
         for desktop_path in Path(d).glob('*.desktop'):
-            icon, light_icon, is_app, no_display = read_meta(desktop_path)
+            icon, is_app, no_display = read_meta(desktop_path)
             if not is_app or no_display or not icon:
                 continue
-            out_path = DARK_OUTPUT_DIR / f'{slug_for(desktop_path)}.png'
-            if icon == str(out_path) and out_path.exists():
-                continue  # already dark
+            candidates.append((desktop_path, icon))
 
-            source_path, _category = resolve_icon(icon)
-            if source_path is None:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(_make_dark_icon, dp, icon): (dp, icon) for dp, icon in candidates}
+        for future in concurrent.futures.as_completed(futures):
+            desktop_path, icon = futures[future]
+            out_path, status = future.result()
+            if out_path is None:
+                if status:
+                    print(f'  ! {desktop_path.name}: {status}')
                 continue
-            curated_dark_source = resolve_curated_dark(source_path)
-            if curated_dark_source is not None:
-                try:
-                    img = load_pixbuf_as_pil(str(curated_dark_source))
-                    img.save(out_path, 'PNG')
-                except Exception as e:
-                    print(f'  ! curated dark icon failed for {desktop_path} ({curated_dark_source}): {e}')
-                    continue
-                if rewrite(desktop_path, out_path, light_icon_value=icon):
-                    print(f'  dark(curated) {desktop_path.name} -> {out_path}')
-                    changed_dbs.add(str(desktop_path.parent))
-                continue
+            err = _write_override(desktop_path, out_path)
+            if err:
+                print(f'  ! {desktop_path.name}: {err}')
+            else:
+                print(f'  dark({status}) {desktop_path.name} -> {out_path}')
 
-            try:
-                img = load_pixbuf_as_pil(str(source_path))
-            except Exception as e:
-                print(f'  ! could not open {desktop_path} ({source_path}): {e}')
-                continue
-            if is_already_dark(img):
-                continue  # already majority-black, nothing to invert
-
-            try:
-                apply_dark_mode(img, out_path)
-            except Exception as e:
-                print(f'  ! dark-mode transform failed for {desktop_path}: {e}')
-                continue
-
-            if rewrite(desktop_path, out_path, light_icon_value=icon):
-                print(f'  dark {desktop_path.name} -> {out_path}')
-                changed_dbs.add(str(desktop_path.parent))
-    for d in changed_dbs:
-        subprocess.run(['update-desktop-database', d], check=False)
+    subprocess.run(['update-desktop-database', str(USER_APPS_DIR)], check=False)
 
 
 def apply_default():
-    changed_dbs = set()
-    for d in WATCH_DIRS:
-        for desktop_path in Path(d).glob('*.desktop'):
-            icon, light_icon, is_app, no_display = read_meta(desktop_path)
-            if not is_app or not light_icon or icon == light_icon:
-                continue
-            if rewrite(desktop_path, light_icon):
-                print(f'  restored {desktop_path.name} -> {light_icon}')
-                changed_dbs.add(str(desktop_path.parent))
-    for d in changed_dbs:
-        subprocess.run(['update-desktop-database', d], check=False)
+    if not USER_APPS_DIR.is_dir():
+        return
+    removed = 0
+    for f in USER_APPS_DIR.glob('*.desktop'):
+        try:
+            if OVERRIDE_MARKER.strip() in f.read_text(encoding='utf-8', errors='replace'):
+                f.unlink()
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        print(f'  removed {removed} dark-mode override(s)')
+    subprocess.run(['update-desktop-database', str(USER_APPS_DIR)], check=False)
 
 
 def main():

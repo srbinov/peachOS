@@ -69,14 +69,17 @@ install -Dm644 "$REPO_DIR/apps/iconmasker/peachos-icon-watcherd.service" /etc/sy
 systemctl enable peachos-icon-watcherd.service
 
 # Dark icon-appearance mode: a *separate* pass from the watcher daemon above, triggered
-# on-demand (pkexec, from the Settings app's Appearance tab) rather than run automatically --
-# it recolors whatever icon the watcher already settled on into a dark variant, it doesn't
-# decide icon shape/backdrop itself.
+# on-demand (from the Settings app's Appearance tab) rather than run automatically -- it
+# recolors whatever icon the watcher already settled on into a dark variant, it doesn't
+# decide icon shape/backdrop itself. Runs entirely unprivileged: it only ever writes XDG
+# overrides under the invoking user's own ~/.local/share, never system-wide, so no polkit
+# policy/pkexec is needed -- icon appearance is a personal preference, not a system policy,
+# and system-wide writes here were also what caused two real bugs (fighting the watcher
+# daemon over the same files, and GNOME Shell's own app-picker-layout state getting
+# corrupted by the resulting burst of changes).
 echo "==> Installing peachOS icon appearance (dark mode) tool -> /usr/lib/peachos/iconmasker"
 install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_dark.py" /usr/lib/peachos/iconmasker/peachos_icon_dark.py
 install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-appearance" /usr/lib/peachos/iconmasker/peachos-icon-appearance
-install -d /usr/share/icons/peachos-dark
-install -Dm644 "$REPO_DIR/apps/iconmasker/org.peachos.icon-appearance.policy" /usr/share/polkit-1/actions/org.peachos.icon-appearance.policy
 install -Dm644 "$REPO_DIR/apps/settings/data/schemas/org.peachos.appearance.gschema.xml" /usr/share/glib-2.0/schemas/org.peachos.appearance.gschema.xml
 glib-compile-schemas /usr/share/glib-2.0/schemas/
 
