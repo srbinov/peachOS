@@ -92,6 +92,13 @@ for f in "$REPO_DIR"/assets/app-icons/darkmode/*.svg; do
     install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
 done
 
+# Same idea for Clear mode -- a smaller set (peachos_icon_clear.py's own algorithm was
+# calibrated against these exact three files, see that module's docstring).
+install -d /usr/share/icons/peachos-clearmode-src
+for f in "$REPO_DIR"/assets/app-icons/clearmode/*.svg; do
+    install -Dm644 "$f" "/usr/share/icons/peachos-clearmode-src/$(basename "$f")"
+done
+
 # iCloud apps (Mail/Contacts/Calendar/Photos/Drive/Notes/Reminders/Pages/Numbers/Keynote/
 # Find/Maps/TV) are built from source here rather than pulled from the Snap Store -- the
 # published Store package (Marcus Tomlinson's upstream) is missing Maps and TV, which only
@@ -292,6 +299,12 @@ elif ! grep -q '^system-db:local$' /etc/dconf/profile/user; then
 fi
 
 dconf update
+
+echo "==> Installing peachOS dconf defaults for the GDM greeter session"
+# Not the standard /etc/dconf/db/gdm.d/ mechanism -- see provision/dconf/01-peachos-gdm's
+# own header comment for why this Ubuntu build's GDM needs a different install path.
+install -Dm644 "$REPO_DIR/provision/dconf/01-peachos-gdm" /usr/share/gdm/dconf/01-peachos-gdm
+/usr/share/gdm/generate-config
 
 echo "==> Done."
 echo "peachOS defaults are now system-wide. Any NEW user account gets the"

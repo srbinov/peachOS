@@ -1,0 +1,49 @@
+# peachOS defaults for the GDM greeter session.
+#
+# This is NOT the standard /etc/dconf/db/gdm.d/ mechanism -- on this Ubuntu build,
+# /usr/share/dconf/profile/gdm points at a compiled flat-file db
+# (/var/lib/gdm3/greeter-dconf-defaults) generated from keyfiles under
+# /usr/share/gdm/dconf/ by /usr/share/gdm/generate-config (see provision.sh). This
+# file gets installed there as 01-peachos-gdm, following the same numbered-override
+# convention /usr/share/gdm/dconf/00-upstream-settings itself documents.
+#
+# Deliberately minimal: no extensions beyond peachos-lockscreen@local.dev are enabled
+# here (not even user-theme/MacTahoe-Light) -- peachos-lockscreen's own stylesheet.css
+# layers its restyling on top of whatever base shell theme is active, the same way
+# macos-top-panel's glass styling already layers on top of MacTahoe-Light on the
+# desktop, so a smaller extension surface in the greeter (lower risk) doesn't cost
+# any visual consistency.
+
+[org/gnome/shell]
+enabled-extensions=['peachos-lockscreen@local.dev']
+
+[org/gnome/desktop/interface]
+accent-color='blue'
+cursor-theme='MacTahoe'
+gtk-theme='MacTahoe-Light'
+icon-theme='MacTahoe'
+
+# This is the REAL, first-party mechanism for the greeter's background image --
+# screenShield.js's own _updateBackground() reads exactly these four keys and applies
+# them as an inline style directly on _lockDialogGroup, the actual parent container
+# LoginDialog lives in (screenShield.js: `this._dialog = new constructor(this._lockDialogGroup)`).
+# org/gnome/desktop/background does NOT work for the greeter (layout.js's own
+# _updateBackgrounds() has `if (Main.sessionMode.isGreeter) return;`, so its automatic
+# per-monitor BackgroundManager never runs for 'gdm' at all), and every attempt at
+# painting a background from extension JS -- a floating overlay actor, styling
+# LoginDialog directly, even a manually-constructed Background.BackgroundManager --
+# ended up invisible, hidden behind _lockDialogGroup regardless of z-order tricks,
+# since _lockDialogGroup's own background (set from exactly these keys) is what
+# actually paints on top. Once discovered, this needed zero extension code at all.
+# background-picture-uri is a snapshot of the user's actually-equipped wallpaper at
+# the time this was written, not the peachOS default -- it doesn't stay live-synced,
+# see lib/lockScreenLayout.js's module comment for why.
+[com/ubuntu/login-screen]
+background-color='#1c1c1e'
+background-picture-uri='file:///usr/share/backgrounds/peachos/macOS_Sonoma_Dark.jpg'
+background-repeat='no-repeat'
+background-size='cover'
+
+[org/gnome/login-screen]
+# Removes the Ubuntu wordmark GDM normally draws under the user list.
+logo=''

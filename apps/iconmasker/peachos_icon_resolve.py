@@ -16,17 +16,19 @@ ICONS_ROOT = Path('/usr/share/icons')
 # never touched at all, regardless of fill ratio (Mail sits at 81% canvas fill with real
 # margin baked in, Numbers/Notes fill edge-to-edge at ~100% -- both are correct as shipped).
 #
-# peachos-dark and peachos-darkmode-src are peachos-icon-appearance's own output/source dirs
-# for dark-mode icons -- MUST be treated as curated here too, or this resolver (shared by
-# peachos-icon-watcherd, the live light-mode masking daemon) sees a dark icon's Icon= change
-# as an unfamiliar path needing its own masking pass, and immediately overwrites the dark
-# variant with a fresh light one. That's a real bug this hit: switching to Dark mode would
-# get silently half-reverted by the watcher within its next few-second debounce window.
+# peachos-dark/-clear and peachos-darkmode-src/-clearmode-src are peachos-icon-appearance's own
+# output/source dirs for dark/clear-mode icons -- MUST be treated as curated here too, or this
+# resolver (shared by peachos-icon-watcherd, the live light-mode masking daemon) sees a dark/
+# clear icon's Icon= change as an unfamiliar path needing its own masking pass, and immediately
+# overwrites the variant with a fresh light one. That's a real bug this hit: switching to Dark
+# mode would get silently half-reverted by the watcher within its next few-second debounce window.
 OWN_DIRS = [
     ICONS_ROOT / 'icloud-for-linux',
     ICONS_ROOT / 'peachos',
     ICONS_ROOT / 'peachos-dark',
     ICONS_ROOT / 'peachos-darkmode-src',
+    ICONS_ROOT / 'peachos-clear',
+    ICONS_ROOT / 'peachos-clearmode-src',
 ]
 
 # MacTahoe is curated art (never needs re-masking/re-coloring/re-shaping) but its own SVGs
@@ -68,6 +70,29 @@ def resolve_curated_dark(source_path):
     if slug is None:
         return None
     p = DARKMODE_SRC_DIR / f'{slug}.svg'
+    return p if p.exists() else None
+
+
+# Real hand-authored Clear-mode variants -- same idea and lookup pattern as
+# CURATED_DARK_SLUGS above, just a separate (usually smaller) set: most icons
+# don't have a hand-authored Clear variant and fall through to
+# peachos_icon_clear.py's algorithm, which was itself calibrated against
+# these exact three files (see that module's docstring).
+CLEARMODE_SRC_DIR = ICONS_ROOT / 'peachos-clearmode-src'
+CURATED_CLEAR_SLUGS = {
+    ICONS_ROOT / 'icloud-for-linux' / 'keynote.svg': 'keynote',
+    ICONS_ROOT / 'icloud-for-linux' / 'numbers.svg': 'numbers',
+    ICONS_ROOT / 'icloud-for-linux' / 'pages.svg': 'pages',
+}
+
+
+def resolve_curated_clear(source_path):
+    """Returns the Path to a hand-authored Clear-mode variant of this exact
+    light icon, or None if this icon doesn't have one."""
+    slug = CURATED_CLEAR_SLUGS.get(Path(source_path).resolve())
+    if slug is None:
+        return None
+    p = CLEARMODE_SRC_DIR / f'{slug}.svg'
     return p if p.exists() else None
 
 

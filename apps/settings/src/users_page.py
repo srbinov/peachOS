@@ -1,7 +1,14 @@
 import os
 
-from gi.repository import Gio, GLib, Gtk
+import gi
 
+gi.require_version('Adw', '1')
+gi.require_version('Gdk', '4.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk
+
+import avatar_picker
+from appearance_page import ACCENT_COLORS, ColorSwatch
 from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
@@ -14,31 +21,99 @@ USER_IFACE = 'org.freedesktop.Accounts.User'
 ACCOUNT_TYPE_STANDARD = 0
 ACCOUNT_TYPE_ADMIN = 1
 
+# Where a newly picked/composited avatar gets staged before being handed to
+# SetIconFile. accounts-daemon copies whatever file this points at into its
+# own cache (confirmed live: it does NOT just store this path -- IconFile
+# reads back as a fixed accounts-daemon-managed location regardless), so
+# this only ever needs to hold the most recent staged image, not a
+# permanent per-user gallery.
+AVATAR_STAGING_DIR = os.path.expanduser('~/.local/share/peachos-settings/avatars')
 
-def _user_row(user_proxy) -> Gtk.Widget:
-    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
-    row.set_margin_start(14)
-    row.set_margin_end(14)
-    row.set_margin_top(8)
-    row.set_margin_bottom(8)
+# accounts-daemon's own icon cache -- confirmed live (see users_page work
+# session) that this is where SetIconFile-supplied images actually end up,
+# NOT at the IconFile property's own value (that read back as ~/.face even
+# though no such file existed on disk). World-readable (0644), so any user
+# can display any account's current avatar without elevation.
+ACCOUNTS_ICON_CACHE_DIR = '/var/lib/AccountsService/icons'
 
-    icon_file = user_proxy.get_cached_property('IconFile').unpack()
+
+def _resolve_avatar_display_path(username: str, icon_file: str | None) -> str | None:
+    cache_path = os.path.join(ACCOUNTS_ICON_CACHE_DIR, username)
+    if os.path.isfile(cache_path):
+        return cache_path
     if icon_file and os.path.isfile(icon_file):
-        icon = Gtk.Image.new_from_file(icon_file)
-    else:
-        icon = Gtk.Image.new_from_icon_name('avatar-default-symbolic')
-    icon.set_pixel_size(32)
-    row.append(icon)
+        return icon_file
+    return None
+
+
+def get_current_user_path() -> str:
+    """The AccountsService object path for whoever is running this process
+    -- used both by the sidebar's own sign-in row (main.py) and by
+    UsersPage to tell "you edited your own account" apart from any other
+    user's row."""
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    reply = bus.call_sync(
+        ACCOUNTS_BUS_NAME, ACCOUNTS_PATH, ACCOUNTS_IFACE, 'FindUserByName',
+        GLib.Variant('(s)', (GLib.get_user_name(),)),
+        GLib.VariantType('(o)'), Gio.DBusCallFlags.NONE, -1, None,
+    )
+    (user_path,) = reply.unpack()
+    return user_path
+
+
+def _load_scaled_picture(path: str, size: int) -> Gtk.Widget:
+    """Cover-fit, pre-rasterized to `size` -- same reasoning as this app's
+    other _load_scaled_picture helpers (appearance_page.py/wallpaper_page.py):
+    Gtk.Picture's natural size otherwise comes from the source file, not the
+    requested display size."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, size, size, False)
+    texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+    picture = Gtk.Picture.new_for_paintable(texture)
+    picture.set_content_fit(Gtk.ContentFit.COVER)
+    return picture
+
+
+def _circular_avatar(path: str | None, size: int, fallback_text: str = '') -> Gtk.Widget:
+    """A real photo/emoji composite when one's set; otherwise the same
+    colored-initials look the sidebar's own sign-in row already uses
+    (Adw.Avatar) -- a plain gray silhouette here read as broken/inconsistent
+    next to that (explicit user feedback), not just "no photo yet"."""
+    if not path:
+        return Adw.Avatar(size=size, text=fallback_text, show_initials=True)
+    wrap = Gtk.Box(width_request=size, height_request=size, css_classes=['avatar-circle'])
+    wrap.set_overflow(Gtk.Overflow.HIDDEN)
+    wrap.append(_load_scaled_picture(path, size))
+    return wrap
+
+
+def _user_row(user_proxy, user_path: str) -> Gtk.ListBoxRow:
+    row = Gtk.ListBoxRow()
+    row.user_path = user_path
+
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
+    box.set_margin_start(14)
+    box.set_margin_end(14)
+    box.set_margin_top(8)
+    box.set_margin_bottom(8)
+    row.set_child(box)
+
+    username = user_proxy.get_cached_property('UserName').unpack()
+    row.username = username
+    icon_file = user_proxy.get_cached_property('IconFile').unpack()
+    real_name = user_proxy.get_cached_property('RealName').unpack() or username
+    box.append(_circular_avatar(_resolve_avatar_display_path(username, icon_file), 32, fallback_text=real_name))
 
     text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
-    real_name = user_proxy.get_cached_property('RealName').unpack() or user_proxy.get_cached_property(
-        'UserName').unpack()
     text_box.append(Gtk.Label(label=real_name, xalign=0))
     account_type = user_proxy.get_cached_property('AccountType').unpack()
     locked = user_proxy.get_cached_property('Locked').unpack()
     subtitle = 'Disabled' if locked else ('Admin' if account_type == ACCOUNT_TYPE_ADMIN else 'Standard')
     text_box.append(Gtk.Label(label=subtitle, xalign=0, css_classes=['caption', 'dim-label']))
-    row.append(text_box)
+    box.append(text_box)
+
+    chevron = Gtk.Image.new_from_icon_name('go-next-symbolic')
+    chevron.add_css_class('dim-label')
+    box.append(chevron)
 
     return row
 
@@ -139,9 +214,207 @@ class _AddUserDialog(Gtk.Window):
         self.close()
 
 
+class _EditUserDialog(Gtk.Window):
+    """Rename / re-photo an existing account -- SetRealName + SetIconFile,
+    both confirmed live to work self-service (no polkit prompt) for a
+    user's own account; editing someone else's account still routes through
+    the exact same calls; whatever polkit does with those (prompt, deny) is
+    surfaced through the normal error label below, not special-cased here.
+    """
+
+    def __init__(self, parent, user_path: str, on_saved):
+        super().__init__(
+            title='Edit Profile', transient_for=parent, modal=True,
+            default_width=360, resizable=False,
+        )
+        self._on_saved = on_saved
+        self._user_path = user_path
+        self._staged_avatar_path: str | None = None
+        self._chosen_emoji_path: str | None = None
+
+        self._bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        self._user_proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None,
+            ACCOUNTS_BUS_NAME, user_path, USER_IFACE, None,
+        )
+        self._username = self._user_proxy.get_cached_property('UserName').unpack()
+        real_name = self._user_proxy.get_cached_property('RealName').unpack() or self._username
+        self._real_name = real_name
+        icon_file = self._user_proxy.get_cached_property('IconFile').unpack()
+        self._current_display_path = _resolve_avatar_display_path(self._username, icon_file)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box.set_margin_start(20)
+        box.set_margin_end(20)
+        box.set_margin_top(20)
+        box.set_margin_bottom(20)
+        self.set_child(box)
+
+        self._avatar_holder = Gtk.Box(halign=Gtk.Align.CENTER)
+        box.append(self._avatar_holder)
+        self._render_avatar_preview()
+
+        change_photo_btn = Gtk.Button(label='Change Photo…', halign=Gtk.Align.CENTER, css_classes=['flat'])
+        change_photo_btn.connect('clicked', self._on_avatar_button_clicked)
+        box.append(change_photo_btn)
+
+        self._color_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.CENTER, visible=False)
+        self._color_swatches: list[tuple[ColorSwatch, str]] = []
+        for name, hex_color in ACCENT_COLORS:
+            swatch = ColorSwatch(name, hex_color, self._on_color_clicked)
+            self._color_swatches.append((swatch, hex_color))
+            self._color_row.append(swatch)
+        box.append(self._color_row)
+
+        box.append(Gtk.Label(label='Full Name', xalign=0))
+        self._name_entry = Gtk.Entry(text=real_name)
+        box.append(self._name_entry)
+
+        self._error_label = Gtk.Label(wrap=True, xalign=0, css_classes=['error'], visible=False)
+        box.append(self._error_label)
+
+        button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.END)
+        cancel_btn = Gtk.Button(label='Cancel')
+        cancel_btn.connect('clicked', lambda *_a: self.close())
+        button_row.append(cancel_btn)
+        self._save_btn = Gtk.Button(label='Save', css_classes=['suggested-action'])
+        self._save_btn.connect('clicked', self._on_save_clicked)
+        button_row.append(self._save_btn)
+        box.append(button_row)
+
+    # ---- avatar preview / editing -----------------------------------
+
+    def _render_avatar_preview(self):
+        child = self._avatar_holder.get_first_child()
+        if child is not None:
+            self._avatar_holder.remove(child)
+        path = self._staged_avatar_path or self._current_display_path
+        self._avatar_holder.append(_circular_avatar(path, 96, fallback_text=self._real_name))
+
+    def _on_avatar_button_clicked(self, btn):
+        popover = Gtk.Popover()
+        popover.set_parent(btn)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_margin_start(4)
+        box.set_margin_end(4)
+        box.set_margin_top(4)
+        box.set_margin_bottom(4)
+        popover.set_child(box)
+
+        photo_btn = Gtk.Button(label='Choose Photo…', css_classes=['flat'])
+        photo_btn.get_child().set_halign(Gtk.Align.START)
+        photo_btn.connect('clicked', lambda _b: (popover.popdown(), self._on_choose_photo()))
+        box.append(photo_btn)
+
+        emoji_btn = Gtk.Button(label='Choose Emoji…', css_classes=['flat'])
+        emoji_btn.get_child().set_halign(Gtk.Align.START)
+        emoji_btn.connect('clicked', lambda _b: (popover.popdown(), self._on_choose_emoji()))
+        box.append(emoji_btn)
+
+        popover.popup()
+
+    def _on_choose_photo(self):
+        dialog = Gtk.FileDialog(title='Choose a Photo')
+        image_filter = Gtk.FileFilter(name='Images')
+        for mime in ('image/png', 'image/jpeg', 'image/webp'):
+            image_filter.add_mime_type(mime)
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(image_filter)
+        dialog.set_filters(filters)
+        dialog.open(self, None, self._on_photo_chosen)
+
+    def _on_photo_chosen(self, dialog, result):
+        try:
+            gfile = dialog.open_finish(result)
+        except GLib.Error:
+            return  # cancelled
+        if gfile is None:
+            return
+        src_path = gfile.get_path()
+        if not src_path:
+            return
+
+        os.makedirs(AVATAR_STAGING_DIR, exist_ok=True)
+        staged_path = os.path.join(AVATAR_STAGING_DIR, f'{self._username}-staged.png')
+        try:
+            avatar_picker.render_photo_avatar(src_path, staged_path)
+        except GLib.Error as e:
+            self._error_label.set_label(f'Could not use that image: {e.message}')
+            self._error_label.set_visible(True)
+            return
+
+        self._chosen_emoji_path = None
+        self._color_row.set_visible(False)
+        self._staged_avatar_path = staged_path
+        self._render_avatar_preview()
+
+    def _on_choose_emoji(self):
+        picker = avatar_picker.EmojiPickerDialog(self)
+        picker.connect('emoji-picked', self._on_emoji_picked)
+        picker.present()
+
+    def _on_emoji_picked(self, _picker, emoji_path: str):
+        self._chosen_emoji_path = emoji_path
+        self._color_row.set_visible(True)
+        default_swatch, default_hex = self._color_swatches[0]
+        for swatch, _hex in self._color_swatches:
+            swatch.set_selected(swatch is default_swatch, '#FFFFFF')
+        self._apply_emoji_background(default_hex)
+
+    def _on_color_clicked(self, swatch: ColorSwatch):
+        hex_color = next(h for s, h in self._color_swatches if s is swatch)
+        for s, _h in self._color_swatches:
+            s.set_selected(s is swatch, '#FFFFFF')
+        self._apply_emoji_background(hex_color)
+
+    def _apply_emoji_background(self, hex_color: str):
+        if not self._chosen_emoji_path:
+            return
+        os.makedirs(AVATAR_STAGING_DIR, exist_ok=True)
+        staged_path = os.path.join(AVATAR_STAGING_DIR, f'{self._username}-staged.png')
+        avatar_picker.render_emoji_avatar(self._chosen_emoji_path, hex_color, staged_path)
+        self._staged_avatar_path = staged_path
+        self._render_avatar_preview()
+
+    # ---- saving -------------------------------------------------------
+
+    def _on_save_clicked(self, _btn):
+        new_name = self._name_entry.get_text().strip()
+        if not new_name:
+            self._error_label.set_label('Name cannot be empty.')
+            self._error_label.set_visible(True)
+            return
+
+        self._save_btn.set_sensitive(False)
+        try:
+            self._bus.call_sync(
+                ACCOUNTS_BUS_NAME, self._user_path, USER_IFACE, 'SetRealName',
+                GLib.Variant('(s)', (new_name,)), None, Gio.DBusCallFlags.NONE, -1, None,
+            )
+            if self._staged_avatar_path and os.path.isfile(self._staged_avatar_path):
+                self._bus.call_sync(
+                    ACCOUNTS_BUS_NAME, self._user_path, USER_IFACE, 'SetIconFile',
+                    GLib.Variant('(s)', (self._staged_avatar_path,)), None, Gio.DBusCallFlags.NONE, -1, None,
+                )
+        except GLib.Error as e:
+            self._save_btn.set_sensitive(True)
+            self._error_label.set_label(e.message)
+            self._error_label.set_visible(True)
+            return
+
+        self._on_saved()
+        self.close()
+
+
 class UsersPage(Gtk.Box):
-    def __init__(self):
+    def __init__(self, on_current_user_changed=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        # Fires in addition to the normal row refresh when the edited row
+        # was the process's own account -- lets main.py's sidebar sign-in
+        # row (a separate live view of the same account) pick up the change
+        # too, instead of only updating here.
+        self._on_current_user_changed = on_current_user_changed
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
@@ -153,6 +426,7 @@ class UsersPage(Gtk.Box):
         ))
 
         self._user_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self._user_list.connect('row-activated', self._on_row_activated)
         self.append(self._user_list)
 
         button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.END)
@@ -169,6 +443,15 @@ class UsersPage(Gtk.Box):
     def _on_add_clicked(self, _btn):
         dialog = _AddUserDialog(self.get_root(), on_added=self._load_users)
         dialog.present()
+
+    def _on_row_activated(self, _listbox, row):
+        dialog = _EditUserDialog(self.get_root(), row.user_path, on_saved=lambda: self._on_saved(row))
+        dialog.present()
+
+    def _on_saved(self, row):
+        self._load_users()
+        if self._on_current_user_changed and row.username == GLib.get_user_name():
+            self._on_current_user_changed()
 
     def _load_users(self):
         child = self._user_list.get_first_child()
@@ -201,4 +484,4 @@ class UsersPage(Gtk.Box):
                 )
             except GLib.Error:
                 continue
-            self._user_list.append(_user_row(user_proxy))
+            self._user_list.append(_user_row(user_proxy, path))

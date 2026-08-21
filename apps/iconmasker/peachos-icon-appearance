@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from peachos_icon_clear import apply_clear_mode
 from peachos_icon_dark import apply_dark_mode, is_already_dark
 from peachos_icon_mask import load_pixbuf_as_pil
-from peachos_icon_resolve import resolve_icon, resolve_curated_dark
+from peachos_icon_resolve import resolve_curated_clear, resolve_curated_dark, resolve_icon
 
 SYSTEM_DIRS = ['/usr/share/applications', '/var/lib/snapd/desktop/applications']
 
@@ -113,6 +113,11 @@ def _make_icon(style, icon_dir, desktop_path, icon):
             apply_dark_mode(img, out_path)
             return out_path, 'generated'
 
+        curated_clear_source = resolve_curated_clear(source_path)
+        if curated_clear_source is not None:
+            img = load_pixbuf_as_pil(str(curated_clear_source))
+            img.save(out_path, 'PNG')
+            return out_path, 'curated'
         img = load_pixbuf_as_pil(str(source_path))
         apply_clear_mode(img, out_path)
         return out_path, 'generated'

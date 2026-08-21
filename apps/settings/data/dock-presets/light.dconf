@@ -2,7 +2,7 @@
 animation-bounce-height=0.75
 animation-magnify=0.46288209606986902
 animation-rise=0.25
-animation-spread=0.75
+animation-spread=0.05
 apps-icon=false
 autohide-dash=false
 autohide-speed=0.5
@@ -17,6 +17,7 @@ dock-padding=0.5
 downloads-icon=true
 edge-distance=0.25
 icon-border-radius=3.0
+icon-shadow=false
 icon-size=0.1326530612244898
 icon-spacing=0.0
 items-pullout-angle=0.5

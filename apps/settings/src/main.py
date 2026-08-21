@@ -26,6 +26,7 @@ gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import users_page
 from wifi_page import WifiPage
 from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
@@ -130,7 +131,7 @@ STYLE_CSS = b"""
     font-size: 14px;
 }
 list.navigation-sidebar row {
-    margin: 0px 4px 0px 2px;
+    margin: 0px 4px;
     padding: 0px;
     border-radius: 5px;
     min-height: 26px;
@@ -228,6 +229,28 @@ headerbar.flat {
    rows are currently showing. */
 dropdown.searchable-dropdown popover scrolledwindow {
     min-height: 300px;
+}
+/* Circular avatar clip -- users_page.py's user-list rows and the Edit
+   Profile dialog's preview both wrap a photo/emoji PNG in a Box with this
+   class + overflow=HIDDEN, same clip-shape technique as .scheme-photo but
+   round instead of the wallpaper tiles' square-with-corner-radius. */
+.avatar-circle {
+    border-radius: 999px;
+}
+/* Emoji picker (Users & Groups' avatar editor) -- light rounded card with a
+   bottom category strip, matching bluebubbles-native's own emoji picker. */
+.emoji-picker-panel {
+    background-color: alpha(currentColor, 0.03);
+    border-radius: 14px;
+    padding: 8px;
+}
+.emoji-picker-search entry, .emoji-picker-search {
+    border-radius: 999px;
+}
+.emoji-picker-tabs {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background-color: alpha(currentColor, 0.06);
 }
 """
 
@@ -388,7 +411,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'touchid':
                     self._pages[row_id] = TouchIDPage()
                 elif row_id == 'users':
-                    self._pages[row_id] = UsersPage()
+                    self._pages[row_id] = UsersPage(on_current_user_changed=self._refresh_signin_row)
                 elif row_id == 'internetaccounts':
                     self._pages[row_id] = InternetAccountsPage()
                 elif row_id == 'keyboard':
@@ -448,27 +471,24 @@ class SettingsWindow(Adw.ApplicationWindow):
         search = Gtk.SearchEntry(placeholder_text='Search')
         top_box.append(search)
 
-        account_name = GLib.get_real_name()
-        if not account_name or account_name == 'Unknown':
-            account_name = GLib.get_user_name()
-
-        signin_button = Gtk.Button(css_classes=['flat', 'signin-row'])
-        signin_content = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-            margin_start=4, margin_top=4, margin_bottom=4,
-        )
-        avatar = Adw.Avatar(size=32, text=account_name, show_initials=True)
-        signin_content.append(avatar)
-        signin_labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
-        signin_labels.append(Gtk.Label(label=account_name, xalign=0, css_classes=['signin-name']))
-        signin_labels.append(Gtk.Label(label='peachOS Account', xalign=0, css_classes=['signin-subtitle']))
-        signin_content.append(signin_labels)
-        signin_button.set_child(signin_content)
-        top_box.append(signin_button)
+        # Live view of the actual account (AccountsService), not a static
+        # GLib.get_real_name() snapshot -- so a name/photo change made here
+        # or from Users & Groups shows up immediately, in both places. See
+        # _refresh_signin_row.
+        self._signin_button = Gtk.Button(css_classes=['flat', 'signin-row'])
+        self._signin_button.connect('clicked', self._on_signin_clicked)
+        top_box.append(self._signin_button)
+        self._refresh_signin_row()
 
         outer.append(top_box)
 
-        scroller = Gtk.ScrolledWindow(vexpand=True)
+        # hscrollbar_policy=NEVER -- without it, this defaulted to AUTOMATIC
+        # and a hair of row-content overflow (long labels like "Printers &
+        # Scanners" with no ellipsize) was enough to spawn a horizontal
+        # scrollbar across the whole sidebar. A sidebar list should never
+        # need to scroll sideways; the content_scroller below already gets
+        # this right, this one just didn't.
+        scroller = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         list_outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=6,
             margin_start=4, margin_end=4, margin_bottom=12,
@@ -482,10 +502,11 @@ class SettingsWindow(Adw.ApplicationWindow):
                 row = Gtk.ListBoxRow()
                 content = Gtk.Box(
                     orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-                    margin_start=0, margin_end=6, margin_top=3, margin_bottom=3,
+                    margin_start=6, margin_end=6, margin_top=3, margin_bottom=3,
                 )
                 content.append(make_sidebar_icon(row_id, icon_name, color))
-                content.append(Gtk.Label(label=title, xalign=0, css_classes=['nav-row-label']))
+                label = Gtk.Label(label=title, xalign=0, hexpand=True, ellipsize=3, css_classes=['nav-row-label'])
+                content.append(label)
                 row.set_child(content)
                 row._row_id = row_id
                 listbox.append(row)
@@ -498,6 +519,45 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         toolbar.set_content(outer)
         return toolbar
+
+    def _refresh_signin_row(self):
+        try:
+            user_path = users_page.get_current_user_path()
+            proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None,
+                users_page.ACCOUNTS_BUS_NAME, user_path, users_page.USER_IFACE, None,
+            )
+            username = proxy.get_cached_property('UserName').unpack()
+            real_name = proxy.get_cached_property('RealName').unpack() or username
+            icon_file = proxy.get_cached_property('IconFile').unpack()
+            avatar_path = users_page._resolve_avatar_display_path(username, icon_file)
+        except GLib.Error:
+            # No AccountsService reachable (e.g. running outside a real
+            # peachOS session) -- fall back to the static local values
+            # rather than leaving the row blank.
+            real_name = GLib.get_real_name()
+            if not real_name or real_name == 'Unknown':
+                real_name = GLib.get_user_name()
+            avatar_path = None
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+            margin_start=4, margin_top=4, margin_bottom=4,
+        )
+        content.append(users_page._circular_avatar(avatar_path, 32, fallback_text=real_name))
+        labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+        labels.append(Gtk.Label(label=real_name, xalign=0, css_classes=['signin-name']))
+        labels.append(Gtk.Label(label='peachOS Account', xalign=0, css_classes=['signin-subtitle']))
+        content.append(labels)
+        self._signin_button.set_child(content)
+
+    def _on_signin_clicked(self, _btn):
+        try:
+            user_path = users_page.get_current_user_path()
+        except GLib.Error:
+            return
+        dialog = users_page._EditUserDialog(self, user_path, on_saved=self._refresh_signin_row)
+        dialog.present()
 
     def _build_content_header(self):
         header = Adw.HeaderBar()
