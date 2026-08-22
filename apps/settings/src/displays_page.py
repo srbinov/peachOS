@@ -234,7 +234,11 @@ class TemperatureRow(Gtk.Box):
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1700, 4700, 50)
         self.scale.set_draw_value(False)
         self.scale.set_hexpand(True)
-        self.scale.set_inverted(True)  # left = warmer (lower K), matching GNOME's own slider direction
+        # No set_inverted() -- 1700 (warm) is already the range's own minimum, so a plain,
+        # non-inverted scale already reads left=warmer/right=cooler on its own. An explicit
+        # set_inverted(True) used to sit here; confirmed live (same bug as keyboard_page.py's
+        # rate/delay sliders) that inverting a Gtk.Scale flips the handle's value-to-position
+        # mapping but leaves the theme's highlighted-track fill on the wrong side of it.
         self.append(self.scale)
 
 

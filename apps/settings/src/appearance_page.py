@@ -4,9 +4,17 @@ import gi
 
 gi.require_version('GdkPixbuf', '2.0')
 
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
-from widgets import make_hero_header
+from widgets import DropdownRow, make_hero_header
+
+# GNOME Tweaks' Fonts section, ported over -- same org.gnome.desktop.interface
+# keys Tweaks itself reads/writes, just presented in peachOS's own Appearance
+# tab instead of a separate app (gap found comparing against Tweaks directly;
+# peachOS's custom Settings never falls back to a stock app for anything, see
+# feedback_settings_no_external_launch).
+FONT_HINT_STYLES = [('None', 'none'), ('Slight', 'slight'), ('Medium', 'medium'), ('Full', 'full')]
+FONT_ANTIALIASING = [('None', 'none'), ('Grayscale', 'grayscale'), ('Subpixel (RGBA)', 'rgba')]
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 ICON_APPEARANCE_SCRIPT = '/usr/lib/peachos/iconmasker/peachos-icon-appearance'
@@ -88,6 +96,15 @@ class SchemeOption(Gtk.Box):
 
         self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
+        # Protects the tile's own minimum size -- without this, the tile had
+        # no size floor of its own (relying purely on the Picture's natural
+        # size), and adding enough width-hungry content elsewhere on the page
+        # (the Fonts section's dropdowns) made the page's total minimum width
+        # exceed the content pane's fixed, never-horizontally-scrolling width
+        # -- confirmed live: GTK's layout solver squeezed this exact
+        # unprotected tile down to 0x0 to make everything else fit, while
+        # widgets with their own minimum-size floor didn't budge.
+        photo_wrap.set_size_request(*self.TILE_SIZE)
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *self.TILE_SIZE)
         photo_wrap.append(picture)
@@ -162,6 +179,7 @@ class IconStyleOption(Gtk.Box):
 
         self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
+        photo_wrap.set_size_request(*ICON_STYLE_TILE_SIZE)  # see SchemeOption's identical fix for why
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *ICON_STYLE_TILE_SIZE)
         photo_wrap.append(picture)
@@ -277,6 +295,62 @@ class AppearancePage(Gtk.Box):
             icon_style_row.append(option)
         icon_style_card.append(icon_style_row)
         self.append(icon_style_card)
+
+        self.append(Gtk.Label(label='Fonts', xalign=0, css_classes=['heading'], margin_start=4))
+
+        font_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        font_card.append(self._make_font_picker_row('Interface Font', 'font-name'))
+        font_card.append(self._make_font_picker_row('Document Font', 'document-font-name'))
+        font_card.append(self._make_font_picker_row('Monospace Font', 'monospace-font-name'))
+        self.append(font_card)
+
+        scaling_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14, css_classes=['network-row'])
+        scaling_row.set_margin_start(14)
+        scaling_row.set_margin_end(14)
+        scaling_row.set_margin_top(10)
+        scaling_row.set_margin_bottom(10)
+        scaling_row.append(Gtk.Label(label='Scaling Factor', xalign=0))
+        scaling_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.05)
+        scaling_scale.set_draw_value(False)
+        scaling_scale.set_hexpand(True)
+        self._settings.bind(
+            'text-scaling-factor', scaling_scale.get_adjustment(), 'value', Gio.SettingsBindFlags.DEFAULT)
+        scaling_row.append(scaling_scale)
+
+        self._hinting_row = DropdownRow('Hinting', FONT_HINT_STYLES)
+        self._hinting_row.set_selected_value(self._settings.get_string('font-hinting'))
+        self._hinting_row.dropdown.connect('notify::selected', self._on_hinting_changed)
+
+        self._antialiasing_row = DropdownRow('Antialiasing', FONT_ANTIALIASING)
+        self._antialiasing_row.set_selected_value(self._settings.get_string('font-antialiasing'))
+        self._antialiasing_row.dropdown.connect('notify::selected', self._on_antialiasing_changed)
+
+        scaling_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        scaling_card.append(scaling_row)
+        scaling_card.append(self._hinting_row)
+        scaling_card.append(self._antialiasing_row)
+        self.append(scaling_card)
+
+    def _make_font_picker_row(self, title: str, key: str) -> Gtk.Widget:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, css_classes=['network-row'])
+        row.set_margin_start(14)
+        row.set_margin_end(14)
+        row.set_margin_top(10)
+        row.set_margin_bottom(10)
+        row.append(Gtk.Label(label=title, xalign=0, hexpand=True))
+
+        font_dialog = Gtk.FontDialog()
+        button = Gtk.FontDialogButton(dialog=font_dialog, valign=Gtk.Align.CENTER)
+        button.set_font_desc(Pango.FontDescription.from_string(self._settings.get_string(key)))
+        button.connect('notify::font-desc', lambda btn, _p, k=key: self._settings.set_string(k, btn.get_font_desc().to_string()))
+        row.append(button)
+        return row
+
+    def _on_hinting_changed(self, _dropdown, _pspec):
+        self._settings.set_string('font-hinting', self._hinting_row.get_selected_value())
+
+    def _on_antialiasing_changed(self, _dropdown, _pspec):
+        self._settings.set_string('font-antialiasing', self._antialiasing_row.get_selected_value())
 
     # ---- Appearance (color-scheme) -------------------------------------
 

@@ -50,7 +50,7 @@ class GroupCard(Gtk.ListBox):
 
 class GeneralPage(Gtk.Box):
     def __init__(self, on_open_about=None, on_open_software_update=None, on_open_storage=None,
-                 on_open_datetime=None, on_open_language=None):
+                 on_open_datetime=None, on_open_language=None, on_open_defaultapps=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
@@ -62,6 +62,7 @@ class GeneralPage(Gtk.Box):
         self._on_open_storage = on_open_storage
         self._on_open_datetime = on_open_datetime
         self._on_open_language = on_open_language
+        self._on_open_defaultapps = on_open_defaultapps
         self._build_ui()
 
     def _build_ui(self):
@@ -95,5 +96,9 @@ class GeneralPage(Gtk.Box):
             PlaceholderRow(
                 'Language & Region', os.path.join(ICON_DIR, 'general_language_region.svg'),
                 on_click=self._on_open_language,
+            ),
+            PlaceholderRow(
+                'Default Apps', os.path.join(ICON_DIR, 'general.svg'),
+                on_click=self._on_open_defaultapps,
             ),
         ]))

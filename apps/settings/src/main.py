@@ -35,6 +35,7 @@ from appearance_page import AppearancePage
 from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
+from general_defaultapps_page import GeneralDefaultAppsPage
 from general_about_page import GeneralAboutPage
 from general_softwareupdate_page import GeneralSoftwareUpdatePage
 from general_storage_page import GeneralStoragePage
@@ -104,10 +105,93 @@ EXTRA_PAGE_TITLES = {
     'general_storage': 'Storage',
     'general_datetime': 'Date & Time',
     'general_language': 'Language & Region',
+    'general_defaultapps': 'Default Apps',
     'accessibility_zoom': 'Zoom',
     'accessibility_display': 'Display',
     'accessibility_audio': 'Audio',
+    'edit_profile': 'Edit Profile',
 }
+
+# Which sidebar tab a drill-in sub-page lives under -- drives the search
+# index's breadcrumb ("General > Software Update") below. 'edit_profile'
+# deliberately has no entry: it's reached by editing a specific account, not
+# something worth surfacing as a search result.
+EXTRA_PAGE_PARENTS = {
+    'general_about': 'general',
+    'general_softwareupdate': 'general',
+    'general_storage': 'general',
+    'general_datetime': 'general',
+    'general_language': 'general',
+    'general_defaultapps': 'general',
+    'accessibility_zoom': 'accessibility',
+    'accessibility_display': 'accessibility',
+    'accessibility_audio': 'accessibility',
+}
+
+# Extra search terms for pages whose real name doesn't obviously contain the
+# word someone would actually type -- kept short and only for genuinely
+# common terms, not an attempt to catalog every individual toggle on every
+# page (that's a much bigger, separate undertaking).
+SEARCH_ALIASES = {
+    'general_defaultapps': ['default browser', 'default email', 'browser', 'email client'],
+    'appearance': ['dark mode', 'light mode', 'accent color', 'theme'],
+    'displays': ['night light', 'resolution', 'brightness', 'color temperature'],
+    'wifi': ['wireless'],
+    'touchid': ['fingerprint', 'change password'],
+    'users': ['add user', 'accounts', 'user account'],
+    'lockscreen': ['screen lock', 'auto lock'],
+    'desktopdock': ['dock size', 'magnification'],
+    'privacy': ['location services', 'camera', 'microphone'],
+}
+
+
+def _compact(text: str) -> str:
+    """Letters/digits only, lowercased -- 'Wi-Fi' and 'wifi' both reduce to
+    the same 'wifi', same for 'Menu Bar'/'menubar', 'Screen Time'/
+    'screentime', etc."""
+    return ''.join(ch for ch in text.lower() if ch.isalnum())
+
+
+def _build_search_index() -> list:
+    """One entry per searchable destination: every top-level sidebar row,
+    plus every drill-in sub-page that has a known parent (see
+    EXTRA_PAGE_PARENTS). Each entry carries what it takes to render a result
+    row (icon/color/title, and a breadcrumb for sub-pages) and to navigate
+    to it (target) -- built once at import time, not on every keystroke."""
+    by_row_id = {row_id: (title, icon_name, color)
+                 for section in SIDEBAR_SECTIONS for row_id, title, icon_name, color in section}
+
+    index = []
+    for row_id, (title, icon_name, color) in by_row_id.items():
+        keywords = [title.lower()] + [kw.lower() for kw in SEARCH_ALIASES.get(row_id, [])]
+        index.append({
+            'target': row_id, 'title': title, 'breadcrumb': None,
+            'icon_name': icon_name, 'color': color, 'icon_row_id': row_id, 'keywords': keywords,
+        })
+
+    for page_id, parent_id in EXTRA_PAGE_PARENTS.items():
+        title = EXTRA_PAGE_TITLES[page_id]
+        parent_title, parent_icon, parent_color = by_row_id[parent_id]
+        keywords = [title.lower(), f'{parent_title.lower()} {title.lower()}']
+        keywords += [kw.lower() for kw in SEARCH_ALIASES.get(page_id, [])]
+        # icon_row_id is the PARENT's id, not the sub-page's own -- there's
+        # no 'general_softwareupdate.svg' custom icon file, only
+        # 'general.svg'. Using the sub-page's own id here was a real bug:
+        # make_sidebar_icon's custom-icon lookup silently missed and fell
+        # back to a plain symbolic glyph that doesn't exist in the icon
+        # theme either, rendering as a blank gray square (confirmed against
+        # a live screenshot -- General's own top-level row, which does
+        # resolve 'general.svg' correctly, looked completely different from
+        # its own sub-page rows in the exact same search results list).
+        index.append({
+            'target': page_id, 'title': title, 'breadcrumb': parent_title,
+            'icon_name': parent_icon, 'color': parent_color, 'icon_row_id': parent_id, 'keywords': keywords,
+        })
+    return index
+
+
+SEARCH_INDEX = _build_search_index()
+SEARCH_RESULTS_LIMIT = 8
 
 ACCENT_CLASSES = {
     '#0A84FF': 'accent-blue',
@@ -385,6 +469,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                         on_open_storage=lambda: self._go_to('general_storage', record_history=True),
                         on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
                         on_open_language=lambda: self._go_to('general_language', record_history=True),
+                        on_open_defaultapps=lambda: self._go_to('general_defaultapps', record_history=True),
                     )
                 elif row_id == 'accessibility':
                     self._pages[row_id] = AccessibilityPage(
@@ -411,7 +496,7 @@ class SettingsWindow(Adw.ApplicationWindow):
                 elif row_id == 'touchid':
                     self._pages[row_id] = TouchIDPage()
                 elif row_id == 'users':
-                    self._pages[row_id] = UsersPage(on_current_user_changed=self._refresh_signin_row)
+                    self._pages[row_id] = UsersPage(on_edit_user=self._open_edit_profile)
                 elif row_id == 'internetaccounts':
                     self._pages[row_id] = InternetAccountsPage()
                 elif row_id == 'keyboard':
@@ -441,6 +526,9 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._pages['general_language'] = GeneralLanguagePage()
         self._placeholder_stack.add_named(self._pages['general_language'], 'general_language')
 
+        self._pages['general_defaultapps'] = GeneralDefaultAppsPage()
+        self._placeholder_stack.add_named(self._pages['general_defaultapps'], 'general_defaultapps')
+
         self._pages['accessibility_zoom'] = AccessibilityZoomPage()
         self._placeholder_stack.add_named(self._pages['accessibility_zoom'], 'accessibility_zoom')
 
@@ -449,6 +537,10 @@ class SettingsWindow(Adw.ApplicationWindow):
 
         self._pages['accessibility_audio'] = AccessibilityAudioPage()
         self._placeholder_stack.add_named(self._pages['accessibility_audio'], 'accessibility_audio')
+
+        self._pages['edit_profile'] = users_page.EditProfilePage(
+            on_saved=self._on_profile_saved, go_back=lambda: self._navigate(-1))
+        self._placeholder_stack.add_named(self._pages['edit_profile'], 'edit_profile')
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
         self._go_to(first_id, record_history=True)
@@ -469,6 +561,10 @@ class SettingsWindow(Adw.ApplicationWindow):
         )
 
         search = Gtk.SearchEntry(placeholder_text='Search')
+        self._search_entry = search
+        search.connect('search-changed', self._on_search_changed)
+        search.connect('stop-search', self._on_search_stopped)
+        search.connect('activate', self._on_search_activate)
         top_box.append(search)
 
         # Live view of the actual account (AccountsService), not a static
@@ -515,10 +611,131 @@ class SettingsWindow(Adw.ApplicationWindow):
             self._listboxes.append(listbox)
 
         scroller.set_child(list_outer)
+        self._sidebar_scroller = scroller
         outer.append(scroller)
+
+        # Search results: a plain always-in-the-tree list, visibility
+        # toggled instead of a Gtk.Popover -- a popover here was tried
+        # first and confirmed live to have two real problems: popup()
+        # stole keyboard focus onto its first row (only the first typed
+        # character ever reached the entry), and autohide's own input
+        # grab could flat-out get stuck, leaving the whole window
+        # unresponsive to clicks elsewhere. A plain widget with
+        # .set_visible() has none of that -- it's the same mechanism
+        # already used safely all over this app (e.g. the emoji-avatar
+        # color row in users_page.py).
+        self._search_results_list = Gtk.ListBox(
+            css_classes=['boxed-list'], selection_mode=Gtk.SelectionMode.NONE, visible=False,
+            margin_start=4, margin_end=4,
+        )
+        self._search_results_list.connect('row-activated', self._on_search_result_activated)
+        outer.append(self._search_results_list)
+
+        self._search_empty_label = Gtk.Label(
+            label='No results found.', css_classes=['dim-label'], margin_top=12, visible=False,
+        )
+        outer.append(self._search_empty_label)
 
         toolbar.set_content(outer)
         return toolbar
+
+    # ---- search ---------------------------------------------------------
+
+    def _search_matches(self, query: str) -> list:
+        query = query.strip().lower()
+        if not query:
+            return []
+        # A "compact" (letters/digits only) form of the query is checked
+        # too, alongside the literal one -- so "wifi" still finds "Wi-Fi",
+        # "menubar" still finds "Menu Bar", "screentime" still finds
+        # "Screen Time", without hand-aliasing every title that happens to
+        # have a space or hyphen a real search term wouldn't.
+        compact_query = _compact(query)
+        scored = []
+        for entry in SEARCH_INDEX:
+            best = None
+            for kw in entry['keywords']:
+                if kw.startswith(query):
+                    best = 0  # prefix match -- best
+                    break
+                if query in kw:
+                    best = 1 if best is None else best  # contains, not a prefix
+                    continue
+                compact_kw = _compact(kw)
+                if compact_query and compact_kw.startswith(compact_query):
+                    best = 1 if best is None else best
+                elif compact_query and compact_query in compact_kw and best is None:
+                    best = 2
+            if best is not None:
+                scored.append((best, entry['title'], entry))
+        scored.sort(key=lambda t: (t[0], t[1]))
+        return [entry for _score, _title, entry in scored[:SEARCH_RESULTS_LIMIT]]
+
+    def _build_search_result_row(self, entry: dict) -> Gtk.Widget:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.set_margin_start(6)
+        row.set_margin_end(6)
+        row.set_margin_top(4)
+        row.set_margin_bottom(4)
+        row.append(make_sidebar_icon(entry['icon_row_id'], entry['icon_name'], entry['color']))
+
+        if entry['breadcrumb']:
+            label = Gtk.Label(xalign=0, use_markup=True)
+            label.set_markup(
+                f'<span alpha="65%">{GLib.markup_escape_text(entry["breadcrumb"])} ›</span> '
+                f'{GLib.markup_escape_text(entry["title"])}'
+            )
+        else:
+            label = Gtk.Label(label=entry['title'], xalign=0)
+        row.append(label)
+        row._search_target = entry['target']
+        return row
+
+    def _show_search_results(self, searching: bool):
+        self._sidebar_scroller.set_visible(not searching)
+        self._search_results_list.set_visible(searching)
+
+    def _refresh_search_results(self, query: str):
+        child = self._search_results_list.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self._search_results_list.remove(child)
+            child = nxt
+
+        query = query.strip()
+        if not query:
+            self._search_empty_label.set_visible(False)
+            self._show_search_results(False)
+            return
+
+        matches = self._search_matches(query)
+        self._search_empty_label.set_visible(not matches)
+        for entry in matches:
+            self._search_results_list.append(self._build_search_result_row(entry))
+        self._show_search_results(True)
+
+    def _on_search_changed(self, entry: Gtk.SearchEntry):
+        self._refresh_search_results(entry.get_text())
+
+    def _on_search_stopped(self, entry: Gtk.SearchEntry):
+        entry.set_text('')
+        self._search_empty_label.set_visible(False)
+        self._show_search_results(False)
+
+    def _on_search_activate(self, entry: Gtk.SearchEntry):
+        # Enter with no manual click -- jump straight to the top match.
+        matches = self._search_matches(entry.get_text())
+        if matches:
+            self._go_to_search_result(matches[0]['target'])
+
+    def _on_search_result_activated(self, _listbox, row):
+        self._go_to_search_result(row.get_child()._search_target)
+
+    def _go_to_search_result(self, target: str):
+        self._search_entry.set_text('')
+        self._search_empty_label.set_visible(False)
+        self._show_search_results(False)
+        self._go_to(target, record_history=True)
 
     def _refresh_signin_row(self):
         try:
@@ -556,8 +773,19 @@ class SettingsWindow(Adw.ApplicationWindow):
             user_path = users_page.get_current_user_path()
         except GLib.Error:
             return
-        dialog = users_page._EditUserDialog(self, user_path, on_saved=self._refresh_signin_row)
-        dialog.present()
+        self._open_edit_profile(user_path)
+
+    def _open_edit_profile(self, user_path: str):
+        self._pages['edit_profile'].load_user(user_path)
+        self._go_to('edit_profile', record_history=True)
+
+    def _on_profile_saved(self, _user_path: str):
+        # Both live views of account data (the sidebar's own sign-in row,
+        # and Users & Groups' list) need to pick up a save regardless of
+        # which one was used to get to the edit page -- cheap enough to
+        # just always refresh both rather than tracking which one launched it.
+        self._refresh_signin_row()
+        self._pages['users'].reload()
 
     def _build_content_header(self):
         header = Adw.HeaderBar()
@@ -627,10 +855,22 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._placeholder_stack.set_transition_type(transition)
         self._placeholder_stack.set_visible_child_name(row_id)
 
+        # Always explicitly syncs (or clears) every listbox's selection to
+        # match row_id -- not just "select it if found". A sub-page (About,
+        # Software Update, a search result, ...) isn't in SIDEBAR_SECTIONS
+        # at all, so the old code simply never touched selection for those,
+        # leaving whichever sidebar row was selected *before* still marked
+        # selected underneath. Confirmed live: re-clicking that exact same
+        # row later then does nothing, since GtkListBox doesn't re-fire
+        # row-selected for a no-op reselect -- the sidebar looked dead.
         for section, listbox in zip(SIDEBAR_SECTIONS, self._listboxes):
+            matched_row = None
             for idx, (rid, *_rest) in enumerate(section):
                 if rid == row_id:
-                    listbox.select_row(listbox.get_row_at_index(idx))
+                    matched_row = listbox.get_row_at_index(idx)
+                    break
+            if listbox.get_selected_row() is not matched_row:
+                listbox.select_row(matched_row)
 
         title = next(
             (title for section in SIDEBAR_SECTIONS for rid, title, *_ in section if rid == row_id),

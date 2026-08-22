@@ -214,49 +214,50 @@ class _AddUserDialog(Gtk.Window):
         self.close()
 
 
-class _EditUserDialog(Gtk.Window):
-    """Rename / re-photo an existing account -- SetRealName + SetIconFile,
+class EditProfilePage(Gtk.Box):
+    """A real page in the same nav stack as every other tab (General, About,
+    ...) -- not a popup window. Explicit user correction: the sign-in row
+    and Users & Groups both used to open this as a separate Gtk.Window,
+    which read as inconsistent next to the rest of the app's drill-in pages
+    (General -> About, etc.), all of which slide within the one content
+    pane and share its back/forward history instead of stacking a floating
+    dialog on top.
+
+    One instance is built once (see main.py) and reused for whichever
+    account is being edited -- load_user(path) repopulates it rather than
+    constructing a fresh page per click, same reasoning as bluebubbles-
+    native's ConversationView.show_chat().
+
+    Rename / re-photo an existing account -- SetRealName + SetIconFile,
     both confirmed live to work self-service (no polkit prompt) for a
     user's own account; editing someone else's account still routes through
     the exact same calls; whatever polkit does with those (prompt, deny) is
     surfaced through the normal error label below, not special-cased here.
     """
 
-    def __init__(self, parent, user_path: str, on_saved):
-        super().__init__(
-            title='Edit Profile', transient_for=parent, modal=True,
-            default_width=360, resizable=False,
-        )
+    def __init__(self, on_saved, go_back):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.set_margin_start(24)
+        self.set_margin_end(24)
+        self.set_margin_top(18)
+        self.set_margin_bottom(18)
+
         self._on_saved = on_saved
-        self._user_path = user_path
+        self._go_back = go_back
+        self._bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        self._user_path: str | None = None
+        self._username = ''
+        self._real_name = ''
+        self._current_display_path: str | None = None
         self._staged_avatar_path: str | None = None
         self._chosen_emoji_path: str | None = None
 
-        self._bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
-        self._user_proxy = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None,
-            ACCOUNTS_BUS_NAME, user_path, USER_IFACE, None,
-        )
-        self._username = self._user_proxy.get_cached_property('UserName').unpack()
-        real_name = self._user_proxy.get_cached_property('RealName').unpack() or self._username
-        self._real_name = real_name
-        icon_file = self._user_proxy.get_cached_property('IconFile').unpack()
-        self._current_display_path = _resolve_avatar_display_path(self._username, icon_file)
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        box.set_margin_start(20)
-        box.set_margin_end(20)
-        box.set_margin_top(20)
-        box.set_margin_bottom(20)
-        self.set_child(box)
-
         self._avatar_holder = Gtk.Box(halign=Gtk.Align.CENTER)
-        box.append(self._avatar_holder)
-        self._render_avatar_preview()
+        self.append(self._avatar_holder)
 
         change_photo_btn = Gtk.Button(label='Change Photo…', halign=Gtk.Align.CENTER, css_classes=['flat'])
         change_photo_btn.connect('clicked', self._on_avatar_button_clicked)
-        box.append(change_photo_btn)
+        self.append(change_photo_btn)
 
         self._color_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.CENTER, visible=False)
@@ -265,23 +266,42 @@ class _EditUserDialog(Gtk.Window):
             swatch = ColorSwatch(name, hex_color, self._on_color_clicked)
             self._color_swatches.append((swatch, hex_color))
             self._color_row.append(swatch)
-        box.append(self._color_row)
+        self.append(self._color_row)
 
-        box.append(Gtk.Label(label='Full Name', xalign=0))
-        self._name_entry = Gtk.Entry(text=real_name)
-        box.append(self._name_entry)
+        self.append(Gtk.Label(label='Full Name', xalign=0))
+        self._name_entry = Gtk.Entry()
+        self.append(self._name_entry)
 
         self._error_label = Gtk.Label(wrap=True, xalign=0, css_classes=['error'], visible=False)
-        box.append(self._error_label)
+        self.append(self._error_label)
 
-        button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.END)
-        cancel_btn = Gtk.Button(label='Cancel')
-        cancel_btn.connect('clicked', lambda *_a: self.close())
-        button_row.append(cancel_btn)
+        button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END)
         self._save_btn = Gtk.Button(label='Save', css_classes=['suggested-action'])
         self._save_btn.connect('clicked', self._on_save_clicked)
         button_row.append(self._save_btn)
-        box.append(button_row)
+        self.append(button_row)
+
+    def load_user(self, user_path: str):
+        """Repopulates the page for a (possibly different) account --
+        called every time navigation lands here, see main.py."""
+        self._user_path = user_path
+        self._staged_avatar_path = None
+        self._chosen_emoji_path = None
+        self._error_label.set_visible(False)
+        self._color_row.set_visible(False)
+        self._save_btn.set_sensitive(True)
+
+        user_proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None,
+            ACCOUNTS_BUS_NAME, user_path, USER_IFACE, None,
+        )
+        self._username = user_proxy.get_cached_property('UserName').unpack()
+        self._real_name = user_proxy.get_cached_property('RealName').unpack() or self._username
+        icon_file = user_proxy.get_cached_property('IconFile').unpack()
+        self._current_display_path = _resolve_avatar_display_path(self._username, icon_file)
+
+        self._name_entry.set_text(self._real_name)
+        self._render_avatar_preview()
 
     # ---- avatar preview / editing -----------------------------------
 
@@ -322,7 +342,7 @@ class _EditUserDialog(Gtk.Window):
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(image_filter)
         dialog.set_filters(filters)
-        dialog.open(self, None, self._on_photo_chosen)
+        dialog.open(self.get_root(), None, self._on_photo_chosen)
 
     def _on_photo_chosen(self, dialog, result):
         try:
@@ -350,7 +370,7 @@ class _EditUserDialog(Gtk.Window):
         self._render_avatar_preview()
 
     def _on_choose_emoji(self):
-        picker = avatar_picker.EmojiPickerDialog(self)
+        picker = avatar_picker.EmojiPickerDialog(self.get_root())
         picker.connect('emoji-picked', self._on_emoji_picked)
         picker.present()
 
@@ -403,18 +423,17 @@ class _EditUserDialog(Gtk.Window):
             self._error_label.set_visible(True)
             return
 
-        self._on_saved()
-        self.close()
+        self._on_saved(self._user_path)
+        self._go_back()
 
 
 class UsersPage(Gtk.Box):
-    def __init__(self, on_current_user_changed=None):
+    def __init__(self, on_edit_user):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        # Fires in addition to the normal row refresh when the edited row
-        # was the process's own account -- lets main.py's sidebar sign-in
-        # row (a separate live view of the same account) pick up the change
-        # too, instead of only updating here.
-        self._on_current_user_changed = on_current_user_changed
+        # Navigates to the shared EditProfilePage (see main.py) rather than
+        # opening a dialog here -- this page doesn't own any nav-stack state
+        # itself, just asks the window to go there.
+        self._on_edit_user = on_edit_user
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
@@ -445,13 +464,10 @@ class UsersPage(Gtk.Box):
         dialog.present()
 
     def _on_row_activated(self, _listbox, row):
-        dialog = _EditUserDialog(self.get_root(), row.user_path, on_saved=lambda: self._on_saved(row))
-        dialog.present()
+        self._on_edit_user(row.user_path)
 
-    def _on_saved(self, row):
+    def reload(self):
         self._load_users()
-        if self._on_current_user_changed and row.username == GLib.get_user_name():
-            self._on_current_user_changed()
 
     def _load_users(self):
         child = self._user_list.get_first_child()

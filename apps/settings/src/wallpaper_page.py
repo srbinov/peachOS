@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 
+import cairo
 import gi
 
 gi.require_version('GdkPixbuf', '2.0')
@@ -24,6 +25,17 @@ REPO_WALLPAPER_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'assets', 'wallpapers',
 ))
 CUSTOM_WALLPAPER_DIR = os.path.expanduser('~/.local/share/peachos/wallpapers/custom')
+
+# The lock screen (both the in-session one and GDM's own login screen) has to
+# read this from a system-readable path -- GDM's greeter runs as a totally
+# separate system account with no visibility into this user's own home
+# directory, so this can't live under ~/.local/share the way the desktop's
+# own custom wallpapers do. A single fixed filename (always re-encoded to
+# this exact path+format on apply) rather than one-per-photo, so both
+# extensions/peachos-lockscreen@local.dev's background override and any
+# future UI here only ever need to check one known location.
+LOCK_WALLPAPER_STAGING_PATH = os.path.expanduser('~/.local/share/peachos/wallpapers/lockscreen-staged.jpg')
+SYSTEM_LOCK_WALLPAPER_PATH = '/usr/share/backgrounds/peachos/custom-lockscreen.jpg'
 
 # (display name, preview image, light wallpaper filename, dark wallpaper filename)
 # peachOS Nectar first per the reference layout / the distro's own default.
@@ -74,6 +86,12 @@ class WallpaperTile(Gtk.Box):
 
         self.ring_box = Gtk.Box(css_classes=['scheme-ring'])
         photo_wrap = Gtk.Box(css_classes=['scheme-photo'])
+        # Without an explicit size floor, GTK's layout solver can squeeze this
+        # Box to 0x0 once total sibling content pushes the (non-scrolling)
+        # page past its available width -- the exact bug already root-caused
+        # and fixed for appearance_page.py's SchemeOption/IconStyleOption,
+        # which this tile never got the same protection for.
+        photo_wrap.set_size_request(*self.TILE_SIZE)
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
         picture = _load_scaled_picture(preview_path, *self.TILE_SIZE)
         photo_wrap.append(picture)
@@ -148,9 +166,10 @@ class WallpaperPage(Gtk.Box):
         self._populate_dynamic_wallpapers()
         self._populate_custom_photos()
         self._refresh_selection()
+        self._refresh_lockscreen_preview()
 
-        self._bg_settings.connect('changed::picture-uri', lambda *_a: self._refresh_selection())
-        self._bg_settings.connect('changed::picture-uri-dark', lambda *_a: self._refresh_selection())
+        self._bg_settings.connect('changed::picture-uri', lambda *_a: (self._refresh_selection(), self._refresh_lockscreen_preview()))
+        self._bg_settings.connect('changed::picture-uri-dark', lambda *_a: (self._refresh_selection(), self._refresh_lockscreen_preview()))
         self._interface_settings.connect('changed::accent-color', lambda *_a: self._refresh_selection())
 
     # ---- UI construction -----------------------------------------------
@@ -192,6 +211,44 @@ class WallpaperPage(Gtk.Box):
         buttons_row.append(Gtk.Button(label='Screen Saver…'))
         buttons_row.append(Gtk.Button(label='Clock Appearance…'))
         self.append(buttons_row)
+
+        self.append(Gtk.Separator())
+
+        self.append(Gtk.Label(label='Lock Screen Wallpaper', xalign=0, css_classes=['heading']))
+        lock_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+
+        lock_preview_wrap = Gtk.Box(css_classes=['scheme-photo'], width_request=160, height_request=90)
+        lock_preview_wrap.set_overflow(Gtk.Overflow.HIDDEN)
+        self._lockscreen_preview_picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER)
+        lock_preview_wrap.append(self._lockscreen_preview_picture)
+        lock_row.append(lock_preview_wrap)
+
+        lock_info_card = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, css_classes=['wifi-card'], hexpand=True, spacing=4,
+            margin_start=14, margin_end=14, margin_top=10, margin_bottom=10,
+        )
+        self._lockscreen_status_label = Gtk.Label(label='—', xalign=0)
+        lock_info_card.append(self._lockscreen_status_label)
+        lock_desc = Gtk.Label(
+            label='Used for both the lock screen and the login screen -- these are always the same.',
+            xalign=0, wrap=True, css_classes=['dim-label', 'caption'],
+        )
+        lock_info_card.append(lock_desc)
+
+        lock_buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, margin_top=6)
+        self._lockscreen_choose_btn = Gtk.Button(label='Choose Photo…')
+        self._lockscreen_choose_btn.connect('clicked', self._on_lockscreen_choose_clicked)
+        lock_buttons.append(self._lockscreen_choose_btn)
+        self._lockscreen_reset_btn = Gtk.Button(label='Use Desktop Wallpaper')
+        self._lockscreen_reset_btn.connect('clicked', self._on_lockscreen_reset_clicked)
+        lock_buttons.append(self._lockscreen_reset_btn)
+        lock_info_card.append(lock_buttons)
+
+        self._lockscreen_error_label = Gtk.Label(wrap=True, xalign=0, css_classes=['error'], visible=False)
+        lock_info_card.append(self._lockscreen_error_label)
+
+        lock_row.append(lock_info_card)
+        self.append(lock_row)
 
         self.append(Gtk.Separator())
 
@@ -331,3 +388,143 @@ class WallpaperPage(Gtk.Box):
             return path
         except GLib.Error:
             return None
+
+    # ---- Lock screen wallpaper (separate from the desktop one) -----------
+    #
+    # SYSTEM_LOCK_WALLPAPER_PATH is root-owned (0644, under /usr/share) --
+    # GDM's greeter can't read anywhere under this user's own home directory
+    # at all, so writing/removing it needs a real privilege escalation, not
+    # a workaround. pkexec is the standard, correct tool for "one specific
+    # native action needs root, prompted right here" -- this isn't shelling
+    # out to another *app* (see feedback_settings_no_external_launch.md),
+    # it's a single install(1)/rm(1) invocation the same way printers_page.py
+    # already goes through lpadmin directly instead of a GUI tool.
+
+    def _refresh_lockscreen_preview(self):
+        if os.path.isfile(SYSTEM_LOCK_WALLPAPER_PATH):
+            self._lockscreen_preview_picture.set_paintable(
+                _load_scaled_texture(SYSTEM_LOCK_WALLPAPER_PATH, 160, 90))
+            self._lockscreen_status_label.set_label('Custom lock screen wallpaper set')
+            self._lockscreen_reset_btn.set_sensitive(True)
+        else:
+            # "Same as Desktop Wallpaper" should actually show the desktop
+            # wallpaper, not an empty box -- .scheme-photo has no
+            # background-color of its own, so with no paintable at all this
+            # previously rendered as a blank void instead of a placeholder.
+            desktop_path = self._current_path('picture-uri') or self._current_path('picture-uri-dark')
+            if desktop_path and os.path.isfile(desktop_path):
+                self._lockscreen_preview_picture.set_paintable(
+                    _load_scaled_texture(desktop_path, 160, 90))
+            else:
+                self._lockscreen_preview_picture.set_paintable(None)
+            self._lockscreen_status_label.set_label('Same as Desktop Wallpaper')
+            self._lockscreen_reset_btn.set_sensitive(False)
+
+    def _set_lockscreen_busy(self, busy: bool):
+        self._lockscreen_choose_btn.set_sensitive(not busy)
+        self._lockscreen_reset_btn.set_sensitive(not busy and os.path.isfile(SYSTEM_LOCK_WALLPAPER_PATH))
+        if busy:
+            self._lockscreen_status_label.set_label('Applying…')
+        else:
+            # Not "restore the previous text" (that'd get stuck on
+            # "Applying..." if the pkexec call itself failed) -- just
+            # re-derive the label from whatever's actually on disk, which is
+            # correct whether the operation just succeeded or failed.
+            self._refresh_lockscreen_preview()
+
+    def _on_lockscreen_choose_clicked(self, _btn):
+        dialog = Gtk.FileDialog(title='Choose a Lock Screen Photo')
+        image_filter = Gtk.FileFilter(name='Images')
+        image_filter.add_mime_type('image/jpeg')
+        image_filter.add_mime_type('image/png')
+        image_filter.add_mime_type('image/webp')
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(image_filter)
+        dialog.set_filters(filters)
+        dialog.open(self.get_root(), None, self._on_lockscreen_file_chosen)
+
+    def _on_lockscreen_file_chosen(self, dialog, result):
+        try:
+            gfile = dialog.open_finish(result)
+        except GLib.Error:
+            return  # cancelled
+        src_path = gfile.get_path() if gfile else None
+        if not src_path:
+            return
+
+        self._lockscreen_error_label.set_visible(False)
+
+        # Re-encoded to one fixed format/path regardless of source type --
+        # the two consumers (peachos-lockscreen@local.dev's JS, and this
+        # page's own preview) only ever need to handle one known format.
+        os.makedirs(os.path.dirname(LOCK_WALLPAPER_STAGING_PATH), exist_ok=True)
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(src_path)
+            if pixbuf.get_has_alpha():
+                # JPEG has no alpha channel at all -- glycin's JPEG encoder
+                # errors out outright on an RGBA8 source (a transparent PNG,
+                # for example) rather than silently dropping it.
+                # composite_color_simple() was tried first but only zeroes
+                # out the alpha *values* -- the pixbuf it returns still
+                # reports get_has_alpha() True, so the encoder still rejects
+                # it. Painting onto a Cairo FORMAT_RGB24 surface (genuinely
+                # no alpha channel in the pixel format) and reading the
+                # result back is the same alpha-flatten technique
+                # avatar_picker.py already uses elsewhere in this app.
+                w, h = pixbuf.get_width(), pixbuf.get_height()
+                surface = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+                ctx = cairo.Context(surface)
+                ctx.set_source_rgb(1, 1, 1)
+                ctx.paint()
+                Gdk.cairo_set_source_pixbuf(ctx, pixbuf, 0, 0)
+                ctx.paint()
+                surface.flush()
+                pixbuf = Gdk.pixbuf_get_from_surface(surface, 0, 0, w, h)
+            pixbuf.savev(LOCK_WALLPAPER_STAGING_PATH, 'jpeg', ['quality'], ['92'])
+        except GLib.Error as e:
+            self._lockscreen_error_label.set_label(f'Could not use that image: {e.message}')
+            self._lockscreen_error_label.set_visible(True)
+            return
+
+        self._set_lockscreen_busy(True)
+        proc = Gio.Subprocess.new(
+            ['pkexec', 'install', '-Dm644', LOCK_WALLPAPER_STAGING_PATH, SYSTEM_LOCK_WALLPAPER_PATH],
+            Gio.SubprocessFlags.NONE,
+        )
+        proc.wait_async(None, self._on_lockscreen_apply_done)
+
+    def _on_lockscreen_apply_done(self, proc, result):
+        try:
+            proc.wait_finish(result)
+        except GLib.Error as e:
+            self._set_lockscreen_busy(False)
+            self._lockscreen_error_label.set_label(f'Could not apply the wallpaper: {e.message}')
+            self._lockscreen_error_label.set_visible(True)
+            return
+
+        self._set_lockscreen_busy(False)
+        if proc.get_exit_status() != 0:
+            self._lockscreen_error_label.set_label(
+                'Could not apply the wallpaper (the password prompt may have been cancelled).')
+            self._lockscreen_error_label.set_visible(True)
+
+    def _on_lockscreen_reset_clicked(self, _btn):
+        self._lockscreen_error_label.set_visible(False)
+        self._set_lockscreen_busy(True)
+        proc = Gio.Subprocess.new(['pkexec', 'rm', '-f', SYSTEM_LOCK_WALLPAPER_PATH], Gio.SubprocessFlags.NONE)
+        proc.wait_async(None, self._on_lockscreen_reset_done)
+
+    def _on_lockscreen_reset_done(self, proc, result):
+        try:
+            proc.wait_finish(result)
+        except GLib.Error as e:
+            self._set_lockscreen_busy(False)
+            self._lockscreen_error_label.set_label(f'Could not reset the wallpaper: {e.message}')
+            self._lockscreen_error_label.set_visible(True)
+            return
+
+        self._set_lockscreen_busy(False)
+        if proc.get_exit_status() != 0:
+            self._lockscreen_error_label.set_label(
+                'Could not reset the wallpaper (the password prompt may have been cancelled).')
+            self._lockscreen_error_label.set_visible(True)

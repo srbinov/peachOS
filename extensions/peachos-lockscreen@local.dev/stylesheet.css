@@ -28,14 +28,43 @@
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.05);
 }
 
+/* ---- Push the avatar + password prompt down a bit ----------------------- */
+
+/* LoginDialog (gdm/loginDialog.js) has style_class 'login-dialog', and its
+   vfunc_allocate() centers the auth prompt / user selection box vertically
+   within `themeNode.get_content_box(dialogBox)` -- which is the dialog's
+   own allocation box shrunk by ITS theme node's padding. Adding padding-top
+   here (with no padding-bottom) shifts that content box's y1 down while its
+   y2 stays put, which moves the computed center -- and therefore the
+   centered avatar/password prompt -- down by roughly padding-top / 2,
+   without touching GDM's own allocation code at all. This was previously
+   attempted by pushing the clock further up instead (widening
+   lockScreenLayout.js's CLOCK_BOTTOM_GAP), which just left the clock
+   floating too high without addressing the actual ask.
+*/
+.login-dialog {
+  padding-top: 96px;
+}
+
 /* ---- Password field: taller, bigger dots ------------------------------- */
 
+/* height/box-shadow were tuned down from an earlier 2.4em/16px-spread pass --
+   GDM's own LoginDialog.vfunc_allocate() computes the auth prompt's natural
+   size fresh on every relayout and clamps it to the dialog's own available
+   height (loginDialog.js's _getCenterActorAllocation: natHeight = min(natHeight,
+   dialogBox height)). Wrong-password specifically adds a message label above
+   this entry, growing the prompt's total natural height right at the moment
+   the clamp is most likely to bite -- the reported "password box disappears
+   after a wrong attempt" symptom matches getting clamped/clipped out at
+   exactly that moment. Kept taller/more visible than stock, just not pushed
+   as far into that ceiling.
+*/
 .login-dialog .login-dialog-prompt-entry {
   border-radius: 999px !important;
   background-color: rgba(236, 236, 236, 0.12);
   color: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 2px 24px 16px rgba(0, 0, 0, 0.05) !important;
-  height: 2.4em !important;
+  box-shadow: 0 2px 12px 8px rgba(0, 0, 0, 0.05) !important;
+  height: 2em !important;
   font-size: 20px !important;
   padding: 0 18px !important;
 }

@@ -3,6 +3,6 @@
     "name": "peachOS Lock & Login Screen",
     "description": "GDM login screen styling for peachOS: a clock (GDM has none built in) plus resized avatar/password field to match the WACK - Sonoma Lockscreen extension's in-session lock screen look.",
     "shell-version": ["50"],
-    "session-modes": ["user", "gdm"],
+    "session-modes": ["user", "unlock-dialog", "gdm"],
     "version-name": "1.0.0"
 }
