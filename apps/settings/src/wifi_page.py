@@ -6,7 +6,7 @@ gi.require_version('NM', '1.0')
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk, NM
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -102,10 +102,10 @@ class WifiPage(Gtk.Box):
         )
         icon_path = os.path.join(ICON_DIR, 'wifi.svg')
         if os.path.isfile(icon_path):
-            icon = Gtk.Image.new_from_file(icon_path)
+            icon = load_sized_image(icon_path, 32)
         else:
             icon = Gtk.Image.new_from_icon_name('network-wireless-symbolic')
-        icon.set_pixel_size(32)
+            icon.set_pixel_size(32)
         card_box.append(icon)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)

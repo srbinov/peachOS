@@ -1,6 +1,27 @@
 import os
 
-from gi.repository import Gtk
+from gi.repository import Gdk, GdkPixbuf, Gtk
+
+
+def load_sized_image(path: str, pixel_size: int) -> Gtk.Image:
+    """Gtk.Image.new_from_file() routes local SVGs through GTK4's sandboxed
+    glycin loader -- confirmed live at ~0.7s PER ICON in this environment
+    (bubblewrap + D-Bus round trip per image, same overhead documented in
+    provision.sh's icon masker daemon comments), regardless of file size.
+    With ~24 sidebar icons plus every page's own hero-header icon all going
+    through that path, this alone accounted for most of a ~57s app startup.
+    GdkPixbuf's own loader (librsvg-backed, no sandbox) loads the same file
+    in single-digit milliseconds -- same fix already used successfully by
+    wallpaper_page.py/appearance_page.py's image-preview code."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, pixel_size, pixel_size, True)
+    icon = Gtk.Image.new_from_paintable(Gdk.Texture.new_for_pixbuf(pixbuf))
+    # Gtk.Image built from a bare paintable (unlike new_from_file/icon-name)
+    # doesn't measure itself at the paintable's own pixel size -- confirmed
+    # live it defaults to 16x16 regardless, which is why every icon fixed by
+    # this helper first rendered tiny. set_pixel_size() still applies here
+    # even though the image wasn't constructed from an icon name.
+    icon.set_pixel_size(pixel_size)
+    return icon
 
 
 def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, description: str,
@@ -15,10 +36,10 @@ def make_hero_header(icon_path: str, fallback_icon_name: str, title: str, descri
     )
 
     if icon_path and os.path.isfile(icon_path):
-        icon = Gtk.Image.new_from_file(icon_path)
+        icon = load_sized_image(icon_path, icon_size)
     else:
         icon = Gtk.Image.new_from_icon_name(fallback_icon_name)
-    icon.set_pixel_size(icon_size)
+        icon.set_pixel_size(icon_size)
     inner.append(icon)
 
     inner.append(Gtk.Label(label=title, css_classes=['title-1']))
@@ -113,8 +134,7 @@ class IconPlaceholderRow(Gtk.Box):
         self.set_margin_bottom(10)
 
         if icon_file and os.path.isfile(icon_file):
-            icon = Gtk.Image.new_from_file(icon_file)
-            icon.set_pixel_size(28)
+            icon = load_sized_image(icon_file, 28)
             self.append(icon)
         else:
             icon_box = Gtk.Box(

@@ -7,7 +7,7 @@ import gi
 
 gi.require_version('GdkPixbuf', '2.0')
 
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk
 
 from appearance_page import ACCENT_HEX
 
@@ -41,9 +41,48 @@ SYSTEM_LOCK_WALLPAPER_PATH = '/usr/share/backgrounds/peachos/custom-lockscreen.j
 # peachOS Nectar first per the reference layout / the distro's own default.
 DYNAMIC_WALLPAPERS = [
     ('peachOS Nectar', 'peachOS_Nectar.svg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.png'),
+    ('macOS Tahoe', 'macOS_Tahoe.svg', 'macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
     ('macOS Sonoma', 'macOS_Sonoma.svg', 'macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
     ('macOS Sequoia', 'macOS_Sequoia.svg', 'macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),
     ('macOS Golden Gate', 'macOS_GoldenGate.png', 'macOS_GoldenGate_Light.png', 'macOS_GoldenGate_Dark.png'),
+]
+
+# (display name, filename) -- single static images (not light/dark pairs),
+# pushed to the icons repo alongside the Tahoe dynamic wallpaper. Live under
+# a presets/ subdirectory of the same wallpaper dir so provisioning can keep
+# treating "the wallpaper dir" as one thing.
+PRESET_WALLPAPERS = [
+    ('Tahoe Beach (Dawn)', 'tahoe_beach_dawn.jpg'),
+    ('Tahoe Beach (Day)', 'tahoe_beach_day.jpg'),
+    ('Tahoe Beach (Dusk)', 'tahoe_beach_dusk.jpg'),
+    ('Tahoe Beach (Night)', 'tahoe_beach_night.jpg'),
+    ('Apple Event 2021', 'apple_event_2021.jpg'),
+    ('Big Sur Coastline', 'bigsur_coastline.jpg'),
+    ('Big Sur Layers', 'bigsur_layers.jpg'),
+    ('Big Sur Sunrise', 'bigsur_sunrise.jpg'),
+    ('Catalina Island', 'catalina_island.jpg'),
+    ('Leopard', 'leopard.jpg'),
+    ('Lion Andromeda', 'lion_andromeda.jpg'),
+    ('Lion Beach', 'lion_beach.jpg'),
+    ('Lion Tranquil', 'lion_tranquil.jpg'),
+    ('Lion Twilight', 'lion_twilight.jpg'),
+    ('Mavericks Tide', 'mavericks_tide.jpg'),
+    ('Mojave Fusion', 'mojave_fusion.png'),
+    ('Mojave Desert', 'mojave_desert.jpg'),
+    ('Mojave Starry Night', 'mojave_starry.jpg'),
+    ('Mountain Lion', 'mountain_lion_1.jpg'),
+    ('Mountain Lion 2', 'mountain_lion_2.jpg'),
+    ('Mountain Lion 3', 'mountain_lion_3.jpg'),
+    ('Mountain Lion 4', 'mountain_lion_4.jpg'),
+    ('Mountain Lion 5', 'mountain_lion_5.jpg'),
+    ('Monterey (Black)', 'monterey_black.jpg'),
+    ('Monterey (Blue)', 'monterey_blue.jpg'),
+    ('Monterey (Green)', 'monterey_green.jpg'),
+    ('Monterey (Orange)', 'monterey_orange.jpg'),
+    ('Monterey WWDC', 'monterey_wwdc.jpg'),
+    ('Sequoia Forest', 'sequoia_forest.jpg'),
+    ('Sierra Peak', 'sierra_peak.jpg'),
+    ('Sonoma', 'sonoma.jpg'),
 ]
 
 
@@ -51,6 +90,10 @@ def _wallpaper_dir() -> str:
     if os.path.isfile(os.path.join(SYSTEM_WALLPAPER_DIR, 'peachOS_Nectar_Light.jpg')):
         return SYSTEM_WALLPAPER_DIR
     return REPO_WALLPAPER_DIR
+
+
+def _preset_dir() -> str:
+    return os.path.join(_wallpaper_dir(), 'presets')
 
 
 def _load_scaled_texture(path: str, width: int, height: int) -> Gdk.Texture:
@@ -80,7 +123,7 @@ class WallpaperTile(Gtk.Box):
 
     TILE_SIZE = (112, 63)
 
-    def __init__(self, label: str, preview_path: str, on_click):
+    def __init__(self, label: str, preview_path: str, on_click, on_right_click=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         self._selected = False
 
@@ -104,6 +147,11 @@ class WallpaperTile(Gtk.Box):
         click.connect('released', lambda *_a: on_click(self))
         self.add_controller(click)
         self.set_cursor_from_name('pointer')
+
+        if on_right_click is not None:
+            right_click = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
+            right_click.connect('released', lambda _g, _n, x, y: on_right_click(self, x, y))
+            self.add_controller(right_click)
 
     def set_selected(self, selected: bool, ring_hex: str):
         self._selected = selected
@@ -164,6 +212,7 @@ class WallpaperPage(Gtk.Box):
 
         self._build_ui()
         self._populate_dynamic_wallpapers()
+        self._populate_preset_wallpapers()
         self._populate_custom_photos()
         self._refresh_selection()
         self._refresh_lockscreen_preview()
@@ -205,16 +254,9 @@ class WallpaperPage(Gtk.Box):
 
         self.append(top_row)
 
-        # Also inert for now -- no screensaver or clock-appearance
-        # settings wired up yet.
-        buttons_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        buttons_row.append(Gtk.Button(label='Screen Saver…'))
-        buttons_row.append(Gtk.Button(label='Clock Appearance…'))
-        self.append(buttons_row)
-
         self.append(Gtk.Separator())
 
-        self.append(Gtk.Label(label='Lock Screen Wallpaper', xalign=0, css_classes=['heading']))
+        self.append(Gtk.Label(label='Login Screen Wallpaper', xalign=0, css_classes=['heading']))
         lock_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
 
         lock_preview_wrap = Gtk.Box(css_classes=['scheme-photo'], width_request=160, height_request=90)
@@ -230,7 +272,7 @@ class WallpaperPage(Gtk.Box):
         self._lockscreen_status_label = Gtk.Label(label='—', xalign=0)
         lock_info_card.append(self._lockscreen_status_label)
         lock_desc = Gtk.Label(
-            label='Used for both the lock screen and the login screen -- these are always the same.',
+            label='Used for the login screen when you start your computer.',
             xalign=0, wrap=True, css_classes=['dim-label', 'caption'],
         )
         lock_info_card.append(lock_desc)
@@ -259,6 +301,14 @@ class WallpaperPage(Gtk.Box):
             max_children_per_line=8, min_children_per_line=1,
         )
         self.append(self._dynamic_flow)
+
+        self.append(Gtk.Label(label='Preset Wallpapers', xalign=0, css_classes=['heading']))
+        self._preset_flow = Gtk.FlowBox(
+            selection_mode=Gtk.SelectionMode.NONE, homogeneous=False,
+            row_spacing=14, column_spacing=14, halign=Gtk.Align.START, valign=Gtk.Align.START,
+            max_children_per_line=8, min_children_per_line=1,
+        )
+        self.append(self._preset_flow)
 
         self.append(Gtk.Label(label='Your Photos', xalign=0, css_classes=['heading']))
         self._photos_flow = Gtk.FlowBox(
@@ -289,6 +339,26 @@ class WallpaperPage(Gtk.Box):
                 self._set_wallpaper(light_path, dark_path)
                 return
 
+    # ---- Preset wallpapers -------------------------------------------------
+
+    def _populate_preset_wallpapers(self):
+        preset_dir = _preset_dir()
+        for name, filename in PRESET_WALLPAPERS:
+            path = os.path.join(preset_dir, filename)
+            if not os.path.isfile(path):
+                continue
+            # Single static image -- light and dark are the same file, same
+            # as a custom photo tile below.
+            tile = WallpaperTile(name, path, self._on_preset_tile_clicked)
+            self._preset_flow.append(tile)
+            self._tiles.append((tile, path, path))
+
+    def _on_preset_tile_clicked(self, tile):
+        for t, light_path, dark_path in self._tiles:
+            if t is tile:
+                self._set_wallpaper(light_path, dark_path)
+                return
+
     # ---- Custom photos ---------------------------------------------------
 
     def _populate_custom_photos(self):
@@ -301,7 +371,7 @@ class WallpaperPage(Gtk.Box):
 
     def _add_custom_photo_tile(self, path: str):
         name = os.path.splitext(os.path.basename(path))[0]
-        tile = WallpaperTile(name, path, self._on_custom_tile_clicked)
+        tile = WallpaperTile(name, path, self._on_custom_tile_clicked, on_right_click=self._on_custom_tile_right_click)
         # Insert before the trailing "Add Photo..." tile.
         insert_at = self._photos_flow.observe_children().get_n_items() - 1
         self._photos_flow.insert(tile, insert_at)
@@ -312,6 +382,45 @@ class WallpaperPage(Gtk.Box):
             if t is tile:
                 self._set_wallpaper(light_path, dark_path)
                 return
+
+    def _on_custom_tile_right_click(self, tile, _x, _y):
+        path = None
+        for t, light_path, _dark_path in self._tiles:
+            if t is tile:
+                path = light_path
+                break
+        if path is None:
+            return
+
+        dialog = Adw.AlertDialog(
+            heading='Remove Photo?',
+            body=f'“{os.path.splitext(os.path.basename(path))[0]}” will be removed from Your Photos.',
+        )
+        dialog.add_response('cancel', 'Cancel')
+        dialog.add_response('remove', 'Remove')
+        dialog.set_response_appearance('remove', Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response('cancel')
+        dialog.connect('response', self._on_remove_custom_photo_response, tile, path)
+        dialog.present(self.get_root())
+
+    def _on_remove_custom_photo_response(self, _dialog, response, tile, path):
+        if response != 'remove':
+            return
+
+        is_active = self._current_path('picture-uri') == path and self._current_path('picture-uri-dark') == path
+
+        self._photos_flow.remove(tile)
+        self._tiles = [(t, l, d) for t, l, d in self._tiles if t is not tile]
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+        if is_active and self._tiles:
+            _fallback_tile, fallback_light, fallback_dark = self._tiles[0]
+            self._set_wallpaper(fallback_light, fallback_dark)
+        else:
+            self._refresh_selection()
 
     def _on_add_photo_clicked(self):
         dialog = Gtk.FileDialog(title='Add Photo')
@@ -374,6 +483,12 @@ class WallpaperPage(Gtk.Box):
                     name = name_
                     break
             if not name:
+                preset_dir = _preset_dir()
+                for name_, filename in PRESET_WALLPAPERS:
+                    if display_path == os.path.join(preset_dir, filename):
+                        name = name_
+                        break
+            if not name:
                 name = os.path.splitext(os.path.basename(display_path))[0]
             self._name_label.set_label(name)
         else:
@@ -404,7 +519,7 @@ class WallpaperPage(Gtk.Box):
         if os.path.isfile(SYSTEM_LOCK_WALLPAPER_PATH):
             self._lockscreen_preview_picture.set_paintable(
                 _load_scaled_texture(SYSTEM_LOCK_WALLPAPER_PATH, 160, 90))
-            self._lockscreen_status_label.set_label('Custom lock screen wallpaper set')
+            self._lockscreen_status_label.set_label('Custom login screen wallpaper set')
             self._lockscreen_reset_btn.set_sensitive(True)
         else:
             # "Same as Desktop Wallpaper" should actually show the desktop
@@ -433,7 +548,7 @@ class WallpaperPage(Gtk.Box):
             self._refresh_lockscreen_preview()
 
     def _on_lockscreen_choose_clicked(self, _btn):
-        dialog = Gtk.FileDialog(title='Choose a Lock Screen Photo')
+        dialog = Gtk.FileDialog(title='Choose a Login Screen Photo')
         image_filter = Gtk.FileFilter(name='Images')
         image_filter.add_mime_type('image/jpeg')
         image_filter.add_mime_type('image/png')

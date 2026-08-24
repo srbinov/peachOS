@@ -6,7 +6,7 @@ gi.require_version('NM', '1.0')
 
 from gi.repository import GLib, Gtk, NM
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -32,8 +32,7 @@ class ServiceRow(Gtk.Box):
         self.set_margin_bottom(10)
 
         if icon_file and os.path.isfile(icon_file):
-            icon = Gtk.Image.new_from_file(icon_file)
-            icon.set_pixel_size(28)
+            icon = load_sized_image(icon_file, 28)
             self.append(icon)
         else:
             icon_box = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=['sidebar-icon', 'accent-blue'])

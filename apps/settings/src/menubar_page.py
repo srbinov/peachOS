@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, Gtk
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -26,8 +26,7 @@ def _make_control_row(icon_file, icon_name, title, *, checkbox=None, trailing=No
         row.append(spacer)
 
     if icon_file and os.path.isfile(icon_file):
-        icon = Gtk.Image.new_from_file(icon_file)
-        icon.set_pixel_size(22)
+        icon = load_sized_image(icon_file, 22)
     else:
         icon = Gtk.Image.new_from_icon_name(icon_name)
         icon.set_pixel_size(18)

@@ -60,6 +60,7 @@ from keyboard_page import KeyboardPage
 from mouse_page import MousePage
 from touchpad_page import TouchpadPage
 from printers_page import PrintersPage
+from widgets import load_sized_image
 
 APP_ID = 'org.peachos.Settings'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
@@ -367,8 +368,7 @@ def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
 
     custom_path = _custom_icon_path(row_id)
     if custom_path:
-        image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(SIDEBAR_ICON_PX)
+        image = load_sized_image(custom_path, SIDEBAR_ICON_PX)
         box.append(image)
         return box
 
@@ -383,9 +383,7 @@ def make_sidebar_icon(row_id: str, icon_name: str, color: str) -> Gtk.Widget:
 def make_placeholder_icon(row_id: str, icon_name: str) -> Gtk.Widget:
     custom_path = _custom_icon_path(row_id)
     if custom_path:
-        image = Gtk.Image.new_from_file(custom_path)
-        image.set_pixel_size(PLACEHOLDER_ICON_PX)
-        return image
+        return load_sized_image(custom_path, PLACEHOLDER_ICON_PX)
     image = Gtk.Image.new_from_icon_name(icon_name)
     image.set_pixel_size(64)
     image.add_css_class('placeholder-icon')
@@ -444,106 +442,116 @@ class SettingsWindow(Adw.ApplicationWindow):
         content_scroller.set_child(self._placeholder_stack)
         self._content_toolbar.set_content(content_scroller)
 
+        # Pages are built lazily (see _ensure_page), not all ~35 of them up
+        # front -- constructing every page eagerly (including ones a given
+        # session never visits: Bluetooth, Printers, Touch ID, ...) measured
+        # at ~57s to first paint, most of it pure accumulation across pages
+        # nobody asked for yet. Only row-id/title/icon metadata is needed
+        # before a page is actually opened, so that's all this collects here.
         self._pages = {}
+        self._page_row_meta = {}
         for section in SIDEBAR_SECTIONS:
             for row_id, title, icon_name, color in section:
-                if row_id == 'wifi':
-                    self._pages[row_id] = WifiPage()
-                elif row_id == 'bluetooth':
-                    self._pages[row_id] = BluetoothPage()
-                elif row_id == 'network':
-                    self._pages[row_id] = NetworkPage(
-                        on_open_wifi=lambda: self._go_to('wifi', record_history=True))
-                elif row_id == 'energy':
-                    self._pages[row_id] = BatteryPage()
-                elif row_id == 'appearance':
-                    self._pages[row_id] = AppearancePage()
-                elif row_id == 'desktopdock':
-                    self._pages[row_id] = DesktopDockPage()
-                elif row_id == 'displays':
-                    self._pages[row_id] = DisplaysPage()
-                elif row_id == 'general':
-                    self._pages[row_id] = GeneralPage(
-                        on_open_about=lambda: self._go_to('general_about', record_history=True),
-                        on_open_software_update=lambda: self._go_to('general_softwareupdate', record_history=True),
-                        on_open_storage=lambda: self._go_to('general_storage', record_history=True),
-                        on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
-                        on_open_language=lambda: self._go_to('general_language', record_history=True),
-                        on_open_defaultapps=lambda: self._go_to('general_defaultapps', record_history=True),
-                    )
-                elif row_id == 'accessibility':
-                    self._pages[row_id] = AccessibilityPage(
-                        on_open_zoom=lambda: self._go_to('accessibility_zoom', record_history=True),
-                        on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
-                        on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
-                    )
-                elif row_id == 'spotlight':
-                    self._pages[row_id] = SpotlightPage()
-                elif row_id == 'menubar':
-                    self._pages[row_id] = MenuBarPage()
-                elif row_id == 'wallpaper':
-                    self._pages[row_id] = WallpaperPage()
-                elif row_id == 'notifications':
-                    self._pages[row_id] = NotificationsPage()
-                elif row_id == 'sound':
-                    self._pages[row_id] = SoundPage()
-                elif row_id == 'screentime':
-                    self._pages[row_id] = ScreenTimePage()
-                elif row_id == 'privacy':
-                    self._pages[row_id] = PrivacyPage()
-                elif row_id == 'lockscreen':
-                    self._pages[row_id] = LockScreenPage()
-                elif row_id == 'touchid':
-                    self._pages[row_id] = TouchIDPage()
-                elif row_id == 'users':
-                    self._pages[row_id] = UsersPage(on_edit_user=self._open_edit_profile)
-                elif row_id == 'internetaccounts':
-                    self._pages[row_id] = InternetAccountsPage()
-                elif row_id == 'keyboard':
-                    self._pages[row_id] = KeyboardPage()
-                elif row_id == 'mouse':
-                    self._pages[row_id] = MousePage()
-                elif row_id == 'touchpad':
-                    self._pages[row_id] = TouchpadPage()
-                elif row_id == 'printers':
-                    self._pages[row_id] = PrintersPage()
-                else:
-                    self._pages[row_id] = self._build_placeholder(row_id, title, icon_name)
-                self._placeholder_stack.add_named(self._pages[row_id], row_id)
-
-        self._pages['general_about'] = GeneralAboutPage()
-        self._placeholder_stack.add_named(self._pages['general_about'], 'general_about')
-
-        self._pages['general_softwareupdate'] = GeneralSoftwareUpdatePage()
-        self._placeholder_stack.add_named(self._pages['general_softwareupdate'], 'general_softwareupdate')
-
-        self._pages['general_storage'] = GeneralStoragePage()
-        self._placeholder_stack.add_named(self._pages['general_storage'], 'general_storage')
-
-        self._pages['general_datetime'] = GeneralDateTimePage()
-        self._placeholder_stack.add_named(self._pages['general_datetime'], 'general_datetime')
-
-        self._pages['general_language'] = GeneralLanguagePage()
-        self._placeholder_stack.add_named(self._pages['general_language'], 'general_language')
-
-        self._pages['general_defaultapps'] = GeneralDefaultAppsPage()
-        self._placeholder_stack.add_named(self._pages['general_defaultapps'], 'general_defaultapps')
-
-        self._pages['accessibility_zoom'] = AccessibilityZoomPage()
-        self._placeholder_stack.add_named(self._pages['accessibility_zoom'], 'accessibility_zoom')
-
-        self._pages['accessibility_display'] = AccessibilityDisplayPage()
-        self._placeholder_stack.add_named(self._pages['accessibility_display'], 'accessibility_display')
-
-        self._pages['accessibility_audio'] = AccessibilityAudioPage()
-        self._placeholder_stack.add_named(self._pages['accessibility_audio'], 'accessibility_audio')
-
-        self._pages['edit_profile'] = users_page.EditProfilePage(
-            on_saved=self._on_profile_saved, go_back=lambda: self._navigate(-1))
-        self._placeholder_stack.add_named(self._pages['edit_profile'], 'edit_profile')
+                self._page_row_meta[row_id] = (title, icon_name)
 
         first_id = SIDEBAR_SECTIONS[0][0][0]
         self._go_to(first_id, record_history=True)
+
+    def _ensure_page(self, row_id: str):
+        """Builds and registers row_id's page on first visit; a no-op on
+        every later visit. _go_to() calls this before showing anything, so
+        it's the single place new pages come into existence."""
+        if row_id in self._pages:
+            return
+
+        title, icon_name = self._page_row_meta.get(row_id, (EXTRA_PAGE_TITLES.get(row_id, ''), ''))
+
+        if row_id == 'wifi':
+            page = WifiPage()
+        elif row_id == 'bluetooth':
+            page = BluetoothPage()
+        elif row_id == 'network':
+            page = NetworkPage(
+                on_open_wifi=lambda: self._go_to('wifi', record_history=True))
+        elif row_id == 'energy':
+            page = BatteryPage()
+        elif row_id == 'appearance':
+            page = AppearancePage()
+        elif row_id == 'desktopdock':
+            page = DesktopDockPage()
+        elif row_id == 'displays':
+            page = DisplaysPage()
+        elif row_id == 'general':
+            page = GeneralPage(
+                on_open_about=lambda: self._go_to('general_about', record_history=True),
+                on_open_software_update=lambda: self._go_to('general_softwareupdate', record_history=True),
+                on_open_storage=lambda: self._go_to('general_storage', record_history=True),
+                on_open_datetime=lambda: self._go_to('general_datetime', record_history=True),
+                on_open_language=lambda: self._go_to('general_language', record_history=True),
+                on_open_defaultapps=lambda: self._go_to('general_defaultapps', record_history=True),
+            )
+        elif row_id == 'accessibility':
+            page = AccessibilityPage(
+                on_open_zoom=lambda: self._go_to('accessibility_zoom', record_history=True),
+                on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
+                on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
+            )
+        elif row_id == 'spotlight':
+            page = SpotlightPage()
+        elif row_id == 'menubar':
+            page = MenuBarPage()
+        elif row_id == 'wallpaper':
+            page = WallpaperPage()
+        elif row_id == 'notifications':
+            page = NotificationsPage()
+        elif row_id == 'sound':
+            page = SoundPage()
+        elif row_id == 'screentime':
+            page = ScreenTimePage()
+        elif row_id == 'privacy':
+            page = PrivacyPage()
+        elif row_id == 'lockscreen':
+            page = LockScreenPage()
+        elif row_id == 'touchid':
+            page = TouchIDPage()
+        elif row_id == 'users':
+            page = UsersPage(on_edit_user=self._open_edit_profile)
+        elif row_id == 'internetaccounts':
+            page = InternetAccountsPage()
+        elif row_id == 'keyboard':
+            page = KeyboardPage()
+        elif row_id == 'mouse':
+            page = MousePage()
+        elif row_id == 'touchpad':
+            page = TouchpadPage()
+        elif row_id == 'printers':
+            page = PrintersPage()
+        elif row_id == 'general_about':
+            page = GeneralAboutPage()
+        elif row_id == 'general_softwareupdate':
+            page = GeneralSoftwareUpdatePage()
+        elif row_id == 'general_storage':
+            page = GeneralStoragePage()
+        elif row_id == 'general_datetime':
+            page = GeneralDateTimePage()
+        elif row_id == 'general_language':
+            page = GeneralLanguagePage()
+        elif row_id == 'general_defaultapps':
+            page = GeneralDefaultAppsPage()
+        elif row_id == 'accessibility_zoom':
+            page = AccessibilityZoomPage()
+        elif row_id == 'accessibility_display':
+            page = AccessibilityDisplayPage()
+        elif row_id == 'accessibility_audio':
+            page = AccessibilityAudioPage()
+        elif row_id == 'edit_profile':
+            page = users_page.EditProfilePage(
+                on_saved=self._on_profile_saved, go_back=lambda: self._navigate(-1))
+        else:
+            page = self._build_placeholder(row_id, title, icon_name)
+
+        self._pages[row_id] = page
+        self._placeholder_stack.add_named(page, row_id)
 
     def _build_sidebar(self) -> Gtk.Widget:
         toolbar = Adw.ToolbarView()
@@ -776,6 +784,7 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._open_edit_profile(user_path)
 
     def _open_edit_profile(self, user_path: str):
+        self._ensure_page('edit_profile')
         self._pages['edit_profile'].load_user(user_path)
         self._go_to('edit_profile', record_history=True)
 
@@ -784,8 +793,14 @@ class SettingsWindow(Adw.ApplicationWindow):
         # and Users & Groups' list) need to pick up a save regardless of
         # which one was used to get to the edit page -- cheap enough to
         # just always refresh both rather than tracking which one launched it.
+        # Reachable via the sidebar's sign-in row directly, without ever
+        # visiting Users & Groups first -- that page may not be built yet
+        # (see _ensure_page), in which case there's nothing to refresh: it'll
+        # load fresh data on its own whenever it does get opened.
         self._refresh_signin_row()
-        self._pages['users'].reload()
+        users_tab = self._pages.get('users')
+        if users_tab:
+            users_tab.reload()
 
     def _build_content_header(self):
         header = Adw.HeaderBar()
@@ -842,6 +857,8 @@ class SettingsWindow(Adw.ApplicationWindow):
         return any(rid == row_id for section in SIDEBAR_SECTIONS for rid, *_ in section)
 
     def _go_to(self, row_id: str, record_history: bool):
+        self._ensure_page(row_id)
+
         # Drilling into a detail page (e.g. General -> About) slides left,
         # like macOS's own settings; returning to a sidebar page slides
         # back right. Switching between two sidebar pages just crossfades.

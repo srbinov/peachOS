@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=System Settings
+GenericName=System Settings
+Comment=Configure system settings and preferences
+Icon=/usr/share/icons/peachos/systemsettings_icon.svg
+Exec=/usr/bin/peachos-settings
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.peachos.Settings
+Categories=GNOME;GTK;Settings;
+Keywords=Settings;Preferences;Wallpaper;Wifi;Bluetooth;Appearance;
+X-GNOME-SingleWindow=true

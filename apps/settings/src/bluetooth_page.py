@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -75,9 +75,11 @@ class BluetoothPage(Gtk.Box):
             margin_start=14, margin_end=14, margin_top=14, margin_bottom=14,
         )
         icon_path = os.path.join(ICON_DIR, 'bluetooth.svg')
-        icon = Gtk.Image.new_from_file(icon_path) if os.path.isfile(icon_path) \
-            else Gtk.Image.new_from_icon_name('bluetooth-symbolic')
-        icon.set_pixel_size(32)
+        if os.path.isfile(icon_path):
+            icon = load_sized_image(icon_path, 32)
+        else:
+            icon = Gtk.Image.new_from_icon_name('bluetooth-symbolic')
+            icon.set_pixel_size(32)
         card_box.append(icon)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)

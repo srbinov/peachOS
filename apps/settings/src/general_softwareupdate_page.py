@@ -2,6 +2,8 @@ import os
 
 from gi.repository import Gtk
 
+from widgets import load_sized_image
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 PEACHOS_VERSION = '10.0'
@@ -14,8 +16,7 @@ class GeneralSoftwareUpdatePage(Gtk.Box):
             valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER, vexpand=True,
         )
 
-        icon = Gtk.Image.new_from_file(os.path.join(ICON_DIR, 'peachos_nectar.svg'))
-        icon.set_pixel_size(96)
+        icon = load_sized_image(os.path.join(ICON_DIR, 'peachos_nectar.svg'), 96)
         self.append(icon)
 
         self.append(Gtk.Label(label=f'peachOS Nectar {PEACHOS_VERSION}', css_classes=['title-1'], margin_top=12))

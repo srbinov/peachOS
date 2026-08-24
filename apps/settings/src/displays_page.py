@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -281,10 +281,10 @@ class DisplaysPage(Gtk.Box):
         header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
         icon_path = os.path.join(ICON_DIR, 'laptop.svg')
         if os.path.isfile(icon_path):
-            icon = Gtk.Image.new_from_file(icon_path)
+            icon = load_sized_image(icon_path, 115)
         else:
             icon = Gtk.Image.new_from_icon_name('computer-symbolic')
-        icon.set_pixel_size(115)
+            icon.set_pixel_size(115)
         header.append(icon)
         header.append(Gtk.Label(label='Built-in Display', css_classes=['title-4']))
         self.append(header)

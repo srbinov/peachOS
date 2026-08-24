@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gtk
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -21,8 +21,7 @@ class PlaceholderRow(Gtk.Box):
         self.set_margin_top(10)
         self.set_margin_bottom(10)
 
-        icon = Gtk.Image.new_from_file(icon_file)
-        icon.set_pixel_size(28)
+        icon = load_sized_image(icon_file, 28)
         self.append(icon)
 
         self.append(Gtk.Label(label=title, xalign=0, hexpand=True, valign=Gtk.Align.CENTER))

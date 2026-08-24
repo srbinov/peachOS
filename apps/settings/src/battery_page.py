@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -73,9 +73,11 @@ class BatteryPage(Gtk.Box):
 
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         icon_path = os.path.join(ICON_DIR, 'energy.svg')
-        icon = Gtk.Image.new_from_file(icon_path) if os.path.isfile(icon_path) \
-            else Gtk.Image.new_from_icon_name('battery-full-symbolic')
-        icon.set_pixel_size(28)
+        if os.path.isfile(icon_path):
+            icon = load_sized_image(icon_path, 28)
+        else:
+            icon = Gtk.Image.new_from_icon_name('battery-full-symbolic')
+            icon.set_pixel_size(28)
         header.append(icon)
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         title_box.append(Gtk.Label(label='Battery', xalign=0, css_classes=['title-2']))

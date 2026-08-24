@@ -99,6 +99,63 @@ for f in "$REPO_DIR"/assets/app-icons/clearmode/*.svg; do
     install -Dm644 "$f" "/usr/share/icons/peachos-clearmode-src/$(basename "$f")"
 done
 
+# System Settings app (apps/settings): a from-scratch GTK4/libadwaita replacement for
+# gnome-control-center, not a wrapper around it (see apps/settings/CLAUDE.md-adjacent
+# feedback: never shell out to the stock Settings app). Installed as a real repo checkout
+# under /usr/lib/peachos rather than packaged, matching the icon masker daemon above --
+# src/ and data/ are copied together so the app's own relative `../data/...` lookups
+# (icons, wallpaper previews, dock presets) keep resolving correctly post-install.
+echo "==> Installing peachOS System Settings app -> /usr/lib/peachos/settings"
+mkdir -p /usr/lib/peachos/settings
+rsync -a --delete "$REPO_DIR/apps/settings/src/" /usr/lib/peachos/settings/src/
+rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data/
+install -Dm755 "$REPO_DIR/apps/settings/peachos-settings" /usr/bin/peachos-settings
+install -Dm644 "$REPO_DIR/apps/settings/peachos-settings.desktop" /usr/share/applications/peachos-settings.desktop
+update-desktop-database /usr/share/applications
+
+# Sidra: an Apple Music desktop client (Electron, github.com/srbinov/sidra -- our own fork of
+# wimpysworld/sidra, currently one commit ahead with a custom splash/icon). Built from source
+# rather than pulling wimpysworld's own GitHub release, since that release predates our fork's
+# icon/splash commit and would ship the wrong branding. Requires the CastLabs Widevine-patched
+# Electron build (github:castlabs/electron-releases, pulled automatically by `npm install` via
+# package.json's own devDependency) -- standard Electron has no Widevine DRM support on Linux,
+# and Apple Music needs it to play anything. electron-builder (also a devDependency) produces a
+# real .deb with its own postinst/icon/.desktop handling, installed the same way as any other
+# apt package rather than run in place out of a source checkout.
+SIDRA_REPO="https://github.com/srbinov/sidra.git"
+SIDRA_COMMIT="4f561fe9823ef1a90f97a8dee76ad991f6978fe1"
+
+echo "==> Installing Node.js 24 (Sidra build dependency)"
+if ! command -v node >/dev/null || [[ "$(node --version)" != v24* ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+    apt-get install -y nodejs
+fi
+
+echo "==> Building Sidra (Apple Music client) -> /opt/Sidra"
+git clone --quiet "$SIDRA_REPO" "$WORK_DIR/sidra"
+git -C "$WORK_DIR/sidra" checkout --quiet "$SIDRA_COMMIT"
+(
+    cd "$WORK_DIR/sidra"
+    npm install
+    npm run build
+    npx electron-builder --linux deb
+)
+apt-get install -y "$WORK_DIR/sidra/release/Sidra-"*-linux-amd64.deb
+
+# Same treatment as peachy.svg/orchard_icon.svg/app_center_icon.svg above -- Sidra's own
+# music_icon_DEFAULTMODE.svg/music_icon_darkMODE.svg are already real, pixel-perfect, pre-styled
+# app icons (squircle backdrop and all, confirmed by rendering both), not raw glyphs -- exactly
+# the "hand-picked, never touched" category those are, not a job for the generic masking
+# algorithm. Icon= gets repointed at the curated absolute path so peachos-icon-watcherd's
+# resolve_icon() categorizes it CATEGORY_OWN and leaves it alone entirely; the matching
+# peachos_icon_resolve.py CURATED_DARK_SLUGS entry (installed above) is what makes the Dark
+# Mode toggle use Sidra's own dark SVG instead of running peachos_icon_dark.py's algorithm on
+# the light one.
+install -Dm644 "$REPO_DIR/assets/app-icons/sidra.svg" /usr/share/icons/peachos/sidra.svg
+sed -i "s|^Icon=.*|Icon=/usr/share/icons/peachos/sidra.svg|; /^X-PeachOS-OriginalIcon=/d" \
+    /usr/share/applications/sidra.desktop
+update-desktop-database /usr/share/applications
+
 # iCloud apps (Mail/Contacts/Calendar/Photos/Drive/Notes/Reminders/Pages/Numbers/Keynote/
 # Find/Maps/TV) are built from source here rather than pulled from the Snap Store -- the
 # published Store package (Marcus Tomlinson's upstream) is missing Maps and TV, which only
@@ -194,6 +251,7 @@ install -Dm644 "$REPO_DIR/assets/app-icons/orchard_icon.svg" /usr/share/icons/pe
 install -Dm644 "$REPO_DIR/assets/app-icons/apps.svg" /usr/share/icons/peachos/apps.svg
 install -Dm644 "$REPO_DIR/assets/app-icons/app_center_icon.svg" /usr/share/icons/peachos/app_center_icon.svg
 install -Dm644 "$REPO_DIR/assets/app-icons/terminal_icon.svg" /usr/share/icons/peachos/terminal_icon.svg
+install -Dm644 "$REPO_DIR/assets/app-icons/systemsettings_icon.svg" /usr/share/icons/peachos/systemsettings_icon.svg
 
 sed -i \
     -e 's/^Name=Files$/Name=Peachy/' \
@@ -286,6 +344,8 @@ done
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/
+mkdir -p /usr/share/backgrounds/peachos/presets
+cp "$REPO_DIR"/assets/wallpapers/presets/*.jpg "$REPO_DIR"/assets/wallpapers/presets/*.png /usr/share/backgrounds/peachos/presets/
 
 echo "==> Installing peachOS dconf system defaults"
 mkdir -p /etc/dconf/db/local.d
