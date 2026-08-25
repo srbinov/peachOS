@@ -61,6 +61,8 @@ CURATED_DARK_SLUGS = {
     ICONS_ROOT / 'peachos' / 'app_center_icon.svg': 'app_center_icon',
     ICONS_ROOT / 'peachos' / 'apps.svg': 'apps',
     ICONS_ROOT / 'peachos' / 'sidra.svg': 'sidra',
+    ICONS_ROOT / 'peachos' / 'peachy.svg': 'peachy',
+    ICONS_ROOT / 'peachos' / 'messages.svg': 'messages',
 }
 
 

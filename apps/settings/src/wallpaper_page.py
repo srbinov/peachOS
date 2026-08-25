@@ -49,6 +49,9 @@ CUSTOM_LOCKSCREEN_WALLPAPER_DIR = os.path.expanduser('~/.local/share/peachos/wal
 # preview on this page.
 LIVE_WALLPAPERS = [
     ('Ocean Waves', 'live-lockscreen.jpg', 'live-lockscreen.mp4'),
+    ('Forest Canopy', 'forest-canopy.jpg', 'forest-canopy.mp4'),
+    ('Mountain Mist', 'mountain-mist.jpg', 'mountain-mist.mp4'),
+    ('Rolling Hills', 'rolling-hills.jpg', 'rolling-hills.mp4'),
 ]
 
 # (display name, preview image, light wallpaper filename, dark wallpaper filename)

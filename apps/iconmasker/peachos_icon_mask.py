@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageStat
 
 CANVAS = 1024
 CONTENT_FILL = 0.81
@@ -70,6 +70,22 @@ def load_pixbuf_as_pil(path, size=CANVAS):
 
 ALREADY_CONFORMING_FILL_RANGE = (0.70, 0.95)
 
+# A solid backdrop shape (circle, squircle) fills most of its own bounding box -- a
+# mathematically perfect filled circle is already ~0.785, real Apple-conforming icons
+# measured comfortably above 0.85. A bare glyph can still land a wide/tall bbox in the
+# "looks big enough" range above without being solid -- e.g. a speech-bubble silhouette
+# (rounded body + a separate pointed tail, real transparent gap between the two lobes) or a
+# thin multi-stroke mark -- and 0.75 catches those while leaving real solid shapes alone.
+MIN_BBOX_COVERAGE = 0.75
+
+
+def _bbox_coverage(img, bbox):
+    """Fraction of the bbox's own area that's actually opaque."""
+    cropped = img.crop(bbox).split()[3]
+    opaque = cropped.point(lambda p: 255 if p > 10 else 0)
+    opaque_px = ImageStat.Stat(opaque).sum[0] / 255
+    return opaque_px / (cropped.width * cropped.height)
+
 
 def needs_masking(img):
     """Decide whether this icon needs squircle treatment.
@@ -78,12 +94,14 @@ def needs_masking(img):
       - a plain flush square (opaque corners, ~full-bleed content) -- the
         classic "raw app icon with hard corners" case.
       - a small glyph centered on a mostly-transparent canvas -- looks like
-        a stray blob next to real icon cards, needs a backdrop.
+        a stray blob next to real icon cards, needs a backdrop. This
+        includes a glyph whose bounding box is deceptively large (see
+        MIN_BBOX_COVERAGE) -- fill ratio alone isn't enough to call it solid.
 
     Anything already filling ~70-95% of its canvas with transparent corners
-    (an organic/circular/already-squircle silhouette, like a real Apple
-    icon or a big circular logo) is left alone -- that's what "already
-    conforming" looks like in practice.
+    AND solidly filling its own bounding box (an organic/circular/already-
+    squircle silhouette, like a real Apple icon or a big circular logo) is
+    left alone -- that's what "already conforming" looks like in practice.
     """
     alpha = img.split()[3]
     bbox = alpha.getbbox()
@@ -94,7 +112,8 @@ def needs_masking(img):
     fill_h = (bbox[3] - bbox[1]) / CANVAS
     lo, hi = ALREADY_CONFORMING_FILL_RANGE
     if lo <= fill_w <= hi and lo <= fill_h <= hi:
-        return False
+        if _bbox_coverage(img, bbox) >= MIN_BBOX_COVERAGE:
+            return False
 
     return True
 

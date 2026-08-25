@@ -297,6 +297,27 @@ Exec=/snap/bin/firefox --ProfileManager
 Name=Open Profile Manager
 EOF
 
+# BlueBubbles (snap store, jojejo's official build -- not the peachOS-native BlueBubbles
+# client experiment, which was scrapped): same snap-desktop-override situation as Firefox
+# above, just no rename this time, only the icon. Curated art (assets/app-icons/messages.svg
+# + darkmode/messages.svg, a real macOS Messages-style bubble) replaces the snap's own bare
+# glyph -- see peachos_icon_resolve.py's CURATED_DARK_SLUGS for the light/dark swap.
+install -Dm644 "$REPO_DIR/assets/app-icons/messages.svg" /usr/share/icons/peachos/messages.svg
+cat > /usr/share/applications/bluebubbles_bluebubbles.desktop <<'EOF'
+[Desktop Entry]
+X-SnapInstanceName=bluebubbles
+Version=1.0
+Name=BlueBubbles
+Comment=BlueBubbles client for Linux
+X-SnapAppName=bluebubbles
+Exec=/snap/bin/bluebubbles
+Icon=/usr/share/icons/peachos/messages.svg
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+StartupWMClass=Bluebubbles
+EOF
+
 # App Center is also snapd-managed (/var/lib/snapd/desktop/applications), same override
 # reasoning as Firefox above.
 cat > /usr/share/applications/snap-store_snap-store.desktop <<'EOF'
@@ -364,9 +385,9 @@ cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/
 mkdir -p /usr/share/backgrounds/peachos/presets
 cp "$REPO_DIR"/assets/wallpapers/presets/*.jpg "$REPO_DIR"/assets/wallpapers/presets/*.png /usr/share/backgrounds/peachos/presets/
 
-echo "==> Installing lock screen live wallpaper -> /usr/share/peachos/lockscreen"
+echo "==> Installing lock screen live wallpapers -> /usr/share/peachos/lockscreen"
 mkdir -p /usr/share/peachos/lockscreen
-cp "$REPO_DIR"/assets/lockscreen/live-lockscreen.mp4 /usr/share/peachos/lockscreen/
+cp "$REPO_DIR"/assets/lockscreen/*.mp4 /usr/share/peachos/lockscreen/
 
 echo "==> Installing peachOS dconf system defaults"
 mkdir -p /etc/dconf/db/local.d
