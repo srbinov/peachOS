@@ -1,0 +1,20 @@
+{
+  "name": "Perfect Lock Screen",
+  "description": "macOS Sonoma-inspired Cupertino lock screen with an optional live video background.",
+  "uuid": "perfect-lockscreen@chris",
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog",
+    "gdm"
+  ],
+  "gettext-domain": "perfect-lockscreen@chris",
+  "settings-schema": "org.gnome.shell.extensions.perfect-lockscreen",
+  "version-name": "1.0.0"
+}

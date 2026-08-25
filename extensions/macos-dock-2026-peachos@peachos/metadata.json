@@ -1,0 +1,11 @@
+{
+  "description": "A macOS-style GNOME dock with liquid glass, based on Dash2Dock Animated",
+  "name": "macOS Dock 2026 peachOS",
+  "original-authors": ["icedman"],
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "url": "https://github.com/icedman/dash2dock-lite",
+  "uuid": "macos-dock-2026-peachos@peachos",
+  "schema-id": "org.gnome.shell.extensions.macos-dock",
+  "gettext-domain": "macos-dock-2026-peachos",
+  "version": 100
+}

@@ -1,0 +1,310 @@
+# WACK - Sonoma Lockscreen
+# Copyright (C) 2026 rinzler69-wastaken
+msgid ""
+msgstr ""
+"Project-Id-Version: wack-lockscreen-clock@rinzler69-wastaken.github.com\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fi\n"
+
+msgid "more"
+msgstr "lisää"
+
+msgid "Press Shift + N to view notifications"
+msgstr "Paina Shift + N nähdäksesi ilmoitukset"
+
+msgid "Sleep prevented by an active process"
+msgstr "Valmiustila estetty aktiivisen prosessin toimesta"
+
+msgid "1 minute"
+msgstr "1 minuutti"
+
+msgid "10 minutes"
+msgstr "10 minuuttia"
+
+msgid "15 minutes"
+msgstr "15 minuuttia"
+
+msgid "2 hours"
+msgstr "2 tuntia"
+
+msgid "30 minutes"
+msgstr "30 minuuttia"
+
+msgid "5 minutes"
+msgstr "5 minuuttia"
+
+msgid "60 minutes"
+msgstr "60 minuuttia"
+
+msgid "Always Show User Widget (Cupertino)"
+msgstr "Näytä aina käyttäjän widget (Cupertino)"
+
+msgid "Always shows user widget, hides notifications by default. Press Shift+N to show notifications."
+msgstr "Näyttää aina käyttäjän widgetin, piilottaa ilmoitukset oletuksena. Näytä ilmoitukset painamalla Shift+N."
+
+msgid "Animations"
+msgstr "Animaatiot"
+
+msgid "Applied to the authentication prompt while it appears"
+msgstr "Käytetään todennuskehotteessa, kun se näkyy"
+
+msgid "Applied to the date and time while opening the password prompt"
+msgstr "Käytetään päivämäärässä ja ajassa, kun salasanakenttää avataan"
+
+msgid "Blank Timeout"
+msgstr "Näytön sammutuksen aikakatkaisu"
+
+msgid "A complete macOS Sonoma-inspired lockscreen layout (Click user-icon to switch users)."
+msgstr "Täydellinen macOS Sonoma -tyylinen lukitusnäytön asettelu (vaihda käyttäjää napsauttamalla käyttäjäkuvaketta)."
+
+msgid "macOS Sonoma-style clock over the classic, GNOME-compliant layout and flow."
+msgstr "macOS Sonoma -tyylinen kello perinteisen, GNOME-yhteensopivan asettelun ja kulun päällä."
+
+msgid "Unlock Crossfade"
+msgstr "Lukituksen avauksen häivytys"
+
+msgid "Crossfade the lockscreen with desktop when unlocking (automatically disabled in Power Saver mode)."
+msgstr "Häivyttää lukitusnäytön työpöydän kanssa lukitusta avattaessa (poistetaan automaattisesti käytöstä virransäästötilassa)."
+
+msgid "Crossfade Speed"
+msgstr "Häivytysnopeus"
+
+msgid "Cupertino Unlock Fade"
+msgstr "Cupertinon lukituksen avauksen häivytys"
+
+msgid "Fade out the lock screen with a panel slide-in when unlocking."
+msgstr "Häivyttää lukitusnäytön paneelin liukuessa sisään lukitusta avattaessa."
+
+msgid "Choose between Legacy and Cupertino styles"
+msgstr "Valitse klassisen ja Cupertino-tyylin välillä"
+
+msgid "Choose how the lock screen clock leaves and how the password prompt enters."
+msgstr "Valitse, miten lukitusnäytön kello poistuu ja miten salasanakenttä tulee näkyviin."
+
+msgid "Clock Animation"
+msgstr "Kello-animaatio"
+
+msgid "Configuration"
+msgstr "Kokoonpano"
+
+msgid "Consider supporting its development!"
+msgstr "Harkitse sen kehittämisen tukemista!"
+
+msgid "Control when the screen turns off or blanks on the lock screen."
+msgstr "Määrittää, milloin näyttö sammuu tai himmenee lukitusnäytöllä."
+
+msgid "Cupertino"
+msgstr "Cupertino"
+
+msgid "Enjoying this extension?"
+msgstr "Pidätkö tästä laajennuksesta?"
+
+msgid "Escape to Sleep / Suspend"
+msgstr "Esc näytön sammuttamiseksi / valmiustilaan"
+
+msgid "Extension Repo"
+msgstr "Laajennus Repo"
+
+msgid "Home"
+msgstr "Aloitus"
+
+msgid "Keep Screen On"
+msgstr "Pidä näyttö päällä"
+
+msgid "Ko-fi"
+msgstr "Ko-fi"
+
+msgid "Legacy"
+msgstr "Klassinen"
+
+msgid "Lockscreen Mode"
+msgstr "Lukitusnäytön tila"
+
+msgid "Show message when locked"
+msgstr "Näytä viesti lukittuna"
+
+msgid "Set..."
+msgstr "Aseta..."
+
+msgid "Set a message to appear on the lockscreen"
+msgstr "Aseta lukitusnäytössä näytettävä viesti"
+
+msgid "Cancel"
+msgstr "Peruuta"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Mode"
+msgstr "tila"
+
+msgid "Never"
+msgstr "Ei koskaan"
+
+msgid "Only keep the screen on if the system is plugged in"
+msgstr "Pidä näyttö päällä vain verkkovirralla"
+
+msgid "Only on AC Power"
+msgstr "Vain verkkovirralla"
+
+msgid "Open Ko-fi"
+msgstr "Avaa Ko-fi"
+
+msgid "Open Saweria"
+msgstr "Avaa Saweria"
+
+msgid "Open on GitHub"
+msgstr "Avaa GitHubissa"
+
+msgid "Press Escape on the lock screen to sleep display (or suspend)"
+msgstr "Paina Esc-näppäintä lukitusnäytöllä sammuttaaksesi näytön (tai siirtyäksesi valmiustilaan)"
+
+msgid "Prevent the screen from immediately turning off when locked. The screen will still turn off after the normal timeout duration set in system settings."
+msgstr "Estää näytön sammumisen heti, kun se on lukittu. Näyttö sammuu edelleen järjestelmän asetuksissa määritetyn normaalin ajan kuluttua."
+
+msgid "Prompt Animation"
+msgstr "Salasanakentän animaatio"
+
+msgid "Reset Animations"
+msgstr "Palauta animaatiot"
+
+msgid "Reset animations"
+msgstr "Nollaa animaatiot"
+
+msgid "Resources"
+msgstr "Resurssit"
+
+msgid "Restore defaults"
+msgstr "Palauta oletusasetukset"
+
+msgid "Saweria"
+msgstr "Saweria"
+
+msgid "Show a custom message above the user prompt stack."
+msgstr "Näyttää mukautetun viestin käyttäjän kirjautumiskentän yläpuolella."
+
+msgid "Screen Timeout"
+msgstr "Näytön aikakatkaisu"
+
+msgid "Time to wait before turning off the screen"
+msgstr "Odotusaika ennen näytön sammuttamista"
+
+msgid "Extras"
+msgstr "Lisäominaisuudet"
+
+msgid "[PRO] GDM Expansion"
+msgstr "[PRO] GDM-laajennus"
+
+msgid "Enabled. Custom layout is active on GDM."
+msgstr "Käytössä. Mukautettu asettelu on käytössä GDM:ssä."
+
+msgid "Enabled"
+msgstr "Käytössä"
+
+msgid "Disabled"
+msgstr "Ei käytössä"
+
+msgid "Disabled."
+msgstr "Ei käytössä."
+
+msgid "GDM and Cross Session Module are missing."
+msgstr "GDM- ja Cross Session -moduulit puuttuvat."
+
+msgid "GDM dconf override configuration is missing."
+msgstr "GDM dconf -ohituskokoonpano puuttuu."
+
+msgid "GDM integration is not configured."
+msgstr "GDM-integraatiota ei ole määritetty."
+
+msgid "Upgrade to Pro"
+msgstr "Päivitä Pro-versioon"
+
+msgid "Get a Sonoma-inspired GDM login screen layout and automatically synchronize your wallpapers from the active user session. To upgrade, run copied command in a terminal."
+msgstr "Hanki Sonoman inspiroima GDM-kirjautumisruudun asettelu ja synkronoi taustakuvasi automaattisesti aktiivisesta käyttäjäistunnosta. Päivitä suorittamalla kopioitu komento päätteessä."
+
+msgid "Copy upgrade command to clipboard"
+msgstr "Kopioi päivityskomento leikepöydälle"
+
+msgid "Copied upgrade command to clipboard!"
+msgstr "Päivityskomento kopioitu leikepöydälle!"
+
+msgid "Uninstall GDM Expansion"
+msgstr "Poista GDM-laajennuksen asennus"
+
+msgid "Revert GDM login screen layout to GNOME Default. To uninstall, run copied command in a terminal."
+msgstr "Palauta GDM-kirjautumisruudun asettelu GNOME-oletukseksi. Poista asennus suorittamalla kopioitu komento päätteessä."
+
+msgid "Copy uninstall command to clipboard"
+msgstr "Kopioi poistokomento leikepöydälle"
+
+msgid "Copied uninstall command to clipboard!"
+msgstr "Poistokomento kopioitu leikepöydälle!"
+
+msgid "[BETA] WACK Shell Integration"
+msgstr "[BETA] WACK Shell -integraatio"
+
+msgid "Installed. Enables crossfade transitions and Cupertino-inspired shell customisations."
+msgstr "Asennettu. Ottaa käyttöön ristiinhäivytyssiirtymät ja Cupertinon inspiroimat shell-mukautukset."
+
+msgid "Upgrade to [PRO]"
+msgstr "Päivitä [PRO]-versioon"
+
+msgid "Installed"
+msgstr "Asennettu"
+
+msgid "Not installed. Install WACK Shell to unlock transition effects."
+msgstr "Ei asennettu. Asenna WACK Shell ottaaksesi siirtymätehosteet käyttöön."
+
+msgid "Not Installed"
+msgstr "Ei asennettu"
+
+msgid "Install WACK Shell"
+msgstr "Asenna WACK Shell"
+
+msgid "Get advanced desktop crossfade transitions and Cupertino-inspired shell customisations. May contain bugs, report if found."
+msgstr "Hanki edistyneet työpöydän ristiinhäivytyssiirtymät ja Cupertinon inspiroimat shell-mukautukset. Saattaa sisältää virheitä, ilmoita niistä tarvittaessa."
+
+msgid "Copy install command to clipboard"
+msgstr "Kopioi asennuskomento leikepöydälle"
+
+msgid "Copied WACK Shell install command to clipboard!"
+msgstr "WACK Shell -asennuskomento kopioitu leikepöydälle!"
+
+msgid "Open WACK Shell repository"
+msgstr "Avaa WACK Shell -arkisto"
+
+msgid "Check for Updates"
+msgstr "Tarkista päivitykset"
+
+msgid "Copy check command to verify if a newer version of WACK Shell is available."
+msgstr "Kopioi tarkistuskomento varmistaaksesi, onko uudempi WACK Shell -versio saatavilla."
+
+msgid "Copy update-check command to clipboard"
+msgstr "Kopioi päivityksen tarkistuskomento leikepöydälle"
+
+msgid "Copied WACK Shell update-check command to clipboard!"
+msgstr "WACK Shell -päivityksen tarkistuskomento kopioitu leikepöydälle!"
+
+msgid "Extras - Status"
+msgstr "Lisäominaisuudet - Tila"
+
+msgid "Extras - Actions"
+msgstr "Lisäominaisuudet - Toiminnot"
+
+msgid "GDM Expansion - Remove"
+msgstr "GDM-laajennus - Poista"
+
+msgid "WACK Shell - Check for Updates"
+msgstr "WACK Shell - Tarkista päivitykset"
+
+msgid "WACK Shell - Install"
+msgstr "WACK Shell - Asenna"
+
+msgid "Upcoming Features"
+msgstr "Tulevat ominaisuudet"
+
+msgid "Check PRO features of this extension on this extension's GitHub repo."
+msgstr "Katso tämän laajennuksen PRO-ominaisuudet sen GitHub-sivulta."
+

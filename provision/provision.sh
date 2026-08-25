@@ -31,7 +31,12 @@ MACTAHOE_ICON_COMMIT="db9a4f8b236d3c559326f041d75d5173de118c45"
 
 echo "==> Installing build dependencies"
 apt-get update -qq
-apt-get install -y --no-install-recommends git rsync dconf-cli libglib2.0-bin
+apt-get install -y --no-install-recommends git rsync dconf-cli libglib2.0-bin gettext
+
+# mpv drives Perfect Lock Screen's live video background (extensions/perfect-lockscreen@chris) --
+# GStreamer is its own fallback if mpv is missing, but mpv is the tested/expected player.
+echo "==> Installing mpv (Perfect Lock Screen live video player)"
+apt-get install -y --no-install-recommends mpv
 
 # peachySearch (apps/ulauncher) runtime deps: python3-gi-cairo fixes a real "Couldn't find
 # foreign struct converter for 'cairo.Context'" crash on every draw (PyGObject's cairo
@@ -341,11 +346,27 @@ for ext_dir in "$REPO_DIR"/extensions/*/; do
     fi
 done
 
+# Perfect Lock Screen needs more than the plain file copy the loop above just did: GDM
+# only loads a login-screen extension once metadata.json lists 'gdm' in session-modes,
+# a dconf drop-in exists telling the greeter to enable it, and its schema is symlinked
+# into /usr/share/glib-2.0/schemas so the greeter process (which never reads
+# /usr/share/gnome-shell/extensions/*/schemas itself) can see Cupertino-mode settings.
+# install-gdm-dlc.sh (vendored alongside the extension, see its own README) does exactly
+# that -- re-syncing the same target the loop above already wrote is intentional and
+# idempotent, not wasted work. --no-restart: restarting GDM mid-provision would kill
+# this very session.
+echo "==> Wiring Perfect Lock Screen into the GDM login screen"
+bash "$REPO_DIR/extensions/perfect-lockscreen@chris/scripts/install-gdm-dlc.sh" --no-restart
+
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/
 mkdir -p /usr/share/backgrounds/peachos/presets
 cp "$REPO_DIR"/assets/wallpapers/presets/*.jpg "$REPO_DIR"/assets/wallpapers/presets/*.png /usr/share/backgrounds/peachos/presets/
+
+echo "==> Installing lock screen live wallpaper -> /usr/share/peachos/lockscreen"
+mkdir -p /usr/share/peachos/lockscreen
+cp "$REPO_DIR"/assets/lockscreen/live-lockscreen.mp4 /usr/share/peachos/lockscreen/
 
 echo "==> Installing peachOS dconf system defaults"
 mkdir -p /etc/dconf/db/local.d

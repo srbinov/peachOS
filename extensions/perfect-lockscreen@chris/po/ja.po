@@ -1,0 +1,310 @@
+# WACK - Sonoma Lockscreen
+# Copyright (C) 2026 rinzler69-wastaken
+msgid ""
+msgstr ""
+"Project-Id-Version: wack-lockscreen-clock@rinzler69-wastaken.github.com\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ja\n"
+
+msgid "more"
+msgstr "さらに"
+
+msgid "Press Shift + N to view notifications"
+msgstr "Shift + N で通知を表示"
+
+msgid "Sleep prevented by an active process"
+msgstr "アクティブなプロセスによりサスペンドが妨げられています"
+
+msgid "1 minute"
+msgstr "1分"
+
+msgid "10 minutes"
+msgstr "10分"
+
+msgid "15 minutes"
+msgstr "15分"
+
+msgid "2 hours"
+msgstr "2時間"
+
+msgid "30 minutes"
+msgstr "30分"
+
+msgid "5 minutes"
+msgstr "5分"
+
+msgid "60 minutes"
+msgstr "60分"
+
+msgid "Always Show User Widget (Cupertino)"
+msgstr "ユーザー ウィジェットを常に表示 (クパチーノ)"
+
+msgid "Always shows user widget, hides notifications by default. Press Shift+N to show notifications."
+msgstr "常にユーザーウィジェットを表示し、デフォルトで通知を非表示にします。Shift+N キーで通知を表示します。"
+
+msgid "Animations"
+msgstr "アニメーション"
+
+msgid "Applied to the authentication prompt while it appears"
+msgstr "認証プロンプトが表示されている間、認証プロンプトに適用されます"
+
+msgid "Applied to the date and time while opening the password prompt"
+msgstr "パスワード入力画面を開く際、日付と時刻に適用されます"
+
+msgid "Blank Timeout"
+msgstr "画面オフのタイムアウト"
+
+msgid "A complete macOS Sonoma-inspired lockscreen layout (Click user-icon to switch users)."
+msgstr "完全に macOS Sonoma にインスパイアされたロック画面レイアウト（ユーザーアイコンをクリックしてユーザーを切り替え）。"
+
+msgid "macOS Sonoma-style clock over the classic, GNOME-compliant layout and flow."
+msgstr "標準の GNOME レイアウトとフロー上に macOS Sonoma 風の時計を表示します。"
+
+msgid "Unlock Crossfade"
+msgstr "ロック解除クロスフェード"
+
+msgid "Crossfade the lockscreen with desktop when unlocking (automatically disabled in Power Saver mode)."
+msgstr "ロック解除時にロック画面をデスクトップとクロスフェードします（バッテリーセーバーモードでは自動的に無効になります）。"
+
+msgid "Crossfade Speed"
+msgstr "クロスフェード速度"
+
+msgid "Cupertino Unlock Fade"
+msgstr "クパチーノのロック解除フェード"
+
+msgid "Fade out the lock screen with a panel slide-in when unlocking."
+msgstr "ロック解除時に、パネルのスライドインと同時にロック画面をフェードアウトします。"
+
+msgid "Choose between Legacy and Cupertino styles"
+msgstr "クラシックとクパチーノスタイルから選択"
+
+msgid "Choose how the lock screen clock leaves and how the password prompt enters."
+msgstr "ロック画面の時計が消える時のアニメーションと、パスワード入力画面が表示される時のアニメーションを選択します。"
+
+msgid "Clock Animation"
+msgstr "時計アニメーション"
+
+msgid "Configuration"
+msgstr "構成"
+
+msgid "Consider supporting its development!"
+msgstr "その開発をサポートすることを検討してください。"
+
+msgid "Control when the screen turns off or blanks on the lock screen."
+msgstr "ロック画面で画面がオフになったり消灯したりするタイミングを制御します。"
+
+msgid "Cupertino"
+msgstr "クパチーノ"
+
+msgid "Enjoying this extension?"
+msgstr "この拡張機能は気に入りましたか？"
+
+msgid "Escape to Sleep / Suspend"
+msgstr "Escで画面オフ/サスペンド"
+
+msgid "Extension Repo"
+msgstr "拡張機能リポジトリ"
+
+msgid "Home"
+msgstr "ホーム"
+
+msgid "Keep Screen On"
+msgstr "画面をオンのままにする"
+
+msgid "Ko-fi"
+msgstr "コフィ"
+
+msgid "Legacy"
+msgstr "クラシック"
+
+msgid "Lockscreen Mode"
+msgstr "ロック画面モード"
+
+msgid "Show message when locked"
+msgstr "ロック時にメッセージを表示"
+
+msgid "Set..."
+msgstr "設定..."
+
+msgid "Set a message to appear on the lockscreen"
+msgstr "ロック画面に表示するメッセージを設定"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Mode"
+msgstr "モード"
+
+msgid "Never"
+msgstr "一度もない"
+
+msgid "Only keep the screen on if the system is plugged in"
+msgstr "電源に接続されている場合のみ画面をオンにする"
+
+msgid "Only on AC Power"
+msgstr "AC電源使用時のみ"
+
+msgid "Open Ko-fi"
+msgstr "Ko-fi で開く"
+
+msgid "Open Saweria"
+msgstr "Saweria で開く"
+
+msgid "Open on GitHub"
+msgstr "GitHub で開く"
+
+msgid "Press Escape on the lock screen to sleep display (or suspend)"
+msgstr "ロック画面で Esc を押すと、画面をオフ（またはサスペンド）にします"
+
+msgid "Prevent the screen from immediately turning off when locked. The screen will still turn off after the normal timeout duration set in system settings."
+msgstr "ロック時に画面がすぐにオフになるのを防ぎます。システム設定で設定された通常のタイムアウト時間が経過すると、画面はオフになります。"
+
+msgid "Prompt Animation"
+msgstr "入力プロンプトのアニメーション"
+
+msgid "Reset Animations"
+msgstr "アニメーションをリセットする"
+
+msgid "Reset animations"
+msgstr "アニメーションをリセットする"
+
+msgid "Resources"
+msgstr "リソース"
+
+msgid "Restore defaults"
+msgstr "デフォルトに戻す"
+
+msgid "Saweria"
+msgstr "サウェリア"
+
+msgid "Show a custom message above the user prompt stack."
+msgstr "ユーザー入力欄の上部にカスタムメッセージを表示します。"
+
+msgid "Screen Timeout"
+msgstr "画面のタイムアウト"
+
+msgid "Time to wait before turning off the screen"
+msgstr "画面をオフにするまでの待ち時間"
+
+msgid "Extras"
+msgstr "追加機能"
+
+msgid "[PRO] GDM Expansion"
+msgstr "[PRO] GDM 扩展"
+
+msgid "Enabled. Custom layout is active on GDM."
+msgstr "有効。カスタムレイアウトが GDM で有効です。"
+
+msgid "Enabled"
+msgstr "有効"
+
+msgid "Disabled"
+msgstr "無効"
+
+msgid "Disabled."
+msgstr "無効。"
+
+msgid "GDM and Cross Session Module are missing."
+msgstr "GDM および Cross Session モジュールがありません。"
+
+msgid "GDM dconf override configuration is missing."
+msgstr "GDM dconf オーバーライド設定がありません。"
+
+msgid "GDM integration is not configured."
+msgstr "GDM 統合は設定されていません。"
+
+msgid "Upgrade to Pro"
+msgstr "Pro にアップグレード"
+
+msgid "Get a Sonoma-inspired GDM login screen layout and automatically synchronize your wallpapers from the active user session. To upgrade, run copied command in a terminal."
+msgstr "Sonoma 風の GDM ログイン画面レイアウトを取得し、アクティブなユーザーセッションから壁紙を自动的に同期します。アップグレードするには、コピーしたコマンドをターミナルで実行してください。"
+
+msgid "Copy upgrade command to clipboard"
+msgstr "アップグレードコマンドをクリップボードにコピー"
+
+msgid "Copied upgrade command to clipboard!"
+msgstr "アップグレードコマンドをクリップボードにコピーしました！"
+
+msgid "Uninstall GDM Expansion"
+msgstr "GDM 拡張をアンインストール"
+
+msgid "Revert GDM login screen layout to GNOME Default. To uninstall, run copied command in a terminal."
+msgstr "GDM ログイン画面のレイアウトを GNOME のデフォルトに戻します。アンインストールするには、コピーしたコマンドをターミナルで実行してください。"
+
+msgid "Copy uninstall command to clipboard"
+msgstr "アンインストールコマンドをクリップボードにコピー"
+
+msgid "Copied uninstall command to clipboard!"
+msgstr "アンインストールコマンドをクリップボードにコピーしました！"
+
+msgid "[BETA] WACK Shell Integration"
+msgstr "[BETA] WACK Shell 統合"
+
+msgid "Installed. Enables crossfade transitions and Cupertino-inspired shell customisations."
+msgstr "インストール済み。クロスフェード遷移とクパチーノ風のシェルカスタマイズを有効にします。"
+
+msgid "Upgrade to [PRO]"
+msgstr "[PRO] にアップグレード"
+
+msgid "Installed"
+msgstr "インストール済"
+
+msgid "Not installed. Install WACK Shell to unlock transition effects."
+msgstr "未インストール。移行エフェクトを利用するには WACK Shell をインストールしてください。"
+
+msgid "Not Installed"
+msgstr "未インストール"
+
+msgid "Install WACK Shell"
+msgstr "WACK Shell をインストール"
+
+msgid "Get advanced desktop crossfade transitions and Cupertino-inspired shell customisations. May contain bugs, report if found."
+msgstr "高度なデスクトップのクロスフェード遷移とクパチーノ風のシェルカスタマイズを取得します。バグが含まれる場合がありますので、見つかった場合は報告してください。"
+
+msgid "Copy install command to clipboard"
+msgstr "インストールコマンドをクリップボードにコピー"
+
+msgid "Copied WACK Shell install command to clipboard!"
+msgstr "WACK Shell インストールコマンドをクリップボードにコピーしました！"
+
+msgid "Open WACK Shell repository"
+msgstr "WACK Shell リポジトリを開く"
+
+msgid "Check for Updates"
+msgstr "更新を確認"
+
+msgid "Copy check command to verify if a newer version of WACK Shell is available."
+msgstr "WACK Shell の新しいバージョンが利用可能かどうかを確認するチェックコマンドをコピーします。"
+
+msgid "Copy update-check command to clipboard"
+msgstr "更新確認コマンドをクリップボードにコピー"
+
+msgid "Copied WACK Shell update-check command to clipboard!"
+msgstr "WACK Shell の更新確認コマンドをクリップボードにコピーしました！"
+
+msgid "Extras - Status"
+msgstr "追加機能 - ステータス"
+
+msgid "Extras - Actions"
+msgstr "追加機能 - アクション"
+
+msgid "GDM Expansion - Remove"
+msgstr "GDM 拡張 - アンインストール"
+
+msgid "WACK Shell - Check for Updates"
+msgstr "WACK Shell - 更新を確認"
+
+msgid "WACK Shell - Install"
+msgstr "WACK Shell - インストール"
+
+msgid "Upcoming Features"
+msgstr "今後の機能"
+
+msgid "Check PRO features of this extension on this extension's GitHub repo."
+msgstr "この拡張機能のGitHubリポジトリでPRO機能を確認してください。"
+

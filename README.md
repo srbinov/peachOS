@@ -46,12 +46,24 @@ of the structure below.
 
 - `assets/logos/` — peachOS branding (SVGs)
 - `assets/wallpapers/` — default wallpaper
+- `assets/lockscreen/live-lockscreen.mp4` — the live video background for
+  the lock screen (`extensions/perfect-lockscreen@chris`, below);
+  provisioned to `/usr/share/peachos/lockscreen/`
 - `macOS-TopBar-Gnome/` — git submodule, the custom top-bar extension
   (`macos-top-panel@local.dev`); its own repo, edited independently
 - `extensions/` — the other 6 GNOME Shell extensions peachOS ships with,
   vendored as-is from a working install (not fetched from
   extensions.gnome.org at provision time, so the exact working version is
-  always what gets installed): `blur-my-shell`, `dash2dock-lite`,
+  always what gets installed): `blur-my-shell`, `macos-dock-2026-peachos`
+  (our own fork of `dash2dock-lite`, with an added Liquid Glass mode --
+  see `~/macOS-Dock-2026-peachOS`, its own repo, edited independently),
+  `perfect-lockscreen@chris` (macOS Sonoma/Cupertino lock + login screen
+  with a live video background -- its own repo,
+  `github.com/srbinov/perfect-lockscreen`, edited independently; unlike
+  every other extension here it also needs GDM-side wiring beyond a plain
+  file copy, so `provision.sh` runs its vendored
+  `scripts/install-gdm-dlc.sh` right after the generic install loop --
+  see that script/its own README for what it does and why),
   `compiz-alike-magic-lamp-effect`, `rounded-windows`, `CoverflowAltTab`,
   `user-theme`
 - `apps/settings/` — the native Settings app (see below)

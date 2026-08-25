@@ -1,0 +1,310 @@
+# WACK - Sonoma Lockscreen
+# Copyright (C) 2026 rinzler69-wastaken
+msgid ""
+msgstr ""
+"Project-Id-Version: wack-lockscreen-clock@rinzler69-wastaken.github.com\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: id\n"
+
+msgid "more"
+msgstr "lagi"
+
+msgid "Press Shift + N to view notifications"
+msgstr "Tekan Shift + N untuk melihat notifikasi"
+
+msgid "Sleep prevented by an active process"
+msgstr "Mode tidur dicegah oleh proses aktif"
+
+msgid "1 minute"
+msgstr "1 menit"
+
+msgid "10 minutes"
+msgstr "10 menit"
+
+msgid "15 minutes"
+msgstr "15 menit"
+
+msgid "2 hours"
+msgstr "2 jam"
+
+msgid "30 minutes"
+msgstr "30 menit"
+
+msgid "5 minutes"
+msgstr "5 menit"
+
+msgid "60 minutes"
+msgstr "60 menit"
+
+msgid "Always Show User Widget (Cupertino)"
+msgstr "Selalu Tampilkan Widget Pengguna (Cupertino)"
+
+msgid "Always shows user widget, hides notifications by default. Press Shift+N to show notifications."
+msgstr "Selalu menampilkan widget pengguna dan menyembunyikan notifikasi secara default. Tekan Shift+N untuk menampilkan notifikasi."
+
+msgid "Animations"
+msgstr "Animasi"
+
+msgid "Applied to the authentication prompt while it appears"
+msgstr "Diterapkan pada perintah autentikasi saat muncul"
+
+msgid "Applied to the date and time while opening the password prompt"
+msgstr "Diterapkan pada tanggal dan waktu saat membuka perintah kata sandi"
+
+msgid "Blank Timeout"
+msgstr "Batas Waktu Mematikan Layar"
+
+msgid "A complete macOS Sonoma-inspired lockscreen layout (Click user-icon to switch users)."
+msgstr "Tata letak layar kunci lengkap yang terinspirasi macOS Sonoma (Klik ikon pengguna untuk beralih pengguna)."
+
+msgid "macOS Sonoma-style clock over the classic, GNOME-compliant layout and flow."
+msgstr "Jam bergaya macOS Sonoma di atas tata letak dan alur klasik yang sesuai dengan GNOME."
+
+msgid "Unlock Crossfade"
+msgstr "Pudar Buka Kunci"
+
+msgid "Crossfade the lockscreen with desktop when unlocking (automatically disabled in Power Saver mode)."
+msgstr "Pudarkan layar kunci dengan desktop saat membuka kunci (dinonaktifkan secara otomatis dalam mode Penghemat Daya)."
+
+msgid "Crossfade Speed"
+msgstr "Kecepatan Pudar"
+
+msgid "Cupertino Unlock Fade"
+msgstr "Pudar Buka Kunci Cupertino"
+
+msgid "Fade out the lock screen with a panel slide-in when unlocking."
+msgstr "Pudarkan layar kunci dengan panel yang meluncur masuk saat membuka kunci."
+
+msgid "Choose between Legacy and Cupertino styles"
+msgstr "Pilih antara gaya Klasik dan Cupertino"
+
+msgid "Choose how the lock screen clock leaves and how the password prompt enters."
+msgstr "Pilih bagaimana jam layar kunci keluar dan bagaimana perintah kata sandi masuk."
+
+msgid "Clock Animation"
+msgstr "Animasi Jam"
+
+msgid "Configuration"
+msgstr "Konfigurasi"
+
+msgid "Consider supporting its development!"
+msgstr "Pertimbangkan untuk mendukung pengembangannya!"
+
+msgid "Control when the screen turns off or blanks on the lock screen."
+msgstr "Kontrol kapan layar mati atau kosong di layar kunci."
+
+msgid "Cupertino"
+msgstr "Cupertino"
+
+msgid "Enjoying this extension?"
+msgstr "Menikmati ekstensi ini?"
+
+msgid "Escape to Sleep / Suspend"
+msgstr "Esc untuk mematikan layar / sleep"
+
+msgid "Extension Repo"
+msgstr "Repo Ekstensi"
+
+msgid "Home"
+msgstr "Beranda"
+
+msgid "Keep Screen On"
+msgstr "Tetap Aktifkan Layar"
+
+msgid "Ko-fi"
+msgstr "Ko-fi"
+
+msgid "Legacy"
+msgstr "Klasik"
+
+msgid "Lockscreen Mode"
+msgstr "Mode Layar Kunci"
+
+msgid "Show message when locked"
+msgstr "Tampilkan pesan saat terkunci"
+
+msgid "Set..."
+msgstr "Atur..."
+
+msgid "Set a message to appear on the lockscreen"
+msgstr "Atur pesan untuk ditampilkan di layar kunci"
+
+msgid "Cancel"
+msgstr "Batal"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Mode"
+msgstr "Mode"
+
+msgid "Never"
+msgstr "Tidak pernah"
+
+msgid "Only keep the screen on if the system is plugged in"
+msgstr "Hanya biarkan layar menyala saat menggunakan daya AC"
+
+msgid "Only on AC Power"
+msgstr "Hanya pada Daya AC"
+
+msgid "Open Ko-fi"
+msgstr "Buka Ko-fi"
+
+msgid "Open Saweria"
+msgstr "Buka Saweria"
+
+msgid "Open on GitHub"
+msgstr "Buka di GitHub"
+
+msgid "Press Escape on the lock screen to sleep display (or suspend)"
+msgstr "Tekan Esc di layar kunci untuk mematikan layar (atau sleep)"
+
+msgid "Prevent the screen from immediately turning off when locked. The screen will still turn off after the normal timeout duration set in system settings."
+msgstr "Mencegah layar langsung mati saat terkunci. Layar akan tetap mati setelah durasi batas waktu normal yang diatur dalam pengaturan sistem."
+
+msgid "Prompt Animation"
+msgstr "Animasi Perintah Kata Sandi"
+
+msgid "Reset Animations"
+msgstr "Atur Ulang Animasi"
+
+msgid "Reset animations"
+msgstr "Setel ulang animasi"
+
+msgid "Resources"
+msgstr "Sumber daya"
+
+msgid "Restore defaults"
+msgstr "Kembalikan default"
+
+msgid "Saweria"
+msgstr "Saweria"
+
+msgid "Show a custom message above the user prompt stack."
+msgstr "Tampilkan pesan khusus di atas kolom input pengguna."
+
+msgid "Screen Timeout"
+msgstr "Batas Waktu Layar"
+
+msgid "Time to wait before turning off the screen"
+msgstr "Lama waktu sebelum layar mati"
+
+msgid "Extras"
+msgstr "Tambahan"
+
+msgid "[PRO] GDM Expansion"
+msgstr "[PRO] Ekspansi GDM"
+
+msgid "Enabled. Custom layout is active on GDM."
+msgstr "Aktif. Tata letak khusus aktif di GDM."
+
+msgid "Enabled"
+msgstr "Aktif"
+
+msgid "Disabled"
+msgstr "Nonaktif"
+
+msgid "Disabled."
+msgstr "Nonaktif."
+
+msgid "GDM and Cross Session Module are missing."
+msgstr "Modul GDM dan Cross Session hilang."
+
+msgid "GDM dconf override configuration is missing."
+msgstr "Konfigurasi override dconf GDM hilang."
+
+msgid "GDM integration is not configured."
+msgstr "Integrasi GDM tidak dikonfigurasi."
+
+msgid "Upgrade to Pro"
+msgstr "Tingkatkan ke Pro"
+
+msgid "Get a Sonoma-inspired GDM login screen layout and automatically synchronize your wallpapers from the active user session. To upgrade, run copied command in a terminal."
+msgstr "Dapatkan tata letak layar masuk GDM yang terinspirasi Sonoma dan sinkronkan wallpaper Anda secara otomatis dari sesi pengguna aktif. Untuk meningkatkan, jalankan perintah yang disalin di terminal."
+
+msgid "Copy upgrade command to clipboard"
+msgstr "Salin perintah peningkatan ke papan klip"
+
+msgid "Copied upgrade command to clipboard!"
+msgstr "Perintah peningkatan disalin ke papan klip!"
+
+msgid "Uninstall GDM Expansion"
+msgstr "Copot Pemasangan Ekspansi GDM"
+
+msgid "Revert GDM login screen layout to GNOME Default. To uninstall, run copied command in a terminal."
+msgstr "Kembalikan tata letak layar masuk GDM ke GNOME Default. Untuk mencopot pemasangan, jalankan perintah yang disalin di terminal."
+
+msgid "Copy uninstall command to clipboard"
+msgstr "Salin perintah copot pemasangan ke papan klip"
+
+msgid "Copied uninstall command to clipboard!"
+msgstr "Perintah copot pemasangan disalin ke papan klip!"
+
+msgid "[BETA] WACK Shell Integration"
+msgstr "[BETA] Integrasi WACK Shell"
+
+msgid "Installed. Enables crossfade transitions and Cupertino-inspired shell customisations."
+msgstr "Terpasang. Mengaktifkan transisi pudar silang dan kustomisasi shell yang terinspirasi Cupertino."
+
+msgid "Upgrade to [PRO]"
+msgstr "Tingkatkan ke [PRO]"
+
+msgid "Installed"
+msgstr "Terpasang"
+
+msgid "Not installed. Install WACK Shell to unlock transition effects."
+msgstr "Tidak terpasang. Instal WACK Shell untuk membuka efek transisi."
+
+msgid "Not Installed"
+msgstr "Tidak Terpasang"
+
+msgid "Install WACK Shell"
+msgstr "Instal WACK Shell"
+
+msgid "Get advanced desktop crossfade transitions and Cupertino-inspired shell customisations. May contain bugs, report if found."
+msgstr "Dapatkan transisi pudar silang desktop tingkat lanjut dan kustomisasi shell yang terinspirasi Cupertino. Mungkin mengandung bug, laporkan jika ditemukan."
+
+msgid "Copy install command to clipboard"
+msgstr "Salin perintah instalasi ke papan klip"
+
+msgid "Copied WACK Shell install command to clipboard!"
+msgstr "Perintah instalasi WACK Shell disalin ke papan klip!"
+
+msgid "Open WACK Shell repository"
+msgstr "Buka repositori WACK Shell"
+
+msgid "Check for Updates"
+msgstr "Periksa Pembaruan"
+
+msgid "Copy check command to verify if a newer version of WACK Shell is available."
+msgstr "Salin perintah pemeriksaan untuk memverifikasi apakah versi WACK Shell yang lebih baru tersedia."
+
+msgid "Copy update-check command to clipboard"
+msgstr "Salin perintah pemeriksaan pembaruan ke papan klip"
+
+msgid "Copied WACK Shell update-check command to clipboard!"
+msgstr "Perintah pemeriksaan pembaruan WACK Shell disalin ke papan klip!"
+
+msgid "Extras - Status"
+msgstr "Ekstra - Status"
+
+msgid "Extras - Actions"
+msgstr "Ekstra - Tindakan"
+
+msgid "GDM Expansion - Remove"
+msgstr "Ekspansi GDM - Hapus"
+
+msgid "WACK Shell - Check for Updates"
+msgstr "WACK Shell - Periksa Pembaruan"
+
+msgid "WACK Shell - Install"
+msgstr "WACK Shell - Instal"
+
+msgid "Upcoming Features"
+msgstr "Fitur Mendatang"
+
+msgid "Check PRO features of this extension on this extension's GitHub repo."
+msgstr "Periksa fitur PRO ekstensi ini di repositori GitHub-nya."
+

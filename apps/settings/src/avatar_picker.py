@@ -3,12 +3,9 @@ square) or an emoji on a solid background color the user picks -- rendered
 to a real PNG file that gets handed to AccountsService's SetIconFile (see
 users_page.py's _EditUserDialog).
 
-Emoji source is the same macOS_Tahoe_SYSICONS/apple-emoji set and
-classification manifest bluebubbles-native's emoji picker already built
-(data/emoji_manifest.json, ~3700 SVGs pre-sorted into categories) -- reused
-here as shared read-only data (like this app's own data/icons/), not by
-importing that app's UI code, so the two apps' actual widget/window code
-stays independent.
+Emoji source is the macOS_Tahoe_SYSICONS/apple-emoji set, classified into
+categories by data/emoji_manifest.json (~3700 SVGs pre-sorted) -- reused
+here as shared read-only data, same as this app's own data/icons/.
 """
 import json
 import os
@@ -23,7 +20,7 @@ from gi.repository import Adw, Gdk, GdkPixbuf, GLib, GObject, Gtk
 
 EMOJI_DIR = '/home/user/macOS_Tahoe_SYSICONS/apple-emoji'
 EMOJI_MANIFEST_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), '..', '..', 'bluebubbles-native', 'data', 'emoji_manifest.json'))
+    os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'emoji_manifest.json'))
 
 AVATAR_SIZE = 512
 EMOJI_FILL_FRACTION = 0.62  # emoji reads as a badge on the color, not a full-bleed fill

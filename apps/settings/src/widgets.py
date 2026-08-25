@@ -1,6 +1,31 @@
 import os
 
-from gi.repository import Gdk, GdkPixbuf, Gtk
+from gi.repository import Gdk, GdkPixbuf, Gio, Gtk
+
+
+def load_extension_settings(uuid: str, schema_id: str):
+    """GNOME Shell extension GSettings schemas aren't in the global schema
+    registry the way app schemas are -- Gio.Settings.new(schema_id)
+    hard-aborts the process (not a catchable exception) if the schema isn't
+    installed globally. GNOME Shell itself resolves these via a
+    per-extension SettingsSchemaSource, so this does too, checking both
+    install locations peachOS can be in: system-wide (/usr/share, what
+    provision.sh installs) and user-local (~/.local/share, what a dev VM
+    typically has). Returns None if the extension isn't installed."""
+    search_dirs = [
+        f'/usr/share/gnome-shell/extensions/{uuid}/schemas',
+        os.path.expanduser(f'~/.local/share/gnome-shell/extensions/{uuid}/schemas'),
+    ]
+    for schema_dir in search_dirs:
+        if not os.path.isdir(schema_dir):
+            continue
+        source = Gio.SettingsSchemaSource.new_from_directory(
+            schema_dir, Gio.SettingsSchemaSource.get_default(), True,
+        )
+        schema = source.lookup(schema_id, False)
+        if schema:
+            return Gio.Settings.new_full(schema, None, None)
+    return None
 
 
 def load_sized_image(path: str, pixel_size: int) -> Gtk.Image:

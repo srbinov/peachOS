@@ -6,8 +6,8 @@ from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
-EXTENSION_UUID = 'dash2dock-lite@icedman.github.com'
-SCHEMA_ID = 'org.gnome.shell.extensions.dash2dock-lite'
+EXTENSION_UUID = 'macos-dock-2026-peachos@peachos'
+SCHEMA_ID = 'org.gnome.shell.extensions.macos-dock'
 
 # "Minimized window animation" isn't a dash2dock-lite setting at all --
 # the Genie effect is a whole separate extension. "None" means that
@@ -198,7 +198,7 @@ class DesktopDockPage(Gtk.Box):
 
         if not self._settings:
             self.append(Gtk.Label(
-                label='dash2dock-lite is not installed, so Dock settings can’t be changed here.',
+                label='macOS Dock 2026 peachOS is not installed, so Dock settings can’t be changed here.',
                 wrap=True, css_classes=['dim-label'], xalign=0,
             ))
             return
@@ -251,6 +251,17 @@ class DesktopDockPage(Gtk.Box):
         behavior_card.append(self._indicators_row)
         self.append(behavior_card)
 
+        appearance_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        self._liquid_glass_row = ToggleRow('Liquid Glass')
+        self._liquid_glass_row.switch.connect('state-set', self._on_liquid_glass_toggled)
+        appearance_card.append(self._liquid_glass_row)
+        self.append(appearance_card)
+
+        # Liquid Glass renders its own light/dark translucent material (see
+        # macOS-Dock-2026-peachOS's liquidGlass.js), auto-matching System
+        # Settings > Appearance -- a manually-picked flat color underneath it
+        # would just be invisible, so these two only make sense while it's
+        # off, same as this project's other "X supersedes manual Y" toggles.
         self.append(Gtk.Label(label='Custom Colors', xalign=0, css_classes=['heading'], margin_start=4))
         colors_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
         self._bg_color_row = ColorRow('Background Color')
@@ -260,6 +271,7 @@ class DesktopDockPage(Gtk.Box):
         self._border_color_row.button.connect('notify::rgba', self._on_border_color_changed)
         colors_card.append(self._border_color_row)
         self.append(colors_card)
+        self._colors_card = colors_card
 
         reset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END)
         reset_btn = Gtk.Button(label='Restore Defaults')
@@ -283,6 +295,9 @@ class DesktopDockPage(Gtk.Box):
         self._border_color_row.button.set_rgba(
             _rgba_from_tuple(self._settings.get_value('border-color').unpack())
         )
+        liquid_glass = self._settings.get_boolean('liquid-glass')
+        self._liquid_glass_row.switch.set_active(liquid_glass)
+        self._colors_card.set_sensitive(not liquid_glass)
         self._syncing = False
         self._refresh_genie_row()
 
@@ -345,6 +360,13 @@ class DesktopDockPage(Gtk.Box):
             'running-indicator-style',
             INDICATOR_STYLE_ON if state else INDICATOR_STYLE_OFF,
         )
+        return False
+
+    def _on_liquid_glass_toggled(self, switch, state):
+        if self._syncing:
+            return False
+        self._settings.set_boolean('liquid-glass', state)
+        self._colors_card.set_sensitive(not state)
         return False
 
     def _on_bg_color_changed(self, button, _pspec):

@@ -1,0 +1,310 @@
+# WACK - Sonoma Lockscreen
+# Copyright (C) 2026 rinzler69-wastaken
+msgid ""
+msgstr ""
+"Project-Id-Version: wack-lockscreen-clock@rinzler69-wastaken.github.com\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ar\n"
+
+msgid "more"
+msgstr "المزيد"
+
+msgid "Press Shift + N to view notifications"
+msgstr "اضغط Shift + N لعرض الإشعارات"
+
+msgid "Sleep prevented by an active process"
+msgstr "تم منع التعليق بواسطة عملية نشطة"
+
+msgid "1 minute"
+msgstr "1 دقيقة"
+
+msgid "10 minutes"
+msgstr "10 دقائق"
+
+msgid "15 minutes"
+msgstr "15 دقيقة"
+
+msgid "2 hours"
+msgstr "ساعاتين"
+
+msgid "30 minutes"
+msgstr "30 دقيقة"
+
+msgid "5 minutes"
+msgstr "5 دقائق"
+
+msgid "60 minutes"
+msgstr "60 دقيقة"
+
+msgid "Always Show User Widget (Cupertino)"
+msgstr "إظهار أداة المستخدم دائمًا (كوبرتينو)"
+
+msgid "Always shows user widget, hides notifications by default. Press Shift+N to show notifications."
+msgstr "يعرض دائمًا عنصر واجهة المستخدم للمستخدم، ويخفي الإشعارات افتراضيًا. اضغط على Shift+N لإظهار الإشعارات."
+
+msgid "Animations"
+msgstr "الرسوم المتحركة"
+
+msgid "Applied to the authentication prompt while it appears"
+msgstr "يتم تطبيقه على موجه المصادقة أثناء ظهوره"
+
+msgid "Applied to the date and time while opening the password prompt"
+msgstr "تطبق على التاريخ والوقت أثناء فتح حقل كلمة المرور"
+
+msgid "Blank Timeout"
+msgstr "مهلة إطفاء الشاشة"
+
+msgid "A complete macOS Sonoma-inspired lockscreen layout (Click user-icon to switch users)."
+msgstr "مظهر كامل لـ قفل الشاشة مستوحى من macOS Sonoma (انقر على أيقونة المستخدم للتبديل بين المستخدمين)."
+
+msgid "macOS Sonoma-style clock over the classic, GNOME-compliant layout and flow."
+msgstr "ساعة بنمط macOS Sonoma فوق واجهة مستخدم وسير عمل GNOME الافتراضي."
+
+msgid "Unlock Crossfade"
+msgstr "تلاشي فتح القفل"
+
+msgid "Crossfade the lockscreen with desktop when unlocking (automatically disabled in Power Saver mode)."
+msgstr "تلاشي شاشة القفل مع سطح المكتب عند فتح القفل (يتم إيقاف تشغيله تلقائيًا في وضع توفير الطاقة)."
+
+msgid "Crossfade Speed"
+msgstr "سرعة التلاشي"
+
+msgid "Cupertino Unlock Fade"
+msgstr "تلاشي فتح قفل كوبرتينו"
+
+msgid "Fade out the lock screen with a panel slide-in when unlocking."
+msgstr "تلاشي شاشة القفل مع انزلاق اللوحة للداخل عند فتح القفل."
+
+msgid "Choose between Legacy and Cupertino styles"
+msgstr "اختر بين النمط الكلاسيكي ونمط Cupertino"
+
+msgid "Choose how the lock screen clock leaves and how the password prompt enters."
+msgstr "اختر حركة اختفاء ساعة قفل الشاشة وحركة ظهور حقل كلمة المرور."
+
+msgid "Clock Animation"
+msgstr "الرسوم المتحركة على مدار الساعة"
+
+msgid "Configuration"
+msgstr "إعدادات"
+
+msgid "Consider supporting its development!"
+msgstr "النظر في دعم تطويرها!"
+
+msgid "Control when the screen turns off or blanks on the lock screen."
+msgstr "التحكم في وقت إطفاء الشاشة أو تعتيمها على شاشة القفل."
+
+msgid "Cupertino"
+msgstr "كوبرتينو"
+
+msgid "Enjoying this extension?"
+msgstr "هل تستمتع بهذا الامتداد؟"
+
+msgid "Escape to Sleep / Suspend"
+msgstr "Esc لإطفاء الشاشة / التعليق"
+
+msgid "Extension Repo"
+msgstr "تمديد الريبو"
+
+msgid "Home"
+msgstr "الرئيسية"
+
+msgid "Keep Screen On"
+msgstr "إبقاء الشاشة قيد التشغيل"
+
+msgid "Ko-fi"
+msgstr "كو فاي"
+
+msgid "Legacy"
+msgstr "كلاسيكي"
+
+msgid "Lockscreen Mode"
+msgstr "وضع قفل الشاشة"
+
+msgid "Show message when locked"
+msgstr "إظهار رسالة عند القفل"
+
+msgid "Set..."
+msgstr "تعيين..."
+
+msgid "Set a message to appear on the lockscreen"
+msgstr "تعيين رسالة لتظهر على شاشة القفل"
+
+msgid "Cancel"
+msgstr "إلغاء"
+
+msgid "OK"
+msgstr "موافق"
+
+msgid "Mode"
+msgstr "وضع"
+
+msgid "Never"
+msgstr "أبداً"
+
+msgid "Only keep the screen on if the system is plugged in"
+msgstr "إبقاء الشاشة تعمل فقط عند التوصيل بالكهرباء"
+
+msgid "Only on AC Power"
+msgstr "عند التوصيل بالكهرباء فقط"
+
+msgid "Open Ko-fi"
+msgstr "افتح Ko-fi"
+
+msgid "Open Saweria"
+msgstr "افتح Saweria"
+
+msgid "Open on GitHub"
+msgstr "افتح على GitHub"
+
+msgid "Press Escape on the lock screen to sleep display (or suspend)"
+msgstr "اضغط على Esc في شاشة القفل لإطفاء الشاشة (أو التعليق)"
+
+msgid "Prevent the screen from immediately turning off when locked. The screen will still turn off after the normal timeout duration set in system settings."
+msgstr "منع الشاشة من الانطفاء فورًا عند القفل. ستستمر الشاشة في الانطفاء بعد فترة المهلة العادية المحددة في إعدادات النظام."
+
+msgid "Prompt Animation"
+msgstr "حركة حقل كلمة المرور"
+
+msgid "Reset Animations"
+msgstr "إعادة تعيين الرسوم المتحركة"
+
+msgid "Reset animations"
+msgstr "إعادة تعيين الرسوم المتحركة"
+
+msgid "Resources"
+msgstr "موارد"
+
+msgid "Restore defaults"
+msgstr "استعادة الإعدادات الافتراضية"
+
+msgid "Saweria"
+msgstr "ساويرية"
+
+msgid "Show a custom message above the user prompt stack."
+msgstr "عرض رسالة مخصصة فوق حقل إدخال المستخدم."
+
+msgid "Screen Timeout"
+msgstr "مهلة الشاشة"
+
+msgid "Time to wait before turning off the screen"
+msgstr "المدة الزمنية sebelum إطفاء الشاشة"
+
+msgid "Extras"
+msgstr "إضافات"
+
+msgid "[PRO] GDM Expansion"
+msgstr "[PRO] توسيع GDM"
+
+msgid "Enabled. Custom layout is active on GDM."
+msgstr "مفعّل. المظهر المخصص نشط على GDM."
+
+msgid "Enabled"
+msgstr "مفعّل"
+
+msgid "Disabled"
+msgstr "معطّل"
+
+msgid "Disabled."
+msgstr "معطّل."
+
+msgid "GDM and Cross Session Module are missing."
+msgstr "ملفات GDM و Cross Session مفقودة."
+
+msgid "GDM dconf override configuration is missing."
+msgstr "تكوين تجاوز dconf لـ GDM مفقود."
+
+msgid "GDM integration is not configured."
+msgstr "لم يتم تكوين تكامل GDM."
+
+msgid "Upgrade to Pro"
+msgstr "الترقية إلى Pro"
+
+msgid "Get a Sonoma-inspired GDM login screen layout and automatically synchronize your wallpapers from the active user session. To upgrade, run copied command in a terminal."
+msgstr "احصل على مظهر شاشة تسجيل دخول GDM مستوحى من Sonoma وقم بمزامنة خلفياتك تلقائيًا من جلسة المستخدم النشطة. للترقية، قم بتشغيل الأمر المنسوخ في الطرفية."
+
+msgid "Copy upgrade command to clipboard"
+msgstr "نسخ أمر الترقية إلى الحافظة"
+
+msgid "Copied upgrade command to clipboard!"
+msgstr "تم نسخ أمر الترقية إلى الحافظة!"
+
+msgid "Uninstall GDM Expansion"
+msgstr "إلغاء تثبيت توسيع GDM"
+
+msgid "Revert GDM login screen layout to GNOME Default. To uninstall, run copied command in a terminal."
+msgstr "استعادة مظهر شاشة تسجيل دخول GDM إلى الوضع الافتراضي لـ GNOME. لإلغاء التثبيت، قم بتشغيل الأمر المنسوخ في الطرفية."
+
+msgid "Copy uninstall command to clipboard"
+msgstr "نسخ أمر إلغاء التثبيت إلى الحافظة"
+
+msgid "Copied uninstall command to clipboard!"
+msgstr "تم نسخ أمر إلغاء التثبيت إلى الحافظة!"
+
+msgid "[BETA] WACK Shell Integration"
+msgstr "[BETA] تكامل WACK Shell"
+
+msgid "Installed. Enables crossfade transitions and Cupertino-inspired shell customisations."
+msgstr "تم التثبيت. يتيح انتقالات التلاشي المتبادل وتخصيصات الواجهة المستوحاة من كوبرتينو."
+
+msgid "Upgrade to [PRO]"
+msgstr "الترقية إلى [PRO]"
+
+msgid "Installed"
+msgstr "مثبت"
+
+msgid "Not installed. Install WACK Shell to unlock transition effects."
+msgstr "غير مثبت. قم بتثبيت WACK Shell لفتح تأثيرات الانتقال."
+
+msgid "Not Installed"
+msgstr "غير مثبت"
+
+msgid "Install WACK Shell"
+msgstr "تثبيت WACK Shell"
+
+msgid "Get advanced desktop crossfade transitions and Cupertino-inspired shell customisations. May contain bugs, report if found."
+msgstr "احصل على انتقالات تلاشي متبادل متقدمة لسطح المكتب وتخصيصات واجهة مستوحاة من كوبرتينو. قد يحتوي على أخطاء، يرجى الإبلاغ عنها إن وجدت."
+
+msgid "Copy install command to clipboard"
+msgstr "نسخ أمر التثبيت إلى الحافظة"
+
+msgid "Copied WACK Shell install command to clipboard!"
+msgstr "تم نسخ أمر تثبيت WACK Shell إلى الحافظة!"
+
+msgid "Open WACK Shell repository"
+msgstr "افتح مستودع WACK Shell"
+
+msgid "Check for Updates"
+msgstr "التحقق من التحديثات"
+
+msgid "Copy check command to verify if a newer version of WACK Shell is available."
+msgstr "انسخ أمر التحقق للتأكد من توفر إصدار أحدث من WACK Shell."
+
+msgid "Copy update-check command to clipboard"
+msgstr "نسخ أمر التحقق من التحديث إلى الحافظة"
+
+msgid "Copied WACK Shell update-check command to clipboard!"
+msgstr "تم نسخ أمر التحقق من تحديث WACK Shell إلى الحافظة!"
+
+msgid "Extras - Status"
+msgstr "الإضافات - الحالة"
+
+msgid "Extras - Actions"
+msgstr "الإضافات - الإجراءات"
+
+msgid "GDM Expansion - Remove"
+msgstr "توسيع GDM - إزالة"
+
+msgid "WACK Shell - Check for Updates"
+msgstr "WACK Shell - التحقق من التحديثات"
+
+msgid "WACK Shell - Install"
+msgstr "WACK Shell - تثبيت"
+
+msgid "Upcoming Features"
+msgstr "الميزات القادمة"
+
+msgid "Check PRO features of this extension on this extension's GitHub repo."
+msgstr "تحقق من ميزات PRO لهذا الامتداد على مستودع GitHub الخاص به."
+

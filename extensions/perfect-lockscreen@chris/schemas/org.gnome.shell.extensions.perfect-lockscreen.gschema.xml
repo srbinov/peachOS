@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.perfect-lockscreen" path="/org/gnome/shell/extensions/perfect-lockscreen/">
+    <key name="lockscreen-mode" type="s">
+      <choices>
+        <choice value="wack"/>
+        <choice value="cupertino"/>
+      </choices>
+      <default>'cupertino'</default>
+      <summary>Lockscreen mode</summary>
+      <description>Visual style of the lock screen. WACK is the classic GNOME-compliant mode; Cupertino emulates macOS Sonoma style.</description>
+    </key>
+    <key name="cupertino-always-show-user" type="b">
+      <default>false</default>
+      <summary>Always show user widget in Cupertino mode</summary>
+      <description>If true, the user widget is always shown in Cupertino mode. Notifications are hidden by default but can be toggled by pressing Shift+N.</description>
+    </key>
+    <key name="cupertino-unlock-fade" type="b">
+      <default>true</default>
+      <summary>Cupertino unlock fade animation</summary>
+      <description>If true, unlocking in Cupertino mode plays a fade-out animation with a panel slide-in (automatically disabled when Power Saver mode is active). Disable for an instant unlock.</description>
+    </key>
+
+    <key name="cupertino-crossfade-speed" type="s">
+      <default>'slow'</default>
+      <summary>Cupertino unlock crossfade speed</summary>
+      <description>Speed preset for the unlock crossfade animation. Values: 'slow', 'normal', 'fast'.</description>
+    </key>
+
+    <key name="clock-animation" type="s">
+      <choices>
+        <choice value="scale-down"/>
+        <choice value="zoom-up"/>
+        <choice value="slide-up"/>
+        <choice value="slide-down"/>
+        <choice value="fade"/>
+      </choices>
+      <default>'scale-down'</default>
+      <summary>Clock animation</summary>
+      <description>Animation applied to the date and time while opening the authentication prompt.</description>
+    </key>
+    <key name="prompt-animation" type="s">
+      <choices>
+        <choice value="rise"/>
+        <choice value="zoom"/>
+        <choice value="slide-up"/>
+        <choice value="slide-down"/>
+        <choice value="fade"/>
+        <choice value="shell"/>
+      </choices>
+      <default>'shell'</default>
+      <summary>Prompt animation</summary>
+      <description>Animation applied to the authentication prompt while it appears.</description>
+    </key>
+    <key name="enable-unblank" type="b">
+      <default>true</default>
+      <summary>Keep screen on when locked</summary>
+      <description>Prevent the screen/monitor from blanking or turning off when locked.</description>
+    </key>
+    <key name="unblank-on-ac-only" type="b">
+      <default>true</default>
+      <summary>Only on AC power</summary>
+      <description>Only keep the screen on if the system is plugged into AC power.</description>
+    </key>
+    <key name="esc-to-sleep" type="b">
+      <default>true</default>
+      <summary>Escape to Sleep</summary>
+      <description>Pressing Escape on the lock screen immediately blanks/sleeps the display (or suspends the system if Keep Screen On is disabled).</description>
+    </key>
+    <key name="prompt-vibrancy" type="b">
+      <default>true</default>
+      <summary>Prompt Vibrancy</summary>
+      <description>Applies dynamic color to the password field based on wallpaper colors.</description>
+    </key>
+
+    <key name="cursor-blink" type="b">
+      <default>true</default>
+      <summary>Cursor Blinking</summary>
+      <description>Enable or disable text cursor blinking in the password entry field.</description>
+    </key>
+
+    <key name="cupertino-lockscreen-message-enable" type="b">
+      <default>false</default>
+      <summary>Enable Lockscreen Message</summary>
+      <description>Show a custom message on the lock screen in Cupertino mode.</description>
+    </key>
+    <key name="cupertino-lockscreen-message-text" type="s">
+      <default>''</default>
+      <summary>Lockscreen Message Text</summary>
+      <description>The text to display on the lock screen in Cupertino mode.</description>
+    </key>
+    <key name="lockscreen-wallpaper-enable" type="b">
+      <default>false</default>
+      <summary>Custom Lockscreen Wallpaper</summary>
+      <description>Use a custom image overlay as the lock screen background.</description>
+    </key>
+    <key name="lockscreen-wallpaper-path" type="s">
+      <default>''</default>
+      <summary>Custom Lockscreen Wallpaper Path</summary>
+      <description>File path to the custom lock screen wallpaper image.</description>
+    </key>
+
+    <key name="background-source" type="s">
+      <choices>
+        <choice value="video"/>
+        <choice value="desktop"/>
+        <choice value="still"/>
+      </choices>
+      <default>'video'</default>
+      <summary>Lock screen background source</summary>
+      <description>Live video, GNOME desktop wallpaper, or a still image overlay.</description>
+    </key>
+    <key name="background-video-path" type="s">
+      <default>''</default>
+      <summary>Path to background video</summary>
+    </key>
+    <key name="background-video-scaling-mode" type="i">
+      <range min="0" max="2"/>
+      <default>2</default>
+      <summary>Background video scaling mode</summary>
+      <description>0 stretch, 1 fit, 2 cover.</description>
+    </key>
+    <key name="background-video-blur-radius" type="i">
+      <range min="0" max="100"/>
+      <default>0</default>
+      <summary>Background video blur radius</summary>
+    </key>
+    <key name="background-video-blur-brightness" type="d">
+      <range min="0" max="1"/>
+      <default>0.65</default>
+      <summary>Background video brightness</summary>
+    </key>
+    <key name="background-video-looped" type="b">
+      <default>true</default>
+      <summary>Loop background video</summary>
+    </key>
+    <key name="background-fade-in-duration" type="i">
+      <range min="0" max="600000"/>
+      <default>500</default>
+      <summary>Background fade-in duration in milliseconds</summary>
+    </key>
+    <key name="general-disable-on-battery" type="b">
+      <default>false</default>
+      <summary>Disable live video on battery</summary>
+    </key>
+    <key name="prompt-pause-video" type="b">
+      <default>false</default>
+      <summary>Pause video when the password prompt appears</summary>
+    </key>
+    <key name="prompt-grayscale" type="b">
+      <default>false</default>
+      <summary>Grayscale video when the password prompt appears</summary>
+    </key>
+    <key name="prompt-change-blur" type="b">
+      <default>false</default>
+      <summary>Change video blur when the password prompt appears</summary>
+    </key>
+    <key name="prompt-blur-radius" type="i">
+      <range min="0" max="100"/>
+      <default>20</default>
+      <summary>Video blur radius on password prompt</summary>
+    </key>
+    <key name="prompt-blur-brightness" type="d">
+      <range min="0" max="1"/>
+      <default>0.65</default>
+      <summary>Video brightness on password prompt</summary>
+    </key>
+    <key name="prompt-blur-anim-duration" type="i">
+      <range min="0" max="600000"/>
+      <default>300</default>
+      <summary>Video blur change animation duration</summary>
+    </key>
+  </schema>
+</schemalist>

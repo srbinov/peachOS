@@ -31,8 +31,8 @@ name='Show Ulauncher'
 [org/gnome/shell]
 app-picker-layout=[{'org.gnome.Calculator.desktop': <{'position': <0>}>, 'com.mattjakeman.ExtensionManager.desktop': <{'position': <1>}>, 'org.gnome.clocks.desktop': <{'position': <2>}>, 'firmware-updater_firmware-updater.desktop': <{'position': <3>}>, 'icloud-for-linux_drive.desktop': <{'position': <4>}>, 'icloud-for-linux_find.desktop': <{'position': <5>}>, 'peachos-settings.desktop': <{'position': <6>}>, 'gnome-language-selector.desktop': <{'position': <7>}>, 'org.gnome.Characters.desktop': <{'position': <8>}>, 'Utilities': <{'position': <9>}>, 'net.nokyan.Resources.desktop': <{'position': <10>}>, 'System': <{'position': <11>}>, 'desktop-security-center_desktop-security-center.desktop': <{'position': <12>}>, 'update-manager.desktop': <{'position': <13>}>, 'org.gnome.Yelp.desktop': <{'position': <14>}>, 'org.gnome.TextEditor.desktop': <{'position': <15>}>, 'org.gnome.tweaks.desktop': <{'position': <16>}>, 'icloud-for-linux_maps.desktop': <{'position': <17>}>, 'icloud-for-linux_tv.desktop': <{'position': <18>}>}]
 disable-user-extensions=false
-disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com']
-enabled-extensions=['blur-my-shell@aunetx', 'dash2dock-lite@icedman.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'macos-top-panel@local.dev', 'peachos-lockscreen@local.dev']
+disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'dash2dock-lite@icedman.github.com']
+enabled-extensions=['blur-my-shell@aunetx', 'macos-dock-2026-peachos@peachos', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'macos-top-panel@local.dev', 'perfect-lockscreen@chris']
 favorite-apps=['org.gnome.Nautilus.desktop', 'snap-store_snap-store.desktop', 'firefox_firefox.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_keynote.desktop', 'icloud-for-linux_calendar.desktop', 'icloud-for-linux_contacts.desktop', 'icloud-for-linux_reminders.desktop', 'icloud-for-linux_numbers.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_pages.desktop', 'org.gnome.Ptyxis.desktop', 'peachos-applauncher.desktop']
 welcome-dialog-last-shown-version='50.1'
 
@@ -80,11 +80,16 @@ sigma=30
 [org/gnome/shell/extensions/coverflowalttab]
 switcher-background-color=(0.20784313725490197, 0.51764705882352946, 0.89411764705882357)
 
-[org/gnome/shell/extensions/dash2dock-lite]
-# apps-icon (below) is deliberately false: dash2dock-lite's own built-in "Show Applications"
+[org/gnome/shell/extensions/macos-dock]
+# apps-icon (below) is deliberately false: this dock's own built-in "Show Applications"
 # grid icon would otherwise sit right next to peachos-applauncher.desktop's own Launchpad-style
 # entry in favorite-apps (see the [org/gnome/shell] section) -- two icons doing basically the
 # same thing side by side. The custom one is the one the rest of peachOS is themed around.
+#
+# background-color/border-color only matter with Liquid Glass turned off (Settings > Desktop &
+# Dock) -- liquid-glass defaults to true (the schema default, not set explicitly here), so a
+# fresh install renders the glass material in liquidGlass.js instead, auto-matching light/dark
+# appearance. These stay as the fallback look for anyone who turns it off.
 animation-bounce-height=0.75
 animation-magnify=0.29999999999999999
 animation-rise=0.25
@@ -108,7 +113,7 @@ dock-padding=0.5
 downloads-icon=true
 edge-distance=0.56725146198830401
 icon-border-radius=3.0
-# icon-shadow (below) is deliberately false: the default rgba(0,0,0,0.32) drop shadow dash2dock-lite
+# icon-shadow (below) is deliberately false: the default rgba(0,0,0,0.32) drop shadow this dock
 # casts under every dock icon is only really visible on pale icon art (e.g. iCloud Notes/Numbers),
 # where it reads as a stray dark smudge rather than the intended subtle macOS depth cue.
 icon-shadow=false
@@ -129,6 +134,16 @@ separator-color=(1.0, 0.98000001907348633, 0.98000001907348633, 0.27173912525177
 separator-thickness=2
 shrink-icons=true
 trash-icon=true
+
+[org/gnome/shell/extensions/perfect-lockscreen]
+# Cupertino is already the schema default; set explicitly for clarity since this is the
+# whole point of shipping this extension. background-source=video plays the live
+# wallpaper below on the in-session lock screen (Super+L) -- the GDM login screen never
+# plays video regardless of this setting (see install-gdm-dlc.sh's own README section),
+# it always mirrors the current desktop wallpaper instead.
+lockscreen-mode='cupertino'
+background-source='video'
+background-video-path='/usr/share/peachos/lockscreen/live-lockscreen.mp4'
 
 [org/gnome/shell/extensions/ding]
 check-x11wayland=true

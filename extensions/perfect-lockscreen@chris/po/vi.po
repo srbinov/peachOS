@@ -1,0 +1,310 @@
+# WACK - Sonoma Lockscreen
+# Copyright (C) 2026 rinzler69-wastaken
+msgid ""
+msgstr ""
+"Project-Id-Version: wack-lockscreen-clock@rinzler69-wastaken.github.com\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: vi\n"
+
+msgid "more"
+msgstr "thêm"
+
+msgid "Press Shift + N to view notifications"
+msgstr "Nhấn Shift + N để xem thông báo"
+
+msgid "Sleep prevented by an active process"
+msgstr "Việc tạm dừng bị ngăn cản bởi một quy trình đang hoạt động"
+
+msgid "1 minute"
+msgstr "1 phút"
+
+msgid "10 minutes"
+msgstr "10 phút"
+
+msgid "15 minutes"
+msgstr "15 phút"
+
+msgid "2 hours"
+msgstr "2 giờ"
+
+msgid "30 minutes"
+msgstr "30 phút"
+
+msgid "5 minutes"
+msgstr "5 phút"
+
+msgid "60 minutes"
+msgstr "60 phút"
+
+msgid "Always Show User Widget (Cupertino)"
+msgstr "Luôn hiển thị tiện ích người dùng (Cupertino)"
+
+msgid "Always shows user widget, hides notifications by default. Press Shift+N to show notifications."
+msgstr "Luôn hiển thị tiện ích người dùng, ẩn thông báo theo mặc định. Nhấn Shift+N để hiển thị thông báo."
+
+msgid "Animations"
+msgstr "Hoạt hình"
+
+msgid "Applied to the authentication prompt while it appears"
+msgstr "Áp dụng cho lời nhắc xác thực khi nó xuất hiện"
+
+msgid "Applied to the date and time while opening the password prompt"
+msgstr "Áp dụng cho ngày và giờ trong khi mở hộp nhập mật khẩu"
+
+msgid "Blank Timeout"
+msgstr "Thời gian chờ tắt màn hình"
+
+msgid "A complete macOS Sonoma-inspired lockscreen layout (Click user-icon to switch users)."
+msgstr "Bố cục màn hình khóa lấy cảm hứng từ macOS Sonoma hoàn chỉnh (Nhấp vào biểu tượng người dùng để chuyển đổi người dùng)."
+
+msgid "macOS Sonoma-style clock over the classic, GNOME-compliant layout and flow."
+msgstr "Đồng hồ kiểu macOS Sonoma trên bố cục và luồng hoạt động chuẩn GNOME cổ điển."
+
+msgid "Unlock Crossfade"
+msgstr "Làm mờ khi mở khóa"
+
+msgid "Crossfade the lockscreen with desktop when unlocking (automatically disabled in Power Saver mode)."
+msgstr "Làm mờ màn hình khóa với màn hình chính khi mở khóa (tự động tắt trong chế độ Tiết kiệm pin)."
+
+msgid "Crossfade Speed"
+msgstr "Tốc độ làm mờ"
+
+msgid "Cupertino Unlock Fade"
+msgstr "Làm mờ khi mở khóa Cupertino"
+
+msgid "Fade out the lock screen with a panel slide-in when unlocking."
+msgstr "Làm mờ màn hình khóa với hiệu ứng bảng trượt vào khi mở khóa."
+
+msgid "Choose between Legacy and Cupertino styles"
+msgstr "Chọn giữa phong cách Cổ điển và Cupertino"
+
+msgid "Choose how the lock screen clock leaves and how the password prompt enters."
+msgstr "Chọn cách đồng hồ màn hình khóa biến mất và hộp nhập mật khẩu xuất hiện."
+
+msgid "Clock Animation"
+msgstr "Hoạt hình đồng hồ"
+
+msgid "Configuration"
+msgstr "Cấu hình"
+
+msgid "Consider supporting its development!"
+msgstr "Hãy xem xét hỗ trợ sự phát triển của nó!"
+
+msgid "Control when the screen turns off or blanks on the lock screen."
+msgstr "Kiểm soát thời điểm màn hình tắt hoặc tối đi trên màn hình khóa."
+
+msgid "Cupertino"
+msgstr "Cupertino"
+
+msgid "Enjoying this extension?"
+msgstr "Bạn có thích tiện ích mở rộng này?"
+
+msgid "Escape to Sleep / Suspend"
+msgstr "Esc để tắt màn hình / tạm dừng"
+
+msgid "Extension Repo"
+msgstr "Kho lưu trữ tiện ích mở rộng"
+
+msgid "Home"
+msgstr "Trang chủ"
+
+msgid "Keep Screen On"
+msgstr "Giữ màn hình luôn bật"
+
+msgid "Ko-fi"
+msgstr "Ko-fi"
+
+msgid "Legacy"
+msgstr "Cổ điển"
+
+msgid "Lockscreen Mode"
+msgstr "Chế độ khóa màn hình"
+
+msgid "Show message when locked"
+msgstr "Hiển thị thông điệp khi khóa"
+
+msgid "Set..."
+msgstr "Thiết lập..."
+
+msgid "Set a message to appear on the lockscreen"
+msgstr "Thiết lập thông điệp hiển thị trên màn hình khóa"
+
+msgid "Cancel"
+msgstr "Hủy"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Mode"
+msgstr "Cách thức"
+
+msgid "Never"
+msgstr "Không bao giờ"
+
+msgid "Only keep the screen on if the system is plugged in"
+msgstr "Chỉ giữ màn hình bật khi cắm sạc"
+
+msgid "Only on AC Power"
+msgstr "Chỉ khi cắm sạc"
+
+msgid "Open Ko-fi"
+msgstr "Mở Ko-fi"
+
+msgid "Open Saweria"
+msgstr "Mở Saweria"
+
+msgid "Open on GitHub"
+msgstr "Mở trên GitHub"
+
+msgid "Press Escape on the lock screen to sleep display (or suspend)"
+msgstr "Nhấn Esc trên màn hình khóa để tắt màn hình (hoặc tạm dừng)"
+
+msgid "Prevent the screen from immediately turning off when locked. The screen will still turn off after the normal timeout duration set in system settings."
+msgstr "Ngăn màn hình tắt ngay lập tức khi bị khóa. Màn hình sẽ vẫn tắt sau khoảng thời gian chờ thông thường được thiết lập trong cài đặt hệ thống."
+
+msgid "Prompt Animation"
+msgstr "Hoạt ảnh của hộp nhập mật khẩu"
+
+msgid "Reset Animations"
+msgstr "Đặt lại ảnh động"
+
+msgid "Reset animations"
+msgstr "Đặt lại hình ảnh động"
+
+msgid "Resources"
+msgstr "Tài nguyên"
+
+msgid "Restore defaults"
+msgstr "Khôi phục mặc định"
+
+msgid "Saweria"
+msgstr "Saweria"
+
+msgid "Show a custom message above the user prompt stack."
+msgstr "Hiển thị thông điệp tùy chỉnh phía trên khung đăng nhập của người dùng."
+
+msgid "Screen Timeout"
+msgstr "Hết thời gian chờ màn hình"
+
+msgid "Time to wait before turning off the screen"
+msgstr "Thời gian chờ trước khi tắt màn hình"
+
+msgid "Extras"
+msgstr "Tính năng bổ sung"
+
+msgid "[PRO] GDM Expansion"
+msgstr "[PRO] Mở rộng GDM"
+
+msgid "Enabled. Custom layout is active on GDM."
+msgstr "Đã bật. Bố cục tùy chỉnh đang hoạt động trên GDM."
+
+msgid "Enabled"
+msgstr "Đã bật"
+
+msgid "Disabled"
+msgstr "Đã tắt"
+
+msgid "Disabled."
+msgstr "Đã tắt."
+
+msgid "GDM and Cross Session Module are missing."
+msgstr "Thiếu GDM và Mô-đun Cross Session."
+
+msgid "GDM dconf override configuration is missing."
+msgstr "Thiếu cấu hình ghi đè dconf GDM."
+
+msgid "GDM integration is not configured."
+msgstr "Tích hợp GDM chưa được cấu hình."
+
+msgid "Upgrade to Pro"
+msgstr "Nâng cấp lên Pro"
+
+msgid "Get a Sonoma-inspired GDM login screen layout and automatically synchronize your wallpapers from the active user session. To upgrade, run copied command in a terminal."
+msgstr "Sở hữu bố cục màn hình đăng nhập GDM lấy cảm hứng từ Sonoma và tự động đồng bộ hóa hình nền từ phiên người dùng đang hoạt động. Để nâng cấp, hãy chạy lệnh đã sao chép trong cửa sổ dòng lệnh."
+
+msgid "Copy upgrade command to clipboard"
+msgstr "Sao chép lệnh nâng cấp vào bộ nhớ tạm"
+
+msgid "Copied upgrade command to clipboard!"
+msgstr "Đã sao chép lệnh nâng cấp vào bộ nhớ tạm!"
+
+msgid "Uninstall GDM Expansion"
+msgstr "Gỡ cài đặt Mở rộng GDM"
+
+msgid "Revert GDM login screen layout to GNOME Default. To uninstall, run copied command in a terminal."
+msgstr "Khôi phục bố cục màn hình đăng nhập GDM về Mặc định của GNOME. Để gỡ cài đặt, hãy chạy lệnh đã sao chép trong cửa sổ dòng lệnh."
+
+msgid "Copy uninstall command to clipboard"
+msgstr "Sao chép lệnh gỡ cài đặt vào bộ nhớ tạm"
+
+msgid "Copied uninstall command to clipboard!"
+msgstr "Đã sao chép lệnh gỡ cài đặt vào bộ nhớ tạm!"
+
+msgid "[BETA] WACK Shell Integration"
+msgstr "[BETA] Tích hợp WACK Shell"
+
+msgid "Installed. Enables crossfade transitions and Cupertino-inspired shell customisations."
+msgstr "Đã cài đặt. Cho phép các hiệu ứng chuyển cảnh mờ dần và tùy chỉnh giao diện lấy cảm hứng từ Cupertino."
+
+msgid "Upgrade to [PRO]"
+msgstr "Nâng cấp lên [PRO]"
+
+msgid "Installed"
+msgstr "Đã cài đặt"
+
+msgid "Not installed. Install WACK Shell to unlock transition effects."
+msgstr "Chưa cài đặt. Hãy cài đặt WACK Shell để kích hoạt các hiệu ứng chuyển cảnh."
+
+msgid "Not Installed"
+msgstr "Chưa cài đặt"
+
+msgid "Install WACK Shell"
+msgstr "Cài đặt WACK Shell"
+
+msgid "Get advanced desktop crossfade transitions and Cupertino-inspired shell customisations. May contain bugs, report if found."
+msgstr "Trải nghiệm các hiệu ứng chuyển cảnh nâng cao của màn hình chính và các tùy chỉnh giao diện lấy cảm hứng từ Cupertino. Có thể có lỗi, vui lòng báo cáo nếu phát hiện."
+
+msgid "Copy install command to clipboard"
+msgstr "Sao chép lệnh cài đặt vào bộ nhớ tạm"
+
+msgid "Copied WACK Shell install command to clipboard!"
+msgstr "Đã sao chép lệnh cài đặt WACK Shell vào bộ nhớ tạm!"
+
+msgid "Open WACK Shell repository"
+msgstr "Mở kho lưu trữ WACK Shell"
+
+msgid "Check for Updates"
+msgstr "Kiểm tra cập nhật"
+
+msgid "Copy check command to verify if a newer version of WACK Shell is available."
+msgstr "Sao chép lệnh kiểm tra để xác minh xem có phiên bản WACK Shell mới hơn hay không."
+
+msgid "Copy update-check command to clipboard"
+msgstr "Sao chép lệnh kiểm tra cập nhật vào bộ nhớ tạm"
+
+msgid "Copied WACK Shell update-check command to clipboard!"
+msgstr "Đã sao chép lệnh kiểm tra cập nhật WACK Shell vào bộ nhớ tạm!"
+
+msgid "Extras - Status"
+msgstr "Tiện ích bổ sung - Trạng thái"
+
+msgid "Extras - Actions"
+msgstr "Tiện ích bổ sung - Hành động"
+
+msgid "GDM Expansion - Remove"
+msgstr "Tiện ích mở rộng GDM - Gỡ bỏ"
+
+msgid "WACK Shell - Check for Updates"
+msgstr "WACK Shell - Kiểm tra cập nhật"
+
+msgid "WACK Shell - Install"
+msgstr "WACK Shell - Cài đặt"
+
+msgid "Upcoming Features"
+msgstr "Tính năng sắp tới"
+
+msgid "Check PRO features of this extension on this extension's GitHub repo."
+msgstr "Kiểm tra các tính năng PRO của tiện ích mở rộng này trên kho lưu trữ GitHub của nó."
+
