@@ -1,6 +1,33 @@
+# peachOS vendor dconf defaults -- applied to every user account (including the one
+# Calamares creates during install) via /etc/dconf/db/local.d + `dconf update`, per the
+# standard GNOME mechanism for shipping default settings distro-wide. NOT seeded through
+# /etc/skel (no per-user file copying needed -- dconf's own system-db layering applies this
+# to every user automatically, present or future).
+#
+# Rebuilt from a full live-session `dconf dump /` (not hand-guessed) the first time anyone
+# actually checked whether this file matched the live desktop before a snapshot -- it
+# didn't, badly: favorite-apps/enabled-extensions/wallpaper were all stale (an older
+# in-progress state, predating this session's dock-extension swap to
+# macos-dock-2026-peachos and lockscreen swap to perfect-lockscreen), and the previous
+# capture had never been refreshed since. Two real bugs found and fixed while rebuilding it,
+# not carried forward:
+#   - perfect-lockscreen's lockscreen-wallpaper-path pointed at a /tmp scratchpad test file
+#     that wouldn't exist on any other machine -- disabled the custom-photo override here so
+#     it correctly falls back to the (real, shipped) rolling-hills.mp4 video background.
+#   - media-keys custom-keybindings referenced a 'peachos-test' path with no actual
+#     binding/command/name defined anywhere -- a dangling reference that would have shown
+#     a broken custom shortcut in Settings. Dropped, kept only the real peachySearch one.
+#
+# Deliberately excluded: anything that's session/hardware state rather than a peachOS
+# "look" default -- window positions/recent-files/notification-history, keyboard layout and
+# touchpad/keyboard hardware prefs (a fresh install picks its own via Calamares' own
+# locale/keyboard steps, not a baked default), and the disabled/superseded lockscreen
+# extensions' (live-lockscreen, wack-lockscreen-clock) own leftover settings.
+
 [org/gnome/desktop/interface]
 accent-color='blue'
-color-scheme='prefer-dark'
+clock-format='12h'
+color-scheme='default'
 cursor-theme='MacTahoe'
 document-font-name='Inter Light 11 @wght=300'
 enable-hot-corners=false
@@ -8,17 +35,51 @@ font-name='Inter Light 11 @wght=300'
 gtk-theme='MacTahoe-Light'
 icon-theme='MacTahoe'
 monospace-font-name='Inter Light 11 @wght=300'
+text-scaling-factor=0.80000000000000004
+toolkit-accessibility=false
 
 [org/gnome/desktop/background]
 color-shading-type='solid'
 picture-options='zoom'
-picture-uri='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Light.jpg'
-picture-uri-dark='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Dark.png'
+picture-uri='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
 primary-color='#000000000000'
 secondary-color='#000000000000'
 
 [org/gnome/desktop/wm/preferences]
 button-layout='close,minimize,maximize:'
+
+[org/gnome/desktop/app-folders]
+folder-children=['System', 'Utilities', 'YaST', 'Pardus', '73622667-ace0-4bad-b83e-75f75ddf4dc9', '67e6e87c-06db-4661-aa71-0db1602c05ed']
+
+[org/gnome/desktop/app-folders/folders/67e6e87c-06db-4661-aa71-0db1602c05ed]
+apps=['libreoffice-math.desktop', 'libreoffice-startcenter.desktop', 'libreoffice-draw.desktop', 'libreoffice-base.desktop']
+name='Office'
+
+[org/gnome/desktop/app-folders/folders/73622667-ace0-4bad-b83e-75f75ddf4dc9]
+apps=['icloud-for-linux_find.desktop', 'icloud-for-linux_drive.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_calendar.desktop', 'icloud-for-linux_keynote.desktop', 'icloud-for-linux_numbers.desktop', 'icloud-for-linux_pages.desktop']
+name='iCloud'
+translate=false
+
+[org/gnome/desktop/app-folders/folders/Pardus]
+categories=['X-Pardus-Apps']
+name='X-Pardus-Apps.directory'
+translate=true
+
+[org/gnome/desktop/app-folders/folders/System]
+apps=['nm-connection-editor.desktop', 'org.gnome.baobab.desktop', 'org.gnome.DiskUtility.desktop', 'im-config.desktop', 'org.gnome.Logs.desktop', 'org.gnome.Sysprof.desktop', 'peachos-settings.desktop', 'org.gnome.Calculator.desktop', 'org.gnome.Extensions.desktop', 'org.gnome.Yelp.desktop', 'org.gnome.tweaks.desktop', 'net.nokyan.Resources.desktop', 'desktop-security-center_desktop-security-center.desktop', 'org.gnome.TextEditor.desktop', 'io.ulauncher.Ulauncher.desktop', 'update-manager.desktop', 'org.gnome.Settings.desktop', 'com.mattjakeman.ExtensionManager.desktop', 'firmware-updater_firmware-updater.desktop', 'org.gnome.Software.desktop']
+name='X-GNOME-Shell-System.directory'
+translate=true
+
+[org/gnome/desktop/app-folders/folders/Utilities]
+apps=['org.gnome.Papers.desktop', 'org.gnome.font-viewer.desktop', 'org.gnome.Loupe.desktop', 'org.gnome.seahorse.Application.desktop', 'org.gnome.clocks.desktop', 'flutter_openurl.desktop', 'gnome-language-selector.desktop', 'org.gnome.Characters.desktop', 'mpv.desktop']
+name='X-GNOME-Shell-Utilities.directory'
+translate=true
+
+[org/gnome/desktop/app-folders/folders/YaST]
+categories=['X-SuSE-YaST']
+name='suse-yast.directory'
+translate=true
 
 [org/gnome/settings-daemon/plugins/media-keys]
 custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ulauncher/']
@@ -26,14 +87,14 @@ custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybin
 [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ulauncher]
 binding='<Primary>space'
 command='/home/user/peachOS/apps/ulauncher/bin/ulauncher toggle'
-name='Show Ulauncher'
+name='Show peachySearch'
 
 [org/gnome/shell]
-app-picker-layout=[{'org.gnome.Calculator.desktop': <{'position': <0>}>, 'com.mattjakeman.ExtensionManager.desktop': <{'position': <1>}>, 'org.gnome.clocks.desktop': <{'position': <2>}>, 'firmware-updater_firmware-updater.desktop': <{'position': <3>}>, 'icloud-for-linux_drive.desktop': <{'position': <4>}>, 'icloud-for-linux_find.desktop': <{'position': <5>}>, 'peachos-settings.desktop': <{'position': <6>}>, 'gnome-language-selector.desktop': <{'position': <7>}>, 'org.gnome.Characters.desktop': <{'position': <8>}>, 'Utilities': <{'position': <9>}>, 'net.nokyan.Resources.desktop': <{'position': <10>}>, 'System': <{'position': <11>}>, 'desktop-security-center_desktop-security-center.desktop': <{'position': <12>}>, 'update-manager.desktop': <{'position': <13>}>, 'org.gnome.Yelp.desktop': <{'position': <14>}>, 'org.gnome.TextEditor.desktop': <{'position': <15>}>, 'org.gnome.tweaks.desktop': <{'position': <16>}>, 'icloud-for-linux_maps.desktop': <{'position': <17>}>, 'icloud-for-linux_tv.desktop': <{'position': <18>}>}]
+app-picker-layout=[{'Utilities': <{'position': <0>}>, 'System': <{'position': <1>}>, '73622667-ace0-4bad-b83e-75f75ddf4dc9': <{'position': <2>}>, '67e6e87c-06db-4661-aa71-0db1602c05ed': <{'position': <3>}>, 'org.localsend.localsend_app.desktop': <{'position': <4>}>, 'org.gnome.Weather.desktop': <{'position': <5>}>, 'org.gnome.Ptyxis.desktop': <{'position': <6>}>}]
 disable-user-extensions=false
-disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'dash2dock-lite@icedman.github.com']
-enabled-extensions=['blur-my-shell@aunetx', 'macos-dock-2026-peachos@peachos', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'macos-top-panel@local.dev', 'perfect-lockscreen@chris']
-favorite-apps=['org.gnome.Nautilus.desktop', 'snap-store_snap-store.desktop', 'firefox_firefox.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_keynote.desktop', 'icloud-for-linux_calendar.desktop', 'icloud-for-linux_contacts.desktop', 'icloud-for-linux_reminders.desktop', 'icloud-for-linux_numbers.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_pages.desktop', 'org.gnome.Ptyxis.desktop', 'peachos-applauncher.desktop']
+disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com']
+enabled-extensions=['blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'perfect-lockscreen@chris', 'macos-top-panel@local.dev', 'macos-dock-2026-peachos@peachos']
+favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_reminders.desktop', 'org.gnome.TextEditor.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
 welcome-dialog-last-shown-version='50.1'
 
 [org/gnome/shell/extensions/blur-my-shell]
@@ -80,73 +141,57 @@ sigma=30
 [org/gnome/shell/extensions/coverflowalttab]
 switcher-background-color=(0.20784313725490197, 0.51764705882352946, 0.89411764705882357)
 
+[org/gnome/shell/extensions/kiwimenu]
+icon=19
+
 [org/gnome/shell/extensions/macos-dock]
-# apps-icon (below) is deliberately false: this dock's own built-in "Show Applications"
-# grid icon would otherwise sit right next to peachos-applauncher.desktop's own Launchpad-style
-# entry in favorite-apps (see the [org/gnome/shell] section) -- two icons doing basically the
-# same thing side by side. The custom one is the one the rest of peachOS is themed around.
-#
-# background-color/border-color only matter with Liquid Glass turned off (Settings > Desktop &
-# Dock) -- liquid-glass defaults to true (the schema default, not set explicitly here), so a
-# fresh install renders the glass material in liquidGlass.js instead, auto-matching light/dark
-# appearance. These stay as the fallback look for anyone who turns it off.
 animation-bounce-height=0.75
-animation-magnify=0.29999999999999999
+animation-magnify=0.24719101123595505
 animation-rise=0.25
-# animation-spread (below) is the real lever for inter-icon spacing in the resting (non-hover)
-# layout -- dock.js computes iconSizeSpaced = iconSize + 2 + 8 * animation_spread, so this
-# directly sets the gap between icons. dock-padding (further down) only pads the dock's own
-# background PILL, not the icons within it -- a wrong first guess, reverted back to the
-# schema default once the real lever was found. Reduced by iterative user request (0.75 ->
-# 0.48 -> 0.384 -> 0.25 -> 0.15 -> 0.05, confirmed) down to near-zero spacing between icons.
-animation-spread=0.050000000000000003
+animation-spread=0.75
 apps-icon=false
 autohide-dash=false
 autohide-speed=0.5
-background-color=(0.8933333158493042, 0.77124440670013428, 0.77124440670013428, 0.25724637508392334)
-blur-background=false
-border-color=(0.74333333969116211, 0.71112221479415894, 0.71112221479415894, 1.0)
-border-radius=3.0
-border-thickness=1
+border-radius=2.6190476190476191
 customize-label=true
-dock-padding=0.5
-downloads-icon=true
-edge-distance=0.56725146198830401
+dock-padding=1.0
+edge-distance=0.37662337662337664
 icon-border-radius=3.0
-# icon-shadow (below) is deliberately false: the default rgba(0,0,0,0.32) drop shadow this dock
-# casts under every dock icon is only really visible on pale icon art (e.g. iCloud Notes/Numbers),
-# where it reads as a stray dark smudge rather than the intended subtle macOS depth cue.
 icon-shadow=false
-icon-size=0.15517241379310345
-icon-spacing=0.0
+icon-size=0.11999999999999923
+icon-spacing=-1.0
 items-pullout-angle=0.5
 label-background-color=(0.0, 0.0, 0.0, 0.0)
-lamp-app-animation=true
+label-border-color=(1.0, 1.0, 1.0, 0.0)
+liquid-glass=true
+liquid-glass-mode=1
 msg-to-ext=''
-open-app-animation=true
 preferred-monitor=0
 pressure-sense=false
 pressure-sense-sensitivity=0.40000000000000002
-running-indicator-size=0
 running-indicator-style=2
 scroll-sensitivity=0.40000000000000002
-separator-color=(1.0, 0.98000001907348633, 0.98000001907348633, 0.27173912525177002)
-separator-thickness=2
-shrink-icons=true
-trash-icon=true
+separator-thickness=1
+
+[org/gnome/shell/extensions/macos-top-panel]
+auto-hide-in-fullscreen=true
+battery-show-percentage=true
+clock-24-hour=false
+clock-show-date=true
+clock-show-seconds=false
+liquid-glass-intensity=90
+show-bluetooth-icon=true
+show-spotlight-icon=true
+show-wifi-icon=true
+window-color-blend-enabled=false
 
 [org/gnome/shell/extensions/perfect-lockscreen]
-# Cupertino is already the schema default; set explicitly for clarity since this is the
-# whole point of shipping this extension. background-source=video plays the live
-# wallpaper below on the in-session lock screen (Super+L) -- the GDM login screen never
-# plays video regardless of this setting (see install-gdm-dlc.sh's own README section),
-# it always mirrors the current desktop wallpaper instead.
-lockscreen-mode='cupertino'
 background-source='video'
-background-video-path='/usr/share/peachos/lockscreen/live-lockscreen.mp4'
+background-video-path='/usr/share/peachos/lockscreen/rolling-hills.mp4'
+lockscreen-wallpaper-enable=false
 
-[org/gnome/shell/extensions/ding]
-check-x11wayland=true
+[org/gnome/shell/extensions/rounded-windows]
+keep-rounded-maximized=true
 
 [org/gnome/shell/extensions/tiling-assistant]
 focus-hint-color='rgb(203,67,20)'
@@ -156,5 +201,18 @@ tiling-popup-all-workspace=true
 [org/gnome/shell/extensions/user-theme]
 name='MacTahoe-Light'
 
-[org/gnome/shell/world-clocks]
-locations=@av []
+[org/gnome/Ptyxis]
+default-profile-uuid='5fb19a772832546755f0e0e16a825b5f'
+profile-uuids=['5fb19a772832546755f0e0e16a825b5f']
+use-system-font=false
+
+[org/gnome/Ptyxis/Profiles/5fb19a772832546755f0e0e16a825b5f]
+palette='Vs Code'
+
+[org/gnome/Ptyxis/Shortcuts]
+copy-clipboard='<Control>c'
+paste-clipboard='<Control>v'
+
+[org/peachos/appearance]
+icon-style='default'
+tint-hue=0.35745564349095788

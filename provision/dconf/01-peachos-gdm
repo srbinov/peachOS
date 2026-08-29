@@ -7,15 +7,27 @@
 # file gets installed there as 01-peachos-gdm, following the same numbered-override
 # convention /usr/share/gdm/dconf/00-upstream-settings itself documents.
 #
-# Deliberately minimal: no extensions beyond peachos-lockscreen@local.dev are enabled
-# here (not even user-theme/MacTahoe-Light) -- peachos-lockscreen's own stylesheet.css
-# layers its restyling on top of whatever base shell theme is active, the same way
+# Deliberately minimal: no extensions beyond perfect-lockscreen@chris are enabled here
+# (not even user-theme/MacTahoe-Light) -- perfect-lockscreen's own stylesheet.css layers
+# its restyling on top of whatever base shell theme is active, the same way
 # macos-top-panel's glass styling already layers on top of MacTahoe-Light on the
 # desktop, so a smaller extension surface in the greeter (lower risk) doesn't cost
 # any visual consistency.
-
+#
+# Real gap this file used to have, found and fixed while double-checking everything
+# before a snapshot: this said peachos-lockscreen@local.dev (the extension
+# perfect-lockscreen@chris superseded) up until now. The live system had already been
+# corrected -- but via a THIRD file dropped directly at
+# /usr/share/gdm/dconf/99-perfect-lockscreen, overriding this one by numeric load order,
+# that never made it into this repo or provision.sh at all. A decoy also existed at
+# /etc/dconf/db/gdm.d/99-perfect-lockscreen (the *standard* dconf gdm-profile location,
+# which -- per the header comment above -- this Ubuntu build's GDM doesn't actually read
+# at all) that looked like a fix but was completely inert. Folded the real fix in here
+# directly instead of carrying a second numbered file forward, so there's only one place
+# this can ever drift out of sync again.
 [org/gnome/shell]
-enabled-extensions=['peachos-lockscreen@local.dev']
+enabled-extensions=['perfect-lockscreen@chris']
+disable-user-extensions=false
 
 [org/gnome/desktop/interface]
 accent-color='blue'
@@ -37,13 +49,18 @@ icon-theme='MacTahoe'
 # actually paints on top. Once discovered, this needed zero extension code at all.
 # background-picture-uri is a snapshot of the user's actually-equipped wallpaper at
 # the time this was written, not the peachOS default -- it doesn't stay live-synced,
-# see lib/lockScreenLayout.js's module comment for why.
+# see lib/lockScreenLayout.js's module comment for why. Refreshed to match the desktop
+# wallpaper actually equipped right now (tahoe_beach_dawn) while re-checking everything
+# else in this file for the same staleness.
 [com/ubuntu/login-screen]
 background-color='#1c1c1e'
-background-picture-uri='file:///usr/share/backgrounds/peachos/macOS_Sonoma_Dark.jpg'
+background-picture-uri='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
 background-repeat='no-repeat'
 background-size='cover'
 
 [org/gnome/login-screen]
-# Removes the Ubuntu wordmark GDM normally draws under the user list.
+# Removes the Ubuntu wordmark GDM normally draws under the user list (both keys: logo is
+# the one actually drawn, fallback-logo is what'd show if logo failed to load -- the
+# now-folded-in 99-perfect-lockscreen fix set both, only the first was here before).
 logo=''
+fallback-logo=''

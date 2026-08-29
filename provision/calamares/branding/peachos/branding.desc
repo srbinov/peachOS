@@ -1,0 +1,32 @@
+---
+componentName: peachos
+
+windowExpanding:    fullscreen
+
+strings:
+    productName:         peachOS
+    shortProductName:    peachOS
+    version:             26.04
+    shortVersion:        26.04
+    versionedName:       peachOS 26.04
+    shortVersionedName:  peachOS 26.04
+    bootloaderEntryName: peachOS
+    productUrl:          https://github.com/srbinov/peachOS
+    supportUrl:          https://github.com/srbinov/peachOS/issues
+
+images:
+    productLogo:         "logo.png"
+    productIcon:         "icon.png"
+    productWelcome:      "welcome.png"
+
+slideshow:               "show.qml"
+
+slideshowAPI:            1
+
+# Same tone as the rest of peachOS's own dark surfaces (Control Center/notification glass
+# solid-dark target, #1c1c1e -- see macOS-TopBar-Gnome/lib/liquidGlassIntensity.js) rather
+# than a color invented just for this screen.
+style:
+   SidebarBackground:    "#1c1c1e"
+   SidebarText:          "#FFFFFF"
+   SidebarTextCurrent:   "#FF8A3D"

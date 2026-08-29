@@ -115,6 +115,41 @@ for f in "$REPO_DIR"/assets/app-icons/presets/darkmode/*.svg; do
     install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
 done
 
+# Calamares installer (the GUI setup screen shown booting the eventual ISO from USB) --
+# peachOS's own branding + module sequence, on top of calamares-settings-ubuntu-common
+# (only ships shared exec-stage modules: bootloader/fstab/grub/mount/etc., not a complete
+# installer). Adapted from a REAL, currently-shipping reference (Ubuntu 26.04's own
+# calamares-settings-kubuntu, `apt-get download` + `dpkg-deb -x`'d to inspect without
+# installing it -- it conflicts on shared file paths with ubuntu-common if actually
+# installed alongside it), not written from guesswork: settings.conf's module sequence,
+# users.conf, and partition.conf are only lightly adapted (peachos_boot/peachos_root
+# partition names, gdm instead of sddm); displaymanager.conf verified against this actual
+# system's own /usr/share/wayland-sessions/ubuntu.desktop rather than assumed; dropped
+# Kubuntu/KDE-specific bug workarounds (fixconkeys, add386arch, oemprep, ...) whose
+# applicability to peachOS was never confirmed, and the pkgselect "optional extras" screen
+# entirely (KDE-app-specific button text/packages, no peachOS equivalent designed yet).
+# unpackfs.conf's source path is the one real unknown left: adapted from penguins-eggs'
+# own installed remaster template (/etc/penguins-eggs.d/brain.d/modules/debian/
+# remaster.bash.tmpl, which copies the squashfs to $ISODIR/live/filesystem.squashfs, a
+# Debian-Live layout -- NOT Kubuntu's casper-based /cdrom/casper/filesystem.squashfs) but
+# the live-boot mount point itself (/run/live/medium) is live-boot's documented default,
+# not something confirmed by actually booting an eggs-built ISO -- re-verify the first time
+# `eggs remaster` produces one. Verified end-to-end short of that: `calamares --debug`
+# actually launches with this exact config and reports "Loaded branding component
+# 'peachos'" plus every view module (welcome/locale/keyboard/partition/users/summary)
+# "loading complete" with zero errors, only benign warnings matching the real Kubuntu
+# reference's own (e.g. partition's "unknown" filesystem meaning "let the user pick").
+echo "==> Installing Calamares installer -> peachOS branding"
+apt-get install -y --no-install-recommends calamares calamares-settings-ubuntu-common
+install -d /etc/calamares/branding/peachos
+install -Dm644 "$REPO_DIR/provision/calamares/settings.conf" /etc/calamares/settings.conf
+for f in "$REPO_DIR"/provision/calamares/modules/*.conf; do
+    install -Dm644 "$f" "/etc/calamares/modules/$(basename "$f")"
+done
+for f in "$REPO_DIR"/provision/calamares/branding/peachos/*; do
+    install -Dm644 "$f" "/etc/calamares/branding/peachos/$(basename "$f")"
+done
+
 # Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
 # -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top
 # bar's own KiwiMenuButton uses at index 19, kiwimenu.js/icons.json) centered above a simple
@@ -502,6 +537,37 @@ Categories=GNOME;GTK;Utility;
 X-Flatpak=org.gnome.Weather
 EOF
 update-desktop-database /usr/share/applications
+
+# LibreOffice suite (Writer/Calc/Impress/Draw/Math/Base) -- preinstalled, not left for
+# peachos-icon-watcherd to discover after the fact. libreoffice-gnome (not pulled in by
+# --no-install-recommends alone) gives it real GTK/GNOME integration -- native file picker,
+# proper icon theme/font rendering -- worth the extra package for a themed distro like this.
+# No curated icon overrides needed: LibreOffice's own stock icons (Ubuntu's package) already
+# ship as proper macOS-style squircles close to Apple's own Pages/Numbers/Keynote look, so
+# peachos-icon-watcherd's light-touch padding pass (not full masking) is all they get, same
+# as any other already-conforming icon.
+echo "==> Installing LibreOffice suite (Writer, Calc, Impress, Draw, Math, Base)"
+apt-get install -y --no-install-recommends libreoffice libreoffice-gnome
+
+# Writer/Calc/Impress are the genuine iWork equivalents (Pages/Numbers/Keynote) -- rebranded
+# to the same curated iCloud art those already use, not left as LibreOffice's own (perfectly
+# fine, just not what this project wants shown) stock icons. Only the Icon= line changes,
+# matching Files->Peachy's own sed rebrand pattern above -- Name=/Exec=/everything else
+# about these apps stays real LibreOffice. Base/Draw/Math are left with their own stock
+# icons; nothing in the curated iCloud set actually corresponds to what they are (a
+# database tool and a diagramming tool, not part of the Pages/Numbers/Keynote trio).
+#
+# No separate dark-mode step needed here: icloud-for-linux is already in OWN_DIRS
+# (peachos_icon_resolve.py) and pages/numbers/keynote are already registered in
+# CURATED_DARK_SLUGS -- retargeting Icon= at that same curated path is what makes
+# peachos-icon-appearance's existing dark-mode generation pick the right art up
+# automatically, the same mechanism first-party curated icons already rely on.
+sed -i 's|^Icon=libreoffice-writer$|Icon=/usr/share/icons/icloud-for-linux/pages.svg|' \
+    /usr/share/applications/libreoffice-writer.desktop
+sed -i 's|^Icon=libreoffice-calc$|Icon=/usr/share/icons/icloud-for-linux/numbers.svg|' \
+    /usr/share/applications/libreoffice-calc.desktop
+sed -i 's|^Icon=libreoffice-impress$|Icon=/usr/share/icons/icloud-for-linux/keynote.svg|' \
+    /usr/share/applications/libreoffice-impress.desktop
 
 # AirMirror (github.com/srbinov/airmirror -- our own GTK4/libadwaita AirPlay-mirroring
 # receiver, wrapping UxPlay's engine). Cloned to /opt (matching Sidra's own /opt/Sidra
