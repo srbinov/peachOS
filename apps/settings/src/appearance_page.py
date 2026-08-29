@@ -18,6 +18,7 @@ FONT_ANTIALIASING = [('None', 'none'), ('Grayscale', 'grayscale'), ('Subpixel (R
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 ICON_APPEARANCE_SCRIPT = '/usr/lib/peachos/iconmasker/peachos-icon-appearance'
+PLYMOUTH_SYNC_SCRIPT = '/usr/lib/peachos/plymouth/peachos-plymouth-sync'
 
 DOCK_ORDER_GUARD_BUS_NAME = 'org.peachos.DockOrderGuard'
 DOCK_ORDER_GUARD_OBJECT_PATH = '/org/peachos/DockOrderGuard'
@@ -546,6 +547,7 @@ class AppearancePage(Gtk.Box):
         is_dark = value == 'prefer-dark'
         self._settings.set_string('color-scheme', value)
         self._sync_shell_theme(is_dark)
+        self._sync_plymouth_theme(is_dark)
         self._refresh_scheme_selection()
 
     def _sync_shell_theme(self, is_dark):
@@ -553,6 +555,23 @@ class AppearancePage(Gtk.Box):
             self._user_theme_settings.set_string('name', 'MacTahoe-Dark' if is_dark else 'MacTahoe-Light')
         except GLib.Error:
             pass  # User Themes extension not present/enabled -- nothing to sync.
+
+    def _sync_plymouth_theme(self, is_dark):
+        """Boot splash colors/logo (peachos-plymouth-sync) live in /usr, so this needs real
+        root, unlike _sync_shell_theme's plain (user-writable) GSettings key above -- pkexec
+        will prompt once. Only called from an actual toggle click (not from __init__, unlike
+        _sync_shell_theme's own startup desync-correction call) so opening this page never
+        surprises the user with an auth prompt when nothing's actually changed -- the script
+        itself is idempotent (skips the slow initramfs rebuild if the mode already matches),
+        but pkexec still has to authenticate before it can even ask the script that, so the
+        no-op has to be avoided on this side instead."""
+        try:
+            Gio.Subprocess.new(
+                ['pkexec', PLYMOUTH_SYNC_SCRIPT, 'dark' if is_dark else 'light'],
+                Gio.SubprocessFlags.NONE,
+            )
+        except GLib.Error:
+            pass  # Nothing more useful to do than leave the boot splash as it was.
 
     def _refresh_scheme_selection(self):
         is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'

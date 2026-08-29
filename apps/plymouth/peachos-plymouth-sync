@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Keeps the peachOS boot splash (Plymouth theme) in sync with the desktop's dark/light
+appearance setting. Run as root (peachOS Settings invokes this via pkexec -- see
+appearance_page.py's _sync_plymouth_theme()).
+
+Plymouth itself runs from the initramfs, long before dconf/the user session exist, so it
+can't just read org.gnome.desktop.interface color-scheme at boot -- there's no live
+mechanism for that. Instead, this rewrites the *content* of the peachOS theme's own files
+(which watermark PNG is active, which background/progress-bar colors are baked into the
+.plymouth config) to match whatever the desktop was last set to, then re-embeds that into
+the initramfs -- so next boot shows whatever the desktop looked like the last time this
+ran, without Plymouth needing to know anything about GSettings at all.
+
+Usage: peachos-plymouth-sync dark|light
+"""
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+THEME_DIR = Path('/usr/share/plymouth/themes/peachos')
+CONFIG_FILE = THEME_DIR / 'peachos.plymouth'
+WATERMARK_FILE = THEME_DIR / 'watermark.png'
+STATE_FILE = THEME_DIR / '.mode'
+
+# BackgroundStartColor/EndColor: the full-screen fill. ProgressBarBackgroundColor/
+# ForegroundColor: the track / fill of the loading bar -- same subtle "barely-there track,
+# solid fill" relationship in both modes, just inverted.
+MODES = {
+    'dark': {
+        'watermark': 'watermark-dark.png',   # white peach mark
+        'BackgroundStartColor': '0x000000',
+        'BackgroundEndColor': '0x000000',
+        'ProgressBarBackgroundColor': '0x2e2e2e',
+        'ProgressBarForegroundColor': '0xffffff',
+    },
+    'light': {
+        'watermark': 'watermark-light.png',  # black peach mark
+        'BackgroundStartColor': '0xffffff',
+        'BackgroundEndColor': '0xffffff',
+        'ProgressBarBackgroundColor': '0xd8d8d8',
+        'ProgressBarForegroundColor': '0x000000',
+    },
+}
+
+
+def _rewrite_config(text, values):
+    for key in ('BackgroundStartColor', 'BackgroundEndColor',
+                'ProgressBarBackgroundColor', 'ProgressBarForegroundColor'):
+        text = re.sub(rf'^{key}=.*$', f'{key}={values[key]}', text, count=1, flags=re.MULTILINE)
+    return text
+
+
+def main():
+    if len(sys.argv) != 2 or sys.argv[1] not in MODES:
+        print(__doc__, file=sys.stderr)
+        return 1
+    mode = sys.argv[1]
+    values = MODES[mode]
+
+    if STATE_FILE.exists() and STATE_FILE.read_text().strip() == mode:
+        return 0  # already in sync -- skip the (slow) initramfs rebuild
+
+    config_text = CONFIG_FILE.read_text()
+    CONFIG_FILE.write_text(_rewrite_config(config_text, values))
+
+    watermark_src = THEME_DIR / values['watermark']
+    WATERMARK_FILE.write_bytes(watermark_src.read_bytes())
+
+    STATE_FILE.write_text(mode)
+
+    subprocess.run(['update-initramfs', '-u'], check=True)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

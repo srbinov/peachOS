@@ -97,6 +97,42 @@ for f in "$REPO_DIR"/assets/app-icons/darkmode/*.svg; do
     install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
 done
 
+# Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
+# -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top
+# bar's own KiwiMenuButton uses at index 19, kiwimenu.js/icons.json) centered above a simple
+# progress bar, no spinner, no text. Its own dark/light variant PNGs (watermark-dark.png,
+# watermark-light.png) and the two-step config both ship in the repo; the small set of
+# password-dialog assets two-step also expects (entry/lock/capslock/bullet/keymap-render)
+# are reused as-is from plymouth-theme-spinner rather than duplicated into this repo, since
+# they're stock Plymouth artwork this theme doesn't customize.
+echo "==> Installing peachOS boot splash (Plymouth theme) -> /usr/share/plymouth/themes/peachos"
+apt-get install -y --no-install-recommends plymouth-theme-spinner
+install -d /usr/share/plymouth/themes/peachos
+install -Dm644 "$REPO_DIR/apps/plymouth/theme/peachos.plymouth" /usr/share/plymouth/themes/peachos/peachos.plymouth
+install -Dm644 "$REPO_DIR/apps/plymouth/theme/watermark-dark.png" /usr/share/plymouth/themes/peachos/watermark-dark.png
+install -Dm644 "$REPO_DIR/apps/plymouth/theme/watermark-light.png" /usr/share/plymouth/themes/peachos/watermark-light.png
+for f in entry.png lock.png capslock.png bullet.png keymap-render.png; do
+    install -Dm644 "/usr/share/plymouth/themes/spinner/$f" "/usr/share/plymouth/themes/peachos/$f"
+done
+
+install -d /usr/lib/peachos/plymouth
+install -Dm755 "$REPO_DIR/apps/plymouth/peachos-plymouth-sync" /usr/lib/peachos/plymouth/peachos-plymouth-sync
+
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
+    /usr/share/plymouth/themes/peachos/peachos.plymouth 100
+update-alternatives --set default.plymouth /usr/share/plymouth/themes/peachos/peachos.plymouth
+
+# Seeds the theme's own watermark.png/colors and bakes them into the initramfs (see
+# peachos-plymouth-sync's own docstring for why Plymouth can't just read the desktop's
+# color-scheme itself at boot). Unconditionally "dark" here rather than reading the
+# installing user's live color-scheme -- matches the feature's own explicit spec (black
+# screen by default) and doesn't depend on dconf/dbus being reachable from a provisioning
+# script the way a live desktop session's own toggle (appearance_page.py's
+# _sync_plymouth_theme(), called from then on) can assume. update-initramfs only needs to
+# run once here even though the script normally does it on every real change, since this is
+# the very first run and there's nothing yet to compare against.
+/usr/lib/peachos/plymouth/peachos-plymouth-sync dark
+
 # Same idea for Clear mode -- a smaller set (peachos_icon_clear.py's own algorithm was
 # calibrated against these exact three files, see that module's docstring).
 install -d /usr/share/icons/peachos-clearmode-src
