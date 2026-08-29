@@ -45,7 +45,17 @@ from peachos_icon_dark import apply_dark_mode, is_already_dark
 from peachos_icon_mask import load_pixbuf_as_pil
 from peachos_icon_resolve import resolve_curated_clear, resolve_curated_dark, resolve_icon
 
-SYSTEM_DIRS = ['/usr/share/applications', '/var/lib/snapd/desktop/applications']
+# Flatpak's own export dir added here (it wasn't originally): Calendar/Text Editor/Weather
+# etc. only ever exist as Flatpaks, with their REAL desktop file living only here or under a
+# per-user override -- neither of which used to be scanned at all, so none of them were ever
+# considered a candidate for dark/clear mode, curated or generated, regardless of anything
+# in peachos_icon_resolve.py. Real bug this hit: switching to Dark Mode silently did nothing
+# for any Flatpak app. Order matters -- see the seen_names loop below.
+SYSTEM_DIRS = [
+    '/usr/share/applications',
+    '/var/lib/snapd/desktop/applications',
+    '/var/lib/flatpak/exports/share/applications',
+]
 
 USER_APPS_DIR = Path.home() / '.local/share/applications'
 USER_ICON_DIR = Path.home() / '.local/share/icons'
@@ -54,6 +64,10 @@ ICON_LINE_RE = re.compile(r'^Icon=(.*)$')
 OVERRIDE_MARKER = 'X-PeachOS-AppearanceOverride=true\n'
 LEGACY_OVERRIDE_MARKER = 'X-PeachOS-DarkOverride=true\n'  # pre-'clear' marker, still on disk
 MAX_WORKERS = 8
+
+# Suffix for a permanent-curation backup -- see _write_override()'s own docstring for why
+# this exists.
+PERMANENT_BACKUP_SUFFIX = '.peachos-original'
 
 
 def slug_for(desktop_path):
@@ -126,6 +140,26 @@ def _make_icon(style, icon_dir, desktop_path, icon):
 
 
 def _write_override(desktop_path, out_path):
+    """Writes the styled override to USER_APPS_DIR -- but first, if a file already sits at
+    that exact path AND carries neither marker, it's not one of our own prior outputs: it's
+    a *permanent* hand-curated override (e.g. Calendar/Text Editor's own iCloud icons, which
+    exist as per-user overrides purely to win XDG priority over their Flatpak's own generic
+    icon -- see provision.sh/git history). Overwriting that unconditionally, the way this
+    used to work, meant apply_default() would later delete it outright (it now carries the
+    override marker) with no way back -- the permanent curation was just gone, not restored.
+    Snapshotting it once, the first time this ever touches that path, is what apply_default()
+    restores from instead of deleting into a gap.
+    """
+    target = USER_APPS_DIR / desktop_path.name
+    backup = target.with_name(target.name + PERMANENT_BACKUP_SUFFIX)
+    if target.exists() and not backup.exists():
+        try:
+            existing = target.read_text(encoding='utf-8', errors='replace')
+            if OVERRIDE_MARKER.strip() not in existing and LEGACY_OVERRIDE_MARKER.strip() not in existing:
+                backup.write_text(existing, encoding='utf-8')
+        except OSError:
+            pass  # worst case: no snapshot, falls back to today's delete-on-default behavior
+
     try:
         lines = desktop_path.read_text(encoding='utf-8', errors='replace').splitlines(keepends=True)
     except OSError as e:
@@ -152,7 +186,31 @@ def _write_override(desktop_path, out_path):
     lines.insert(entry_end, OVERRIDE_MARKER)
 
     USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
-    (USER_APPS_DIR / desktop_path.name).write_text(''.join(lines), encoding='utf-8')
+    target.write_text(''.join(lines), encoding='utf-8')
+    return None
+
+
+def _permanent_curated_icon(desktop_name):
+    """If a permanent hand-curated override already sits in USER_APPS_DIR for this exact
+    desktop-id (e.g. Calendar/Text Editor's own iCloud icons -- see _write_override()'s own
+    docstring for what makes an override "permanent" vs. one of our own prior outputs),
+    return ITS Icon= value. Without this, dark/clear mode would resolve the candidate's own
+    stock Icon= instead (read from the Flatpak's own export, which _write_override() only
+    ever treats as an output target, never consults for input) -- generating a dark version
+    of the app's generic stock icon nobody actually sees, instead of the one the user does.
+    Real bug this hit: Calendar/Text Editor's dark icons were GNOME's own stock designs,
+    not the curated iCloud Calendar/Notes art their light mode actually shows.
+    """
+    target = USER_APPS_DIR / desktop_name
+    try:
+        text = target.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return None
+    if OVERRIDE_MARKER.strip() in text or LEGACY_OVERRIDE_MARKER.strip() in text:
+        return None  # one of our own prior outputs, not a permanent curation -- ignore
+    for line in text.splitlines():
+        if (m := ICON_LINE_RE.match(line)):
+            return m.group(1).strip()
     return None
 
 
@@ -174,10 +232,19 @@ def apply_style(style):
         for desktop_path in Path(d).glob('*.desktop'):
             if desktop_path.name in seen_names:
                 continue
-            seen_names.add(desktop_path.name)
             icon, is_app, no_display = read_meta(desktop_path)
             if not is_app or no_display or not icon:
+                # NOT marked seen here (below the dedup line is the real fix) -- e.g. Text
+                # Editor exists both as a NoDisplay'd native apt package (see provision.sh,
+                # kept installed only as a base-image dependency) AND the real, curated
+                # Flatpak this project actually uses. The old code marked a name seen the
+                # moment ANY file with that name was found, even one that fails these
+                # checks and was never actually added as a candidate -- so the native
+                # entry's own NoDisplay wrongly blocked the real Flatpak entry (checked
+                # after it, per SYSTEM_DIRS order) from ever being seen at all.
                 continue
+            icon = _permanent_curated_icon(desktop_path.name) or icon
+            seen_names.add(desktop_path.name)
             candidates.append((desktop_path, icon))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -205,16 +272,32 @@ def apply_default():
     if not USER_APPS_DIR.is_dir():
         return
     removed = 0
+    restored = 0
     for f in USER_APPS_DIR.glob('*.desktop'):
         try:
             text = f.read_text(encoding='utf-8', errors='replace')
             if OVERRIDE_MARKER.strip() in text or LEGACY_OVERRIDE_MARKER.strip() in text:
-                f.unlink()
-                removed += 1
+                # A permanent hand-curated override (see _write_override()'s own docstring)
+                # gets restored, not just deleted into a gap that falls through to whatever
+                # generic icon the app itself ships -- that's correct for an app with no
+                # permanent curation, but wrong for e.g. Calendar/Text Editor, whose only
+                # correct "default" icon IS this file, not their Flatpak's own stock one.
+                backup = f.with_name(f.name + PERMANENT_BACKUP_SUFFIX)
+                if backup.exists():
+                    backup.replace(f)
+                    restored += 1
+                else:
+                    f.unlink()
+                    removed += 1
         except OSError:
             continue
-    if removed:
-        print(f'  removed {removed} icon-appearance override(s)')
+    if removed or restored:
+        bits = []
+        if removed:
+            bits.append(f'removed {removed}')
+        if restored:
+            bits.append(f'restored {restored} permanent curation(s)')
+        print(f'  {", ".join(bits)}')
     subprocess.run(['update-desktop-database', str(USER_APPS_DIR)], check=False)
 
 

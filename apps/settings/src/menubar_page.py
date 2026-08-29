@@ -66,6 +66,9 @@ class MenuBarPage(Gtk.Box):
             'Wi-Fi', 'wifi.svg', 'network-wireless-symbolic', 'show-wifi-icon'))
         controls_card.append(self._build_checkbox_row(
             'Bluetooth', 'bluetooth.svg', 'bluetooth-symbolic', 'show-bluetooth-icon'))
+        controls_card.append(self._build_checkbox_row(
+            'Match Touching Window Color', 'menubar.svg', 'open-menu-symbolic',
+            'window-color-blend-enabled'))
         controls_card.append(self._build_battery_row())
         self.append(controls_card)
 

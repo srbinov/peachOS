@@ -343,6 +343,175 @@ echo "==> Installing peachOS App Launcher (Launchpad) desktop entry"
 cp "$REPO_DIR/apps/applauncher/peachos-applauncher.desktop" /usr/share/applications/
 update-desktop-database /usr/share/applications
 
+# LocalSend (Flathub, github.com/localsend/localsend -- an open-source cross-platform
+# AirDrop alternative, opened from the Control Center's airdrop circle -- see
+# macOS-TopBar-Gnome's controlCenterIndicator.js). Flathub over a vendored .deb: always
+# current, no binary to keep re-vendoring into this repo for every release.
+#
+# Unlike Firefox/BlueBubbles/App Center above (all snaps), this is a Flatpak -- Flathub's
+# own exported desktop file + icon take priority over /usr/share/applications in
+# XDG_DATA_DIRS (the *reverse* of snap's priority order), so the usual override-in-
+# /usr/share/applications trick silently loses here. $XDG_DATA_HOME (~/.local/share) is
+# implicitly checked before every XDG_DATA_DIRS entry, including Flatpak's own export
+# dirs, which is why the override goes to ~/.local/share/applications per user instead.
+#
+# "per user" for real this time, not just whoever's logged in during provisioning: written
+# to /etc/skel (so any account created after this runs gets it automatically, same as the
+# dconf defaults below already do) AND backfilled for every real account already on the
+# machine, since an existing user's home was already copied from the OLD /etc/skel before
+# this file existed in it.
+echo "==> Installing LocalSend (Flathub) -> curated AirDrop-style icon"
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install -y --system --noninteractive flathub org.localsend.localsend_app
+
+install -Dm644 "$REPO_DIR/assets/app-icons/localsend.svg" /usr/share/icons/peachos/localsend.svg
+install -Dm644 "$REPO_DIR/assets/app-icons/darkmode/localsend.svg" /usr/share/icons/peachos-darkmode-src/localsend.svg
+
+write_localsend_override() {
+    local apps_dir="$1/.local/share/applications"
+    mkdir -p "$apps_dir"
+    cat > "$apps_dir/org.localsend.localsend_app.desktop" <<'EOF'
+[Desktop Entry]
+Name=LocalSend
+Comment=Share files to nearby devices
+Exec=/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=localsend --file-forwarding org.localsend.localsend_app @@u %U @@
+Icon=/usr/share/icons/peachos/localsend.svg
+Terminal=false
+Type=Application
+Categories=GTK;FileTransfer;Utility;
+Keywords=Sharing;LAN;Files;
+StartupNotify=true
+X-Flatpak=org.localsend.localsend_app
+EOF
+}
+
+write_localsend_override /etc/skel
+
+# UID 1000-59999 is the standard Debian/Ubuntu range for real (non-system, non-service)
+# accounts -- everything outside it (root, daemon users, etc.) has no business getting a
+# desktop launcher written into it.
+while IFS=: read -r account _ uid _ _ homedir _; do
+    if [[ "$uid" -ge 1000 && "$uid" -lt 60000 && -d "$homedir" ]]; then
+        write_localsend_override "$homedir"
+        chown -R "$account:$account" "$homedir/.local/share/applications"
+    fi
+done < <(getent passwd)
+
+# Image Viewer (Loupe, apt-installed): same treatment as Sidra above -- a real, pre-styled
+# curated icon (assets/app-icons/imageviewer.svg), Icon= repointed at the absolute path so
+# peachos-icon-watcherd's resolve_icon() sees CATEGORY_OWN and never touches it. Lives
+# directly in /usr/share/applications (a normal apt package, not a snap/flatpak), so this
+# is the simple in-place sed rewrite, not the per-user override LocalSend needed above. Dark
+# variant (assets/app-icons/darkmode/imageviewer.svg) is picked up by the generic darkmode/
+# glob loop near the top of this script + its own CURATED_DARK_SLUGS entry -- nothing else
+# to do here for it.
+echo "==> Installing Image Viewer (Loupe) -> curated icon"
+install -Dm644 "$REPO_DIR/assets/app-icons/imageviewer.svg" /usr/share/icons/peachos/imageviewer.svg
+sed -i "s|^Icon=.*|Icon=/usr/share/icons/peachos/imageviewer.svg|; /^X-PeachOS-OriginalIcon=/d" \
+    /usr/share/applications/org.gnome.Loupe.desktop
+update-desktop-database /usr/share/applications
+
+# Calculator (gnome-calculator, part of the base Ubuntu desktop image -- nothing to install
+# here): no curated light icon, it keeps whatever peachos-icon-watcherd's own generic
+# padding pass already gives it. Dark mode is still curated though -- CURATED_DARK_SLUGS
+# keys off that padded output's own path, which is deterministic (slug_for() hashes the
+# *desktop file's* path, not its content -- see peachos_icon_resolve.py's own comment on
+# this entry), so it's stable across every machine without any provisioning step at all.
+
+# Text Editor (gnome-text-editor, also part of the base Ubuntu image): NoDisplay'd so the
+# real, curated Flatpak version (added separately, if ever) is the only "Text Editor" a
+# user ever sees -- otherwise this native copy collides on the exact same desktop-file ID
+# and peachos-icon-appearance silently overwrites whichever curated override exists with
+# this one's own icon (a real bug this hit once already -- see git history).
+sed -i '/^\[Desktop Entry\]/a NoDisplay=true' /usr/share/applications/org.gnome.TextEditor.desktop
+update-desktop-database /usr/share/applications
+
+# GNOME Weather (Flathub): same story as Calculator above -- no curated light icon, keeps
+# whatever peachos-icon-watcherd's padding pass gives it, dark mode is curated via
+# CURATED_DARK_SLUGS. Flatpak, though, so unlike Calculator it needs an explicit copy in
+# /usr/share/applications: peachos-icon-appearance/-icon-watcherd only ever scan there (+
+# snapd's own dir) for *candidates*, never Flatpak's own export dir or any per-user path --
+# without this copy neither script can ever find Weather to process it at all.
+echo "==> Installing GNOME Weather (Flathub)"
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install -y --system --noninteractive flathub org.gnome.Weather
+
+cat > /usr/share/applications/org.gnome.Weather.desktop <<'EOF'
+[Desktop Entry]
+Name=Weather
+Comment=Show weather conditions and forecast
+Exec=/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=gapplication org.gnome.Weather launch org.gnome.Weather
+Icon=org.gnome.Weather
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;Utility;
+X-Flatpak=org.gnome.Weather
+EOF
+update-desktop-database /usr/share/applications
+
+# AirMirror (github.com/srbinov/airmirror -- our own GTK4/libadwaita AirPlay-mirroring
+# receiver, wrapping UxPlay's engine). Cloned to /opt (matching Sidra's own /opt/Sidra
+# convention) rather than any one user's home -- its own scripts/install.sh writes a
+# launcher that hardcodes a reference back to wherever the clone lives, so /opt has to
+# survive regardless of which account eventually runs it.
+echo "==> Installing AirMirror (AirPlay receiver) -> /opt/airmirror"
+apt-get install -y --no-install-recommends uxplay avahi-daemon gstreamer1.0-gtk4 \
+    gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
+    python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-gstreamer-1.0 \
+    gir1.2-gst-plugins-base-1.0
+systemctl enable --now avahi-daemon
+
+rm -rf /opt/airmirror
+git clone --quiet https://github.com/srbinov/airmirror.git /opt/airmirror
+chmod +x /opt/airmirror/bin/mirror /opt/airmirror/scripts/install.sh /opt/airmirror/scripts/uninstall.sh
+chown -R root:root /opt/airmirror
+chmod -R a+rX /opt/airmirror
+
+install -Dm644 "$REPO_DIR/assets/app-icons/airmirror.svg" /usr/share/icons/peachos/airmirror.svg
+
+# scripts/install.sh is per-user by design (writes $HOME/.local/bin, .../applications,
+# .../icons/hicolor) -- HOME is overridden per target rather than reimplementing its own
+# logic, so this stays in sync automatically if install.sh ever changes upstream. Icon=
+# gets repointed at our curated art afterward, same as every other curated app above.
+install_airmirror_for() {
+    local home_dir="$1" owner="$2"
+    HOME="$home_dir" bash /opt/airmirror/scripts/install.sh >/dev/null
+    sed -i "s|^Icon=.*|Icon=/usr/share/icons/peachos/airmirror.svg|" \
+        "$home_dir/.local/share/applications/app.mirror.Mirror.desktop"
+    if [[ -n "$owner" ]]; then
+        chown -R "$owner:$owner" "$home_dir/.local/bin" "$home_dir/.local/share/applications" \
+            "$home_dir/.local/share/icons"
+    fi
+}
+
+install_airmirror_for /etc/skel ""
+while IFS=: read -r account _ uid _ _ homedir _; do
+    if [[ "$uid" -ge 1000 && "$uid" -lt 60000 && -d "$homedir" ]]; then
+        install_airmirror_for "$homedir" "$account"
+    fi
+done < <(getent passwd)
+
+# Also needs a copy directly in /usr/share/applications, same reasoning as Weather above:
+# peachos-icon-appearance/-icon-watcherd can't see the per-user copies at all. Exec= here
+# is self-contained (mirrors bin/mirror's own generated wrapper) rather than assuming any
+# specific user's ~/.local/bin/mirror exists -- this copy's only real job is being visible
+# to those two scripts; actual launches always resolve to one of the higher-priority
+# per-user copies above instead.
+cat > /usr/share/applications/app.mirror.Mirror.desktop <<EOF
+[Desktop Entry]
+Name=Mirror
+Comment=AirPlay receiver for this computer
+Exec=/usr/bin/python3 -c "import sys; sys.path.insert(0, '/opt/airmirror'); from mirror.identity import apply; apply(); from mirror.app import main; raise SystemExit(main())"
+Path=/opt/airmirror
+Icon=/usr/share/icons/peachos/airmirror.svg
+Terminal=false
+Type=Application
+Categories=AudioVideo;Network;
+StartupNotify=true
+StartupWMClass=app.mirror.Mirror
+EOF
+update-desktop-database /usr/share/applications
+
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"

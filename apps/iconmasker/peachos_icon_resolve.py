@@ -63,6 +63,20 @@ CURATED_DARK_SLUGS = {
     ICONS_ROOT / 'peachos' / 'sidra.svg': 'sidra',
     ICONS_ROOT / 'peachos' / 'peachy.svg': 'peachy',
     ICONS_ROOT / 'peachos' / 'messages.svg': 'messages',
+    ICONS_ROOT / 'peachos' / 'localsend.svg': 'localsend',
+    ICONS_ROOT / 'peachos' / 'imageviewer.svg': 'imageviewer',
+    ICONS_ROOT / 'peachos' / 'airmirror.svg': 'airmirror',
+    # Calculator/Weather: no curated *light* icon was provided (dark-only additions), so
+    # these key off whatever the light mode already, actually resolves to -- Calculator's
+    # own MacTahoe source runs oversized, so peachos-icon-watcherd already padded it into
+    # its own peachos-auto output (a stable path -- see slug_for()'s docstring, it hashes
+    # the *desktop file's* path, not the icon content); Weather's MacTahoe source needed no
+    # padding, so it's still that source file untouched.
+    ICONS_ROOT / 'peachos-auto' / 'org.gnome.Calculator-943aa4c6.png': 'calculator',
+    # Same story as Calculator above: MacTahoe's own org.gnome.Weather.svg runs oversized,
+    # so peachos-icon-watcherd already padded it into peachos-auto once a system-wide
+    # /usr/share/applications/org.gnome.Weather.desktop existed for it to notice.
+    ICONS_ROOT / 'peachos-auto' / 'org.gnome.Weather-d4e1f354.png': 'weather',
 }
 
 

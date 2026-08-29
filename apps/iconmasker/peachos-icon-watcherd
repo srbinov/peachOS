@@ -124,6 +124,11 @@ def rewrite_icon_line(desktop_path, new_icon_path, original_icon_value):
     # can be regenerated from the real source later, instead of being stuck pointing at
     # nothing forever -- self-healing needs a way back to the original.
     if not original_present:
+        # A desktop file whose last line lacked a trailing newline (some packages ship
+        # them that way) would otherwise get this line glued onto the end of that one --
+        # e.g. "StartupNotify=trueX-PeachOS-OriginalIcon=..." -- silently corrupting both.
+        if entry_end > 0 and not lines[entry_end - 1].endswith('\n'):
+            lines[entry_end - 1] += '\n'
         lines.insert(entry_end, f'X-PeachOS-OriginalIcon={original_icon_value}\n')
 
     try:

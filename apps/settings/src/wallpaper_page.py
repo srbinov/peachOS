@@ -69,6 +69,7 @@ DYNAMIC_WALLPAPERS = [
 # a presets/ subdirectory of the same wallpaper dir so provisioning can keep
 # treating "the wallpaper dir" as one thing.
 PRESET_WALLPAPERS = [
+    ('Nectar Island', 'nectar_island.jpg'),
     ('Tahoe Beach (Dawn)', 'tahoe_beach_dawn.jpg'),
     ('Tahoe Beach (Day)', 'tahoe_beach_day.jpg'),
     ('Tahoe Beach (Dusk)', 'tahoe_beach_dusk.jpg'),

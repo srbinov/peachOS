@@ -78,6 +78,140 @@ def _apply_css(widget: Gtk.Widget, css: str):
     widget.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
+# ---- Liquid Glass intensity ---------------------------------------------------------
+#
+# Mirrors macOS-TopBar-Gnome/lib/liquidGlassIntensity.js's interpolation exactly (same
+# solid targets, same recipe values, same linear blend) so this preview shows the real
+# math the extension itself uses, not an approximation. See that file for the full
+# rationale -- at intensity 100 this is the shared glass recipe already in
+# stylesheet.css, unchanged; at 0 it's fully solid (white in light mode, a dark
+# macOS-style surface gray in dark mode); everything between is a straight blend.
+LIQUID_GLASS_SOLID_LIGHT = (255, 255, 255)
+LIQUID_GLASS_SOLID_DARK = (28, 28, 30)
+
+# Same values as stylesheet.css's shared glass recipe block.
+LIQUID_GLASS_RECIPE = {
+    'fill': (255, 255, 255, 0.12),
+    'gradient_start': (255, 255, 255, 0.28),
+    'gradient_end': (255, 255, 255, 0.08),
+    'border': (255, 255, 255, 0.42),
+    'shadow': (255, 255, 255, 0.5),
+}
+
+
+def _glass_lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
+
+
+def _glass_interpolate(base_rgba, intensity: int, is_dark: bool, solid_alpha: float = 1.0):
+    t = max(0, min(100, intensity)) / 100
+    solid = LIQUID_GLASS_SOLID_DARK if is_dark else LIQUID_GLASS_SOLID_LIGHT
+    r, g, b, a = base_rgba
+    return (
+        round(_glass_lerp(solid[0], r, t)),
+        round(_glass_lerp(solid[1], g, t)),
+        round(_glass_lerp(solid[2], b, t)),
+        _glass_lerp(solid_alpha, a, t),
+    )
+
+
+def _glass_rgba(c) -> str:
+    r, g, b, a = c
+    return f'rgba({r}, {g}, {b}, {round(a, 3)})'
+
+
+class LiquidGlassPreview(Gtk.Box):
+    """A sample notification card, live-restyled as the slider moves, so the effect is
+    visible immediately without needing a real notification to fire. The backdrop is a
+    plain CSS gradient, not a photo -- an earlier version used one of the demo photos
+    behind a Gtk.Overlay, which rendered visibly broken (stray artifacts bleeding
+    through). A CSS gradient on this same box needs no Overlay/Picture/SVG-rasterizing
+    at all, just something varied enough behind the card to actually show translucency
+    against, which is the only reason a backdrop is here at all."""
+
+    def __init__(self):
+        super().__init__(css_classes=['liquid-glass-preview'])
+        self.set_size_request(-1, 108)
+        self.set_overflow(Gtk.Overflow.HIDDEN)
+
+        self._card = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+            valign=Gtk.Align.CENTER, halign=Gtk.Align.FILL,
+            hexpand=True,
+            css_classes=['liquid-glass-preview-card'],
+        )
+        # Matches the real .notification-banner's own proportions (stylesheet.css in
+        # macOS-TopBar-Gnome): min-height 42px, and the app icon there is explicitly
+        # 20% bigger than MacTahoe's stock 48px (-> 58px) -- both mirrored here so this
+        # preview is a real match, not just an approximation with its own made-up sizes.
+        self._card.set_margin_top(8)
+        self._card.set_margin_bottom(8)
+        self._card.set_margin_start(12)
+        self._card.set_margin_end(16)
+
+        # Same curated icon BlueBubbles itself uses (its default/light-mode variant) --
+        # a real sample notification, not a generic placeholder glyph.
+        messages_gicon = Gio.icon_new_for_string(os.path.join(ICON_DIR, 'messages_preview.svg'))
+        self._icon = Gtk.Image.new_from_gicon(messages_gicon)
+        self._icon.set_pixel_size(58)
+        self._card.append(self._icon)
+
+        text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, valign=Gtk.Align.CENTER)
+        self._title_label = Gtk.Label(label='Messages', xalign=0)
+        self._body_label = Gtk.Label(label='This is what a notification looks like', xalign=0)
+        self._body_label.set_ellipsize(Pango.EllipsizeMode.END)
+        text_col.append(self._title_label)
+        text_col.append(self._body_label)
+        self._card.append(text_col)
+
+        self.append(self._card)
+
+        self._provider = Gtk.CssProvider()
+        for widget in (self, self._card, self._title_label, self._body_label):
+            widget.get_style_context().add_provider(self._provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def update(self, intensity: int, is_dark: bool):
+        backdrop = (
+            'linear-gradient(135deg, #2c2450, #6a3a8f, #b3487a)' if is_dark
+            else 'linear-gradient(135deg, #ffd36e, #ff8a5c, #ff5e7a)'
+        )
+
+        fill = _glass_interpolate(LIQUID_GLASS_RECIPE['fill'], intensity, is_dark)
+        gradient_start = _glass_interpolate(LIQUID_GLASS_RECIPE['gradient_start'], intensity, is_dark)
+        gradient_end = _glass_interpolate(LIQUID_GLASS_RECIPE['gradient_end'], intensity, is_dark)
+        border = _glass_interpolate(LIQUID_GLASS_RECIPE['border'], intensity, is_dark, solid_alpha=0.18)
+        shadow = _glass_interpolate(LIQUID_GLASS_RECIPE['shadow'], intensity, is_dark, solid_alpha=0.0)
+        # MacTahoe's own theme already pairs dark notification text with its light variant
+        # and light text with its dark variant (same pairing our solid light/dark targets
+        # above are designed around) -- matched here rather than interpolated, since text
+        # only ever needs to be readable against whichever solid target intensity is
+        # heading toward, not blended itself.
+        text_color = '#f5f5f7' if is_dark else '#242424'
+        body_color = 'rgba(245, 245, 247, 0.75)' if is_dark else 'rgba(36, 36, 36, 0.75)'
+
+        css = f"""
+        .liquid-glass-preview {{
+            background-image: {backdrop};
+            border-radius: 12px;
+        }}
+        .liquid-glass-preview-card {{
+            background-color: {_glass_rgba(fill)};
+            background-image: linear-gradient(to bottom, {_glass_rgba(gradient_start)}, {_glass_rgba(gradient_end)});
+            border: 1px solid {_glass_rgba(border)};
+            border-radius: 14px;
+            box-shadow: inset 0 1px 0 {_glass_rgba(shadow)};
+        }}
+        .liquid-glass-preview-card label:first-child {{
+            color: {text_color};
+            font-weight: bold;
+        }}
+        .liquid-glass-preview-card label:last-child {{
+            color: {body_color};
+        }}
+        """
+        self._provider.load_from_data(css.encode())
+
+
 class SchemeOption(Gtk.Box):
     """A photo tile + label below it. Plain Box, not a Gtk.ToggleButton --
     same reasoning as ColorSwatch below: the active GTK theme's baked-in
@@ -218,15 +352,37 @@ class AppearancePage(Gtk.Box):
 
         self._settings = Gio.Settings.new('org.gnome.desktop.interface')
         self._appearance_settings = Gio.Settings.new('org.peachos.appearance')
+        # Same schema id menubar_page.py already uses Gio.Settings.new() against directly
+        # (it's in the global schema registry on a real peachOS install) -- matching that
+        # instead of widgets.py's load_extension_settings() helper for consistency.
+        self._panel_settings = Gio.Settings.new('org.gnome.shell.extensions.macos-top-panel')
+        # User Themes (already vendored/enabled in peachOS -- extensions/user-theme@...) is
+        # what actually decides which gnome-shell.css the Shell loads. Real gap found
+        # investigating "dropdown menus don't respect dark mode": this key was NEVER wired
+        # to color-scheme, so the Shell always loaded MacTahoe-Light regardless of dark
+        # mode -- only GTK/libadwaita apps (which follow color-scheme directly) ever looked
+        # dark. _sync_shell_theme() below keeps it in lockstep with color-scheme from here
+        # on; only affects genuine system-styled popups (like the top-left/global menu's
+        # dropdowns) since this project's own Control Center/notifications already do their
+        # own explicit light/dark overrides instead of relying on the shell theme at all.
+        self._user_theme_settings = Gio.Settings.new('org.gnome.shell.extensions.user-theme')
         self._icon_style_busy = False
+
+        # Correct any pre-existing desync on open (e.g. dark mode was already on before
+        # this sync existed) rather than only fixing it forward from the next toggle.
+        self._sync_shell_theme(self._settings.get_string('color-scheme') == 'prefer-dark')
 
         self._build_ui()
 
         self._settings.connect('changed::color-scheme', lambda *_: self._refresh_all_selection())
+        self._settings.connect('changed::color-scheme', lambda *_: self._refresh_liquid_glass_preview())
         self._settings.connect('changed::accent-color', lambda *_: self._refresh_all_selection())
         self._appearance_settings.connect('changed::icon-style', lambda *_: self._refresh_icon_style_selection())
+        self._panel_settings.connect(
+            'changed::liquid-glass-intensity', lambda *_: self._refresh_liquid_glass_preview())
         self._refresh_all_selection()
         self._refresh_icon_style_selection()
+        self._refresh_liquid_glass_preview()
 
     def _build_ui(self):
         self.append(make_hero_header(
@@ -296,6 +452,37 @@ class AppearancePage(Gtk.Box):
         icon_style_card.append(icon_style_row)
         self.append(icon_style_card)
 
+        self.append(Gtk.Label(label='Liquid Glass', xalign=0, css_classes=['heading'], margin_start=4))
+
+        # Controls the Control Center, Notification Center, and notification banners'
+        # translucency -- not the dock, which has its own separate liquid-glass-mode
+        # concept in macOS-Dock-2026-peachOS. 100 (max, the slider's own default) is the
+        # original translucent look; 0 is fully solid/opaque. See
+        # macOS-TopBar-Gnome/lib/liquidGlassIntensity.js for the shared interpolation math
+        # this preview mirrors exactly.
+        glass_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0, css_classes=['wifi-card'])
+
+        glass_preview_wrap = Gtk.Box(margin_start=14, margin_end=14, margin_top=14)
+        self._liquid_glass_preview = LiquidGlassPreview()
+        glass_preview_wrap.append(self._liquid_glass_preview)
+        glass_card.append(glass_preview_wrap)
+
+        glass_slider_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+            margin_start=14, margin_end=14, margin_top=12, margin_bottom=14,
+        )
+        glass_slider_row.append(Gtk.Label(label='Solid', css_classes=['dim-label']))
+        self._liquid_glass_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self._liquid_glass_scale.set_draw_value(False)
+        self._liquid_glass_scale.set_hexpand(True)
+        self._liquid_glass_scale.set_value(self._panel_settings.get_int('liquid-glass-intensity'))
+        self._liquid_glass_scale.connect('value-changed', self._on_liquid_glass_scale_changed)
+        glass_slider_row.append(self._liquid_glass_scale)
+        glass_slider_row.append(Gtk.Label(label='Liquid Glass', css_classes=['dim-label']))
+        glass_card.append(glass_slider_row)
+
+        self.append(glass_card)
+
         self.append(Gtk.Label(label='Fonts', xalign=0, css_classes=['heading'], margin_start=4))
 
         font_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
@@ -356,8 +543,16 @@ class AppearancePage(Gtk.Box):
 
     def _on_scheme_clicked(self, option):
         value = 'default' if option is self._light_option else 'prefer-dark'
+        is_dark = value == 'prefer-dark'
         self._settings.set_string('color-scheme', value)
+        self._sync_shell_theme(is_dark)
         self._refresh_scheme_selection()
+
+    def _sync_shell_theme(self, is_dark):
+        try:
+            self._user_theme_settings.set_string('name', 'MacTahoe-Dark' if is_dark else 'MacTahoe-Light')
+        except GLib.Error:
+            pass  # User Themes extension not present/enabled -- nothing to sync.
 
     def _refresh_scheme_selection(self):
         is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
@@ -460,3 +655,17 @@ class AppearancePage(Gtk.Box):
         ring_hex = ACCENT_HEX.get(self._settings.get_string('accent-color'), '#0461BE')
         for style_id, option in self._icon_style_options.items():
             option.set_selected(style_id == active, ring_hex)
+
+    # ---- Liquid Glass ----------------------------------------------------
+
+    def _on_liquid_glass_scale_changed(self, scale):
+        intensity = round(scale.get_value())
+        self._panel_settings.set_int('liquid-glass-intensity', intensity)
+        self._refresh_liquid_glass_preview()
+
+    def _refresh_liquid_glass_preview(self):
+        intensity = self._panel_settings.get_int('liquid-glass-intensity')
+        if round(self._liquid_glass_scale.get_value()) != intensity:
+            self._liquid_glass_scale.set_value(intensity)
+        is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
+        self._liquid_glass_preview.update(intensity, is_dark)
