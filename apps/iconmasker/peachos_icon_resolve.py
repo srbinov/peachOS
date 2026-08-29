@@ -4,7 +4,10 @@ Pure filesystem lookup (no Gtk.IconTheme/Gdk.Display) so this works from a
 headless root systemd service with no session/display available. Follows
 the standard freedesktop Icon Theme Spec directory layout.
 """
+import re
 from pathlib import Path
+
+from peachos_icon_presets_registry import PRESETS
 
 ICON_THEME_SEARCH = ['MacTahoe', 'MacTahoe-dark', 'hicolor']
 ICON_SIZE_DIRS = ['scalable', '512x512', '256x256', '128x128', '96x96', '72x72', '64x64', '48x48', '32x32']
@@ -29,6 +32,12 @@ OWN_DIRS = [
     ICONS_ROOT / 'peachos-darkmode-src',
     ICONS_ROOT / 'peachos-clear',
     ICONS_ROOT / 'peachos-clearmode-src',
+    # Curated third-party app presets (peachos_icon_presets_registry.py) -- resolve_preset()
+    # already only ever points Icon= at one of these once matched by name, same as OWN_DIRS'
+    # other entries; needs to be here too so re-scanning an already-preset-applied .desktop
+    # file resolves it as CATEGORY_OWN (never touched again) instead of an unfamiliar path
+    # that would otherwise queue it for masking.
+    ICONS_ROOT / 'peachos-presets',
 ]
 
 # MacTahoe is curated art (never needs re-masking/re-coloring/re-shaping) but its own SVGs
@@ -78,6 +87,19 @@ CURATED_DARK_SLUGS = {
     # /usr/share/applications/org.gnome.Weather.desktop existed for it to notice.
     ICONS_ROOT / 'peachos-auto' / 'org.gnome.Weather-d4e1f354.png': 'weather',
 }
+
+# Third-party preset apps (peachos_icon_presets_registry.py) -- every one of them, not just
+# the apps with genuinely distinct dark art. assets/app-icons/presets/darkmode/<slug>.svg
+# always exists for every registered slug (a plain copy of the default when there's no real
+# dark variant -- see that dir's own build step), so this lookup always resolves to
+# *something* deterministic. That's deliberate: falling through to peachos-icon-appearance's
+# automatic dark-mode generator instead (what happens for any *uncurated* icon lacking an
+# entry here) would violate this project's own curation rule for these -- "no separate dark
+# art" is supposed to mean pixel-identical in both modes, not "guess a good enough tint".
+CURATED_DARK_SLUGS.update({
+    ICONS_ROOT / 'peachos-presets' / f'{_slug}.svg': _slug
+    for _slug in PRESETS
+})
 
 
 def resolve_curated_dark(source_path):
@@ -138,6 +160,44 @@ def _categorize(path):
     if _is_user_appearance_icon_dir(path):
         return CATEGORY_OWN
     return None
+
+
+# Curated presets for common third-party apps peachOS doesn't ship itself (browsers, chat
+# clients, dev tools, ...) but a user is likely to install later -- see
+# peachos_icon_presets_registry.py for the actual app list and how to add to it. Matched by
+# the installed app's own .desktop Name= field (peachos-icon-watcherd passes it in), not by
+# its Icon= value or file path the way OWN/THEME are -- unlike those two, a freshly-installed
+# app's icon obviously isn't sitting in one of our own curated directories yet, so there's no
+# path to categorize; the *name* is the only identifier that stays consistent across
+# packaging formats (apt/.deb, snap, Flatpak all set a sensible Name=, even when their
+# .desktop filenames and Icon= conventions differ wildly).
+PRESET_ICONS_DIR = ICONS_ROOT / 'peachos-presets'
+
+CATEGORY_PRESET = 'preset'
+
+
+def _normalize_name(name):
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
+
+PRESET_NAME_TO_SLUG = {
+    _normalize_name(name): slug
+    for slug, meta in PRESETS.items()
+    for name in meta['names']
+}
+
+
+def resolve_preset(name_value):
+    """Returns the Path to a curated preset PNG matching this .desktop file's Name= value,
+    or None if there isn't one (either no app in the registry has that name, or its preset
+    hasn't actually been generated/shipped yet -- see peachos_icon_preset_batch.py)."""
+    if not name_value:
+        return None
+    slug = PRESET_NAME_TO_SLUG.get(_normalize_name(name_value))
+    if slug is None:
+        return None
+    p = PRESET_ICONS_DIR / f'{slug}.svg'
+    return p if p.exists() else None
 
 
 def resolve_icon(icon_value):

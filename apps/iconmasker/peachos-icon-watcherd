@@ -29,7 +29,7 @@ from peachos_icon_mask import (
     load_pixbuf_as_pil, needs_masking, generate_squircle_icon,
     needs_padding_only, pad_icon_to_target,
 )
-from peachos_icon_resolve import resolve_icon, CATEGORY_OWN, CATEGORY_THEME
+from peachos_icon_resolve import resolve_icon, resolve_preset, CATEGORY_OWN, CATEGORY_THEME
 
 WATCH_DIRS = [
     '/usr/share/applications',
@@ -52,11 +52,30 @@ def slug_for(desktop_path):
     return f'{stem}-{digest}'
 
 
+NAME_LINE_RE = re.compile(r'^Name=(.*)$')  # bare Name= only -- NOT the localized Name[xx]=
+                                            # variants, which use the same "Name" prefix
+
+# Same two marker strings peachos-icon-appearance itself writes (OVERRIDE_MARKER/
+# LEGACY_OVERRIDE_MARKER there) to mark a .desktop file as ITS OWN deliberate dark/clear-mode
+# override, not this daemon's business -- duplicated here rather than imported since these
+# two scripts already each keep their own small format-detection constants (ICON_LINE_RE
+# etc.) independently. Real, reproducible bug this exists to fix: peachos-icon-appearance
+# writes its per-user override straight into ~/.local/share/applications, one of this
+# daemon's own WATCH_DIRS -- without this check, both the general resolve_icon() pipeline
+# AND (once presets existed) resolve_preset()'s own name match would see that write as an
+# unfamiliar Icon= value needing "fixing" and silently revert it, within this daemon's own
+# few-second debounce window. Symptom: switching to Dark mode shows the dark icon for a
+# couple seconds, then it reverts to light on its own.
+OVERRIDE_MARKER_RE = re.compile(r'^X-PeachOS-(?:Appearance|Dark)Override=true$')
+
+
 def read_icon_and_type(desktop_path):
     icon = None
     original_icon = None
+    name = None
     is_application = False
     no_display = False
+    has_override_marker = False
     try:
         with open(desktop_path, encoding='utf-8', errors='replace') as f:
             in_entry = False
@@ -75,6 +94,8 @@ def read_icon_and_type(desktop_path):
                     is_application = True
                 elif line.startswith('NoDisplay=true'):
                     no_display = True
+                elif OVERRIDE_MARKER_RE.match(line):
+                    has_override_marker = True
                 else:
                     m = ORIGINAL_ICON_LINE_RE.match(line)
                     if m:
@@ -83,9 +104,13 @@ def read_icon_and_type(desktop_path):
                     m = ICON_LINE_RE.match(line)
                     if m and icon is None:
                         icon = m.group(1).strip()
+                        continue
+                    m = NAME_LINE_RE.match(line)
+                    if m and name is None:
+                        name = m.group(1).strip()
     except OSError:
-        return None, None, False, False
-    return icon, original_icon, is_application, no_display
+        return None, None, None, False, False, False
+    return icon, original_icon, name, is_application, no_display, has_override_marker
 
 
 def rewrite_icon_line(desktop_path, new_icon_path, original_icon_value):
@@ -140,9 +165,12 @@ def rewrite_icon_line(desktop_path, new_icon_path, original_icon_value):
 
 
 def process_desktop_file(desktop_path):
-    icon_value, original_icon, is_application, no_display = read_icon_and_type(desktop_path)
+    icon_value, original_icon, name_value, is_application, no_display, has_override_marker = \
+        read_icon_and_type(desktop_path)
     if not is_application or no_display or not icon_value:
         return False
+    if has_override_marker:
+        return False  # peachos-icon-appearance's own file -- see OVERRIDE_MARKER_RE's doc
 
     out_path = OUTPUT_DIR / f'{slug_for(desktop_path)}.png'
     if icon_value == str(out_path):
@@ -151,6 +179,21 @@ def process_desktop_file(desktop_path):
         if not original_icon:
             return False  # generated file went missing and we have no way back to source
         icon_value = original_icon  # self-heal: regenerate from the real source icon
+
+    # Curated preset check, ahead of the general resolve_icon()/masking pipeline below --
+    # matched by this app's own Name= (see resolve_preset()'s own doc for why that's the
+    # identifier that actually stays consistent across apt/snap/Flatpak, unlike Icon=/the
+    # desktop file's path). Presets are already pre-masked squircle PNGs, so this just
+    # points Icon= straight at one, the same way a CATEGORY_OWN icon would already be
+    # pointing at its own curated file -- no masking pass needed.
+    preset_path = resolve_preset(name_value)
+    if preset_path is not None:
+        if icon_value == str(preset_path):
+            return False  # already applied
+        if rewrite_icon_line(desktop_path, preset_path, icon_value):
+            print(f'  preset {desktop_path.name if isinstance(desktop_path, Path) else desktop_path} -> {preset_path}')
+            return True
+        return False
 
     source_path, category = resolve_icon(icon_value)
     if source_path is None or category == CATEGORY_OWN:

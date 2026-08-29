@@ -214,9 +214,21 @@ def _is_full_bleed(img):
     return (w / CANVAS) > 0.85 and (h / CANVAS) > 0.85
 
 
-def squircle_icon_image(source_path, canvas=CANVAS):
+def squircle_icon_image(source_path, canvas=CANVAS, backdrop_color=None):
     """Same normalization generate_squircle_icon() writes to disk, returned
-    as an in-memory Image instead -- see pad_icon_image() for why."""
+    as an in-memory Image instead -- see pad_icon_image() for why.
+
+    backdrop_color: explicit (r, g, b[, a]) override, skipping
+    _dominant_backdrop_color()'s own auto-detection. Needed for flat,
+    single-tone brand marks (e.g. Simple Icons' SVGs) -- unlike a real
+    two-tone Apple glyph (a white envelope drawn ON its own blue), those
+    have no separate "backdrop hue" to sample: the glyph *is* the brand
+    color, so auto-detecting from it just reproduces roughly the same hue
+    for both glyph and backdrop and the icon nearly disappears into itself.
+    The real fix for that class of source is an explicit backdrop_color
+    (the brand's own published hex) paired with a white-recolored glyph --
+    see apps/iconmasker/peachos_icon_preset.py.
+    """
     src = load_pixbuf_as_pil(source_path, canvas)
 
     content_size = int(canvas * CONTENT_FILL)
@@ -227,7 +239,7 @@ def squircle_icon_image(source_path, canvas=CANVAS):
     else:
         bbox = src.split()[3].getbbox() or (0, 0, canvas, canvas)
         glyph = src.crop(bbox)
-        backdrop = Image.new('RGBA', (content_size, content_size), _dominant_backdrop_color(glyph))
+        backdrop = Image.new('RGBA', (content_size, content_size), backdrop_color or _dominant_backdrop_color(glyph))
         glyph_size = int(content_size * GLYPH_FILL)
         # scale-to-fit, not Image.thumbnail() -- thumbnail() only ever shrinks, so a small
         # source glyph (e.g. a logo drawn tiny within a large padded canvas) never actually
@@ -248,8 +260,8 @@ def squircle_icon_image(source_path, canvas=CANVAS):
     return out
 
 
-def generate_squircle_icon(source_path, out_path, canvas=CANVAS):
-    squircle_icon_image(source_path, canvas).save(out_path, 'PNG')
+def generate_squircle_icon(source_path, out_path, canvas=CANVAS, backdrop_color=None):
+    squircle_icon_image(source_path, canvas, backdrop_color).save(out_path, 'PNG')
 
 
 if __name__ == '__main__':

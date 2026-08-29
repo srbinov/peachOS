@@ -97,6 +97,24 @@ for f in "$REPO_DIR"/assets/app-icons/darkmode/*.svg; do
     install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
 done
 
+# Curated presets for common third-party apps (browsers, chat clients, dev tools, ...) a
+# user is likely to install later, not something peachOS ships itself -- see
+# apps/iconmasker/peachos_icon_presets_registry.py for the actual app list/matching names.
+# peachos-icon-watcherd matches a newly-installed app by its own .desktop Name= field and
+# points Icon= straight at one of these instead of running it through the masking pipeline.
+# darkmode/ always has one file per app registered in PRESETS, even when it's just a copy of
+# the default (see that dir's own build step) -- landing in the SAME peachos-darkmode-src
+# already populated above is what makes CURATED_DARK_SLUGS resolve every preset app
+# deterministically, never falling through to the automatic dark-mode generator meant for
+# uncurated icons.
+install -d /usr/share/icons/peachos-presets
+for f in "$REPO_DIR"/assets/app-icons/presets/*.svg; do
+    install -Dm644 "$f" "/usr/share/icons/peachos-presets/$(basename "$f")"
+done
+for f in "$REPO_DIR"/assets/app-icons/presets/darkmode/*.svg; do
+    install -Dm644 "$f" "/usr/share/icons/peachos-darkmode-src/$(basename "$f")"
+done
+
 # Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
 # -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top
 # bar's own KiwiMenuButton uses at index 19, kiwimenu.js/icons.json) centered above a simple
