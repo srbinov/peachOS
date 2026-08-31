@@ -1,0 +1,356 @@
+# peachOS — Agent Handoff
+
+**Written:** 2026-08-31, end of a long overnight session, in anticipation of the user getting a
+new laptop tomorrow, building a fresh ISO, and continuing work live on real hardware (possibly
+via a different agent/session at that point). Read this whole file before touching anything —
+it is trying to save you from re-discovering things the hard way.
+
+## What peachOS is
+
+A macOS-styled Linux distro built on Ubuntu 26.04 + GNOME Shell 50. Custom top bar (traffic
+lights, macOS-style menu, Control Center), a macOS-style dock, a custom lock screen, a
+from-scratch GTK4/libadwaita Settings app (never wraps or shells out to gnome-control-center —
+see "Hard rule" below), curated app icons, MacTahoe GTK/icon theming, and a Calamares-based
+installer. The dev/build machine (this sandbox, `/home/user`) runs the OS live for development;
+`penguins-eggs` remasters that exact live filesystem into a bootable ISO.
+
+**Repo:** `https://github.com/srbinov/peachOS` (main branch, everything pushed as of this
+writing). Satellite repos, each independently developed and periodically synced INTO
+`peachOS/extensions/`:
+- `~/macOS-TopBar-Gnome` → `extensions/macos-top-panel@local.dev/`
+- `~/macOS-Dock-2026-peachOS` → `extensions/macos-dock-2026-peachos@peachos/`
+- `~/perfect-lockscreen/perfect-lockscreen@chris` → `extensions/perfect-lockscreen@chris/`
+- `~/macOS_Tahoe_SYSICONS` (icon source assets)
+
+## Hard rule (user-stated, non-negotiable)
+
+**peachOS's own Settings app must NEVER shell out to gnome-control-center or any other legacy
+Ubuntu app.** Always build a native replacement, with full feature parity to whatever the
+legacy panel offered. This was violated in FIVE places as of last night (all fixed, see
+changelog) — if you find a sixth, fix it the same way: point it at `peachos-settings <page-id>`
+instead, and audit the destination page for actual feature completeness while you're there
+(don't just fix the launch target and assume the page itself is done).
+
+## THE #1 THING TO KNOW: nothing has been boot-tested yet
+
+Every fix described below has been verified as thoroughly as this sandboxed dev VM allows
+(live-applied, dconf-diffed, Calamares dry-run validated, Gvc volume control tested against
+this VM's real audio device, etc.) — but **zero fresh ISO has been built with the full current
+set of fixes and actually boot-tested on real hardware.** The most recent ISO that exists on
+disk (`/home/eggs/egg-of-peachos-nectar-peachos-amd64-2026-08-30_2109.iso`, 8.53 GiB) only has
+an early subset of tonight's fixes baked in (branding + extensions sync + onboarding-disable) —
+it predates the live-session lockout fix, the real-install security fix, the installer UI
+redesign, the Wi-Fi/wallpaper/dconf audit, and the gnome-control-center/volume-slider fixes.
+**Do not treat that file, or the GitHub release `peachos-iso-2026-08-30-v2`, as current** — the
+release is actually empty (an upload was started, then interrupted before any chunk finished,
+see below). A fresh `eggs remaster` is needed before anything gets tested on the new laptop.
+
+## Session narrative — what happened and why (read this to understand *why* things are shaped the way they are)
+
+### Phase 1: first real-hardware boot test, and it was bad
+The user's first boot of an ISO built earlier this session (`peachos-iso-2026-08-30`, first
+release) went badly: stock Ubuntu branding everywhere ("Welcome to Ubuntu", GRUB showed stock
+penguin art, OS reported as "Ubuntu 26.04"), the dock/top-bar/traffic-lights/lock-screen were
+**entirely missing** (blank desktop), no install button/flow, missing pinned apps, Settings
+looked broken. This triggered the whole rest of the session.
+
+**Root cause #1 (the big one): extension deployment topology was broken.**
+`provision.sh`'s extension-install loop only installs whatever currently exists under
+`peachOS/extensions/*/` into `/usr/share/gnome-shell/extensions/` — there is **no automatic
+sync** from the actively-developed sibling repos (`~/macOS-TopBar-Gnome` etc.) into that
+directory. It had silently drifted badly: `macos-top-panel@local.dev` had **never** existed
+anywhere except a dev-convenience symlink at `~/.local/share/gnome-shell/extensions/`
+(`-> /home/user/macOS-TopBar-Gnome`), so `provision.sh` could never have deployed it, ever, on
+any build. The dock and lock-screen extensions were present in `peachOS/extensions/` but
+several days stale. This had been silently masked in all prior local testing because dev/live
+testing always used the symlink location directly, never actually exercising provision.sh's own
+deployment path. **Fixed** by re-syncing all three from their live dev repos into
+`peachOS/extensions/` and redeploying. **If you ever touch one of the dev extension repos
+directly, remember to re-sync into `peachOS/extensions/` too, or the next build won't have your
+change** — this is a standing gotcha, not a one-time fix.
+
+**Root cause #2: OS identity was never set.** `/etc/os-release` had never been customized —
+`provision.sh` now writes real `peachOS 10.0` identity (NAME/PRETTY_NAME/etc.), which is what
+`gnome-initial-setup` and Calamares read for their own branding text.
+
+**Root cause #3: GRUB/BIOS boot art.** penguins-eggs' `splash.png` (used for both GRUB and
+isolinux menus) was the stock penguin photo. Replaced with a peachOS wordmark
+(`assets/boot/grub-splash.png`), installed by `provision.sh`.
+
+**Root cause #4: no real install launcher.** penguins-eggs regenerates
+`/usr/share/applications/install-system.desktop` from a hardcoded template baked into its own
+compiled Go binary on every remaster — you cannot edit that file's content directly, it gets
+stomped every build (confirmed via `eggs remaster --debug`'s JSON plan, module type
+`"template"`). The fix lives one layer over: `trust-desktop.sh` (penguins-eggs' own live-session
+autostart script that copies that launcher to the Desktop and marks it trusted) is copied
+verbatim at build time, not regenerated — so `provision/penguins-eggs/trust-desktop.sh`
+overrides it to write peachOS-branded Desktop Entry content directly instead of trusting the
+stock file. Also fixed to only act during a live/demo boot (see boot=live pattern below) so a
+real install's first login doesn't get a spurious "Install peachOS" icon.
+
+### Phase 2: "did you focus on total custom onboarding" → gnome-initial-setup
+User pushed back explicitly asking whether the *onboarding* experience (not just branding) was
+addressed. It wasn't yet. Fixed: `gnome-initial-setup` (GNOME's own first-login wizard) is
+disabled entirely for every account, live user and real-install user alike, via its own
+documented skip mechanism — seed `/etc/skel/.config/gnome-initial-setup-done`
+(`gnome-initial-setup-first-login.service`'s `ConditionPathExists=!%E/gnome-initial-setup-done`).
+peachOS ships fully preconfigured via dconf defaults (see below), so there's nothing left for
+that wizard to ask.
+
+### Phase 3: "stop, take a step back, audit everything" — the user caught a real lockout bug
+User reported: booting the live/demo session, walking away, coming back locked out — never told
+a password. Real bug: peachOS's dconf profile never touched screensaver/idle-lock settings, so
+stock GNOME defaults applied, and the live user's password is penguins-eggs' own **undocumented**
+default (`custom.yaml`'s commented-out example, `"evolution"`, never shown to the person trying
+peachOS). **Fixed** via `provision/live-session/disable-lock.sh`, an autostart script gated on
+`grep -qw 'boot=live' /proc/cmdline` — disables screensaver lock/idle-activation **only** during
+a live/demo boot, so a real install's actual security is never touched. **This `boot=live`
+detection pattern is now the standard way to write anything that should behave differently on
+live-boot vs. a real install** — reuse it, don't invent a new detection mechanism.
+
+**A much bigger bug surfaced while auditing that fix's blast radius:** nothing in Calamares'
+install sequence removed the "live" demo account or its GDM autologin after a real install.
+Confirmed by reading `users.conf` (`doAutologin: false` only governs the account Calamares
+itself creates) and `displaymanager.conf` (`basicSetup: false`, `sysconfigSetup: false` — it
+never touches the pre-existing `AutomaticLogin*` config already baked into the squashfs). Left
+alone, **every real peachOS install would have booted straight back into the "live" account**
+(sudo group, same undocumented password) instead of the user's own. Fixed with a new Calamares
+shellprocess step (`provision/calamares/modules/shellprocess_cleanuplive.conf`) that deletes the
+live account and clears GDM autologin on the target post-install, wired into
+`provision/calamares/settings.conf`'s exec sequence right after the `users` step. Also added
+`live` to `users.conf`'s `forbidden_names` so a real user can't collide with that cleanup by
+picking that exact username.
+
+**Also found while there:** `settings.conf` referenced `shellprocess_logs.conf` /
+`shellprocess_rmcdrom.conf`, which existed on this live dev system (from the original Calamares
+package install) but had **never been captured into the repo** — a truly fresh build would have
+silently skipped both steps. Recovered both into the repo. **Lesson: whenever you find a config
+file referenced by name but not obviously present in the repo, check whether it exists live and
+just was never committed — this has now happened twice (extensions, Calamares shellprocess
+configs) and is worth actively checking for elsewhere too.**
+
+### Phase 4: "did you fix a total custom onboarding" (round 2) — Ubuntu-specific prompts
+User asked specifically about the dark/light-mode picker, data-sharing prompt, and "App Center"
+promo screen seen during onboarding. Investigated properly rather than assuming the earlier
+gnome-initial-setup fix covered it: confirmed via the compiled binary's own embedded page list
+(`gis-appearance-page.ui`, `gis-ubuntu-insights-page.ui`, `gis-software-page.ui`/
+`gis-apps-page.ui`) that **yes**, all three are pages inside that same wizard, already fully
+skipped by the marker-file fix. But `ubuntu-report` turned out to be a **genuinely separate**
+mechanism (zero references anywhere in the gnome-initial-setup binary) — its own systemd path
+unit fires an interactive "send hardware/usage metrics" dialog independently, and `whoopsie` is
+the actual Canonical crash-submission daemon behind it. **Important gotcha caught before
+damage:** `apt-get remove --simulate ubuntu-report whoopsie ...` showed it would cascade into
+removing `gdm3`/`gnome-shell`/`gnome-control-center`/`ubuntu-session` entirely, since
+`ubuntu-desktop-minimal` hard-depends on them. **Always `--simulate` an apt removal on a
+package you didn't install yourself before running it for real** — this could have bricked the
+whole desktop. Fixed instead by masking the systemd units (`systemctl mask whoopsie.path
+whoopsie.service`, `systemctl --global mask ubuntu-report.path ubuntu-report.service`) — same
+practical outcome, zero dependency risk. `apport` itself (local crash collection, not the
+submission step) was deliberately left enabled — useful for peachOS's own debugging, doesn't
+itself prompt anyone or send anything anywhere.
+
+### Phase 5: "make the installer UI much nicer" — full Calamares UI redesign
+User wanted the installer's left-hand sidebar gone, a blue accent (not the earlier orange),
+sleeker/cleaner, Apple-like, with real animations. Researched Calamares' actual supported
+branding mechanism first rather than guessing (`sidebar: none|widget|qml`, `navigation:
+none|widget|qml` in `branding.desc` — confirmed via the installed Calamares 3.3.14's own stock
+`branding.desc` docs). Pulled the **real, verified QML API** (the `Branding`/`ViewManager`
+singletons and their actual properties/methods) from Calamares' own KaOS reference branding
+component on GitHub (`calamares/calamares-extensions`) rather than inventing plausible-looking
+QML that might silently fail. Built:
+- `calamares-sidebar.qml` — replaces the left rail with a slim animated top progress bar (dots +
+  a cross-fading current-step label), `sidebar: qml,top`.
+- `calamares-navigation.qml` — bottom nav bar, ghost "Back" + filled blue-pill "Continue",
+  real hover/press animations via QML `Behavior` (Qt Widgets stylesheets can't animate, which is
+  why this needed QML and not just more QSS).
+- `stylesheet.qss` — restyles the actual step content (forms/buttons/inputs) to match, same
+  dark-surface (#1c1c1e) + blue accent (#0A84FF, macOS system blue) language as the rest of
+  peachOS.
+
+**Validated before ever considering a rebuild, and caught two real breakages doing so:**
+1. The reference's Qt5-style versioned imports (`import QtQuick.Layouts 1.3`) don't load under
+   this Calamares' actual **Qt6** runtime — fixed to version-less imports (`import
+   QtQuick.Layouts`).
+2. `QtQuick.Controls`/`QtQuick.Layouts` QML modules were **not installed at all** on this
+   system — confirmed via `calamares --debug`'s own `module "QtQuick.Layouts" is not installed`
+   warning, not assumed. Added `qml6-module-qtquick-controls qml6-module-qtquick-layouts` to
+   `provision.sh`'s Calamares apt-install line.
+
+After both fixes: `calamares --debug` under `QT_QPA_PLATFORM=offscreen` shows all 6 view
+modules plus the new `cleanuplive` step loading cleanly, window reaching "visible and
+populated", no fatal/crash indicators. **This is the validation pattern to reuse** whenever you
+touch Calamares branding again — don't just eyeball the QML, actually run
+`sudo timeout 15 env QT_QPA_PLATFORM=offscreen calamares --debug` and grep the log for
+`WARNING (Qt)` / `TypeError` / `not installed` / `Fatal`.
+
+### Phase 6: "did you fix the settings app wifi/wallpaper, confirm dconf parity"
+Three asks, all real:
+
+1. **Wi-Fi settings page** — the scan/display logic was actually solid (async `NM.Client`,
+   real `request_scan_async`, AP add/remove signals, 15s periodic rescans). Found one real bug:
+   `_on_activate_done` was shared between two different async call sites and tried to guess
+   which `finish()` to call by catching `TypeError` — a mismatched GAsyncResult/GTask
+   `finish()` call in PyGObject actually surfaces as `GLib.Error`, not `TypeError`, so that
+   guess never worked. Split into two unambiguous callbacks
+   (`apps/settings/src/wifi_page.py`).
+
+2. **Wallpaper page "takes forever" / "not responding"** — root cause found and *measured*:
+   every preset wallpaper (32 of them) decoded the full-resolution source image directly at
+   tile size, on every single page load, in `__init__` before the window even showed. Two of
+   the five dynamic-wallpaper previews were even worse — a full-5K SVG with an embedded raster
+   image (9–11MB each). Measured before/after with a real timing script:
+   **7.15s → 0.059s, a 121.7x speedup**, comfortably enough to explain tripping GTK's
+   "not responding" watchdog. Fixed by generating real small JPEG previews for every preset and
+   dynamic wallpaper (script: `provision/wallpaper-previews/gen_wallpaper_previews.py`, rerun
+   it if new preset wallpapers are ever added) and pointing tiles at those; the actual applied
+   wallpaper path is untouched. Custom "Your Photos" tiles get the same treatment lazily — a
+   thumbnail generated once on first add/load and cached in a `.thumbnails/` subdirectory,
+   cleaned up when the photo is removed.
+
+3. **dconf parity — the user explicitly demanded this be *verified*, not assumed.** Wrote a
+   script-based diff comparing a full live `dconf dump` against every baked default across
+   every peachOS-relevant path, not trusting the previous snapshot was still current. Found and
+   fixed real drift:
+   - Desktop wallpaper: baked said `tahoe_beach_dawn`, live was actually `lion_beach` — fixed
+     in both `provision/dconf/01-peachos` and the separate GDM greeter snapshot
+     (`provision/dconf/01-peachos-gdm`, which is a **manual, non-live-synced snapshot by
+     design** — see that file's own comment for why; **if the desktop wallpaper ever changes
+     again, this GDM file needs a matching manual re-sync, it will not pick it up on its own**).
+   - `macos-dock` extension's `icon-size` had drifted slightly from a small live tweak.
+   - `last-selected-power-profile` was never captured at all.
+   - Found and cleaned up actual **leftover test-session pollution**: the lock screen's
+     `lockscreen-wallpaper-path` pointed at a file inside a previous Claude session's own
+     ephemeral scratchpad (already gone) — harmless in practice since `background-source` was
+     correctly still `'video'` the whole time, but dangling state that would've shipped broken
+     if left in. Reset to schema defaults before re-syncing baked defaults.
+   - Deliberately did **not** bake in `org/gnome/shell`'s weather/world-clock sections — a
+     specific city (Iowa City) tied to this dev machine, personal location data, not a
+     look-and-feel default every real install should ship with. This was a judgment call, not
+     an oversight — mention it if the user asks why weather isn't preset.
+   - **The diff script itself is worth keeping around** (it was inline, not saved to the repo —
+     consider writing it to `provision/dconf/` as a standing tool if dconf drift becomes a
+     recurring worry): dump every relevant path with `dconf dump`, parse both that and the
+     baked `01-peachos` file into `{section: {key: value}}` dicts, diff.
+
+### Phase 7: sound settings bug → systemic gnome-control-center audit
+User reported the top bar's "Sound Settings…" menu item opens the **legacy** Ubuntu Settings
+app. Grepped the whole repo rather than patching just that one call site — found **five**
+places doing this (a systemic pattern, not a one-off):
+`extensions/macos-top-panel@local.dev/lib/soundIndicator.js` (the reported one),
+`lib/menuManager.js`'s `open-settings` action, `src/menulayout.json`'s top-level
+"System Settings…" entry, `src/userSwitcher.js`'s "Users & Groups Settings…", and
+`app/aboutWindow.js`'s "More Info…" button. All five now launch `peachos-settings` instead of
+`gnome-control-center`.
+
+Fixing the launch target alone wasn't enough — clicking "Sound Settings" needs to actually land
+on the Sound page, including when Settings is already open elsewhere. Added real deep-linking:
+`SettingsApp.do_command_line()` in `apps/settings/src/main.py` (Adw.Application's
+`DEFAULT_FLAGS` makes it a normal single-instance D-Bus-activated app —
+**`do_activate()` never receives argv, only `do_command_line()` does, including for a second
+invocation while the window's already open** — this is the actual reason the override exists,
+not a style choice). `peachos-settings <row_id>` now navigates straight to that page;
+unrecognized/absent page args fall back to the existing placeholder-page behavior, so a typo
+can't crash it. **If you ever add a way to launch a settings sub-page from outside the app
+(a new top-bar menu item, a notification action, whatever), this is the mechanism — pass the
+target `row_id` as argv[1], nothing more is needed.**
+
+Then audited `sound_page.py` itself against the user's explicit "every setting the legacy app
+has" standard, and it genuinely was missing the single most basic thing a sound page needs:
+**no volume slider at all**, output or input. Added one, deliberately mirroring the *already
+proven* logic in the top bar's own `soundIndicator.js` (same Gvc calls: `get_volume()`/
+`set_volume()`/`push_volume()`, `get_is_muted()`/`change_is_muted()`, `get_vol_max_norm()`,
+`notify::volume`/`notify::is-muted`) rather than reinventing it. **This VM actually has a real
+audio device** — constructed the page headlessly, confirmed the mixer reached `READY` and read
+the real stream's actual volume/mute state correctly, then simulated a slider drag and confirmed
+it wrote the exact expected raw volume value and correctly auto-unmuted. Restored the device's
+original volume/mute state afterward. **If you touch `sound_page.py` again, you have a real
+device to test against on this VM — use it, don't just trust the code.**
+
+## Architecture reference (things you'll need repeatedly)
+
+- **`provision/provision.sh`** is the single source of truth for how this dev VM (and thus what
+  gets remastered into an ISO) is set up. It is idempotent-ish and re-runnable. Whenever you fix
+  something "live" on this VM, **also** make the same change in whatever `provision.sh` installs
+  from (a repo file it copies), or the fix disappears on the next fresh provision/rebuild. This
+  has been the single most common class of bug found this session — check this every time.
+- **Safe root-file-edit pattern**: `sudo` needs a password piped in (`echo user123 | sudo -S
+  <cmd>` — the sudo password is `user123`, distinct from the GitHub PAT). For editing a
+  root-owned file, do **not** try `Edit` directly on it (permission denied) and do **not** use a
+  heredoc piped alongside `sudo -S` (heredoc-stdin and the piped password conflict and can
+  trigger a lockout — this happened once already). Instead: `Write`/`Edit` a scratch copy, then
+  `sudo cp` it into place.
+- **`eggs remaster --debug`** prints the full JSON execution plan and exits without building —
+  use this to check whether a given file gets regenerated from a hardcoded template during
+  remaster (search for its `dest` path) before assuming a live edit will survive a rebuild. Some
+  steps (`create-live-launcher`, `eggs-icon`) write hardcoded content from the compiled Go
+  binary itself, not from any editable file on disk — those need the "override the *next* thing
+  that reads the stock output" trick (see `trust-desktop.sh` in Phase 1 above), not a direct
+  edit.
+- **Disk space**: `/home/eggs` (the eggs work dir) needs roughly 2x the estimated ISO size free
+  on the *same partition* as the working dir. It also does **not** clean itself up between runs —
+  `sudo rm -rf /home/eggs` before a rebuild if space is tight (confirmed safe, it's pure scratch
+  space). `/tmp/.../scratchpad` is a small separate tmpfs, not the real disk — never stage
+  multi-GB files there.
+- **GitHub Releases 2GB-per-asset limit**: the ISO (~8GB at max zstd compression) needs
+  chunking. Pattern: `dd if=ISO of=chunk bs=1M skip=N count=M` one chunk at a time (not `split`,
+  which needs 2x disk), `gh release upload <tag> <chunk> --clobber`, `rm` the chunk, repeat —
+  run this as a real backgrounded script (`nohup setsid bash script.sh > log 2>&1 & disown`),
+  not a single foreground command (uploads take 15-20+ min each over this sandbox's bandwidth,
+  well past any reasonable tool timeout). **The current release `peachos-iso-2026-08-30-v2` is
+  empty** — an upload was started and interrupted before the first chunk finished. Either
+  restart that upload against a freshly rebuilt ISO, or delete the empty release first
+  (`gh release delete peachos-iso-2026-08-30-v2 --repo srbinov/peachOS`).
+- **dconf vendor-defaults mechanism**: `/etc/dconf/db/local.d/01-peachos` (normal user session
+  defaults, `dconf update` recompiles) + `/usr/share/gdm/dconf/01-peachos-gdm` (compiled via
+  `/usr/share/gdm/generate-config` into `/var/lib/gdm3/greeter-dconf-defaults` — this Ubuntu
+  build's GDM does **not** read the standard `/etc/dconf/db/gdm.d/` path at all, confirmed in an
+  earlier session, don't waste time trying that path). Both files live in
+  `provision/dconf/` in the repo and are installed by `provision.sh`.
+- **`boot=live` detection**: `grep -qw 'boot=live' /proc/cmdline` — the standard, reusable way
+  to make a script behave differently during a live/demo boot vs. after a real install, without
+  needing to check for the literal `live` username (which itself is now a forbidden name for a
+  real account, see Phase 3). Used in `disable-lock.sh` and `trust-desktop.sh`; reuse it for
+  anything similar.
+
+## What's still genuinely open / not yet done
+
+1. **A fresh `eggs remaster` incorporating everything through Phase 7, then an actual boot test
+   on real hardware** — this is almost certainly the very next step, and per the user's plan,
+   probably what tomorrow with the new laptop is for. Clean `/home/eggs` first if reusing this
+   VM.
+2. **The GitHub release upload** needs to be redone against whatever fresh ISO gets built — the
+   current release is empty (see above).
+3. The user's original bug report also mentioned "missing preset apps on the dock" and
+   "Wi-Fi/Bluetooth not popping up" — both were investigated and attributed to the
+   top-bar/dock extensions being entirely absent on that first bad boot (now fixed), not
+   independent bugs. **This has not been re-confirmed on an actual fresh boot** — worth
+   explicitly checking on the first real test.
+4. No further systemic sweep has been done beyond gnome-control-center — if the user reports
+   another "opens the wrong/legacy thing" bug, grep the whole repo for the legacy tool's name
+   first (as in Phase 7), don't assume it's an isolated instance.
+5. `provision.sh` does not install the snap packages it writes `.desktop` launchers for
+   (BlueBubbles, Firefox/Orchard, App Center) — this is a reproducibility gap for a *fresh
+   base-image* provision run, not a bug in what's currently shipped (those snaps are already
+   manually installed on this dev VM, and the ISO is built from this VM's actual live state).
+   Noted but deliberately not fixed this session — low priority relative to everything else, but
+   worth knowing about if a truly from-scratch base image is ever provisioned.
+
+## Working with this user
+
+- Explicit, demanding, will call out anything that feels like guessing or a surface-level patch
+  ("it just looks like a re-skin", "please focus"). **Verify claims concretely before stating
+  them as fact** — this whole session's pattern of "confirmed via X" / "measured Y before and
+  after" rather than "should work now" is what actually satisfied them; assumed fixes did not.
+- Wants root causes, not symptom patches — when investigating one bug, checking whether it's
+  part of a wider pattern (as in Phase 7) was explicitly the right call, not scope creep.
+- Once a long background job (build, upload) is running, they've explicitly asked for *silence*
+  until it's actually done or fails — no unsolicited progress narration. `Monitor`/background
+  jobs, report on completion.
+- Git: commits should be detailed and explain *why*, not just *what* — this repo's own commit
+  log is itself a good source of truth for later reference, written with that in mind
+  deliberately.
+- GitHub credentials (username `srbinov`, PAT) are provided by the user directly in-session when
+  needed for push/release operations — never persisted to git config or any file, used inline in
+  the push URL or piped to `gh auth login --with-token`, and redacted in any echoed command
+  output (`sed 's/ghp_[A-Za-z0-9]*/ghp_***REDACTED***/g'`). Ask for it fresh rather than assuming
+  it's remembered from a prior session.
