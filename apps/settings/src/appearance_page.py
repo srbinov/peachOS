@@ -236,14 +236,19 @@ class LiquidGlassPreview(Gtk.Box):
 
         self._card = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
-            valign=Gtk.Align.CENTER, halign=Gtk.Align.FILL,
-            hexpand=True,
+            valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER,
             css_classes=['liquid-glass-preview-card'],
         )
         # Matches the real .notification-banner's own proportions (stylesheet.css in
-        # macOS-TopBar-Gnome): min-height 42px, and the app icon there is explicitly
-        # 20% bigger than MacTahoe's stock 48px (-> 58px) -- both mirrored here so this
-        # preview is a real match, not just an approximation with its own made-up sizes.
+        # macOS-TopBar-Gnome): min-height 42px, the app icon there is explicitly 20%
+        # bigger than MacTahoe's stock 48px (-> 58px), and -- unlike an earlier version of
+        # this preview, which stretched the card to fill whatever width the Settings
+        # window happened to have -- a real notification banner is a fixed, fairly narrow
+        # 28.8em bar (~460px at the toolkit's default 16px root em) that never stretches
+        # regardless of screen width. halign=CENTER + this width keeps the backdrop box
+        # itself full-width (still reads as "desktop behind the banner"), only the card
+        # itself is pinned to realistic proportions.
+        self._card.set_size_request(460, -1)
         self._card.set_margin_top(8)
         self._card.set_margin_bottom(8)
         self._card.set_margin_start(12)
@@ -281,13 +286,19 @@ class LiquidGlassPreview(Gtk.Box):
         gradient_end = _glass_interpolate(LIQUID_GLASS_RECIPE['gradient_end'], intensity, is_dark)
         border = _glass_interpolate(LIQUID_GLASS_RECIPE['border'], intensity, is_dark, solid_alpha=0.18)
         shadow = _glass_interpolate(LIQUID_GLASS_RECIPE['shadow'], intensity, is_dark, solid_alpha=0.0)
-        # MacTahoe's own theme already pairs dark notification text with its light variant
-        # and light text with its dark variant (same pairing our solid light/dark targets
-        # above are designed around) -- matched here rather than interpolated, since text
-        # only ever needs to be readable against whichever solid target intensity is
-        # heading toward, not blended itself.
-        text_color = '#f5f5f7' if is_dark else '#242424'
-        body_color = 'rgba(245, 245, 247, 0.75)' if is_dark else 'rgba(36, 36, 36, 0.75)'
+        # Real .notification-banner text color (notificationBannerGlass.js's own _apply()) is
+        # ONE shared rgba(...) value for title AND body alike -- MacTahoe's theme only ever
+        # sets `font-weight: bold` on .message-title, no separate color/opacity for either --
+        # and it isn't simply tied to system dark/light mode the way this preview had it
+        # (a real, confirmed mismatch this preview had before, not a stylistic choice worth
+        # keeping). It's the shouldUseDarkContent() adaptive rule instead: dark content is
+        # forced in light mode once intensity drops below 50 (the glass has gone opaque
+        # enough that light text would stop being readable), and never happens at all in dark
+        # mode (that solid target is already dark). Ported 1:1 from that function rather than
+        # approximated.
+        needs_dark_content = (not is_dark) and intensity < 50
+        text_color = 'rgba(28, 28, 30, 0.95)' if needs_dark_content else 'rgba(222, 222, 222, 0.95)'
+        body_color = text_color
 
         css = f"""
         .liquid-glass-preview {{
