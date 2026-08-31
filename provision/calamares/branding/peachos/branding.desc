@@ -23,10 +23,22 @@ slideshow:               "show.qml"
 
 slideshowAPI:            1
 
+# Replaces Calamares' classic left-hand step list (the stock Ubuntu-installer look) with a
+# slim animated top progress bar and a bottom Back/Continue nav bar -- both custom QML, see
+# calamares-sidebar.qml/calamares-navigation.qml in this same directory for the reasoning and
+# the verified Calamares QML API they're built against. "qml,top" / plain "qml" (defaults to
+# bottom) are documented sidebar/navigation kinds, not custom flags.
+sidebar: qml,top
+navigation: qml
+
 # Same tone as the rest of peachOS's own dark surfaces (Control Center/notification glass
-# solid-dark target, #1c1c1e -- see macOS-TopBar-Gnome/lib/liquidGlassIntensity.js) rather
-# than a color invented just for this screen.
+# solid-dark target, #1c1c1e -- see macOS-TopBar-Gnome/lib/liquidGlassIntensity.js). Accent
+# switched from the earlier orange (#FF8A3D) to peachOS's blue (#0A84FF, macOS system blue)
+# per explicit direction -- these two keys double as the QML panels' accent color (read via
+# Branding.styleString(Branding.SidebarBackgroundCurrent) in both), not just the legacy
+# widget sidebar's own current-step highlight.
 style:
    SidebarBackground:    "#1c1c1e"
    SidebarText:          "#FFFFFF"
-   SidebarTextCurrent:   "#FF8A3D"
+   SidebarBackgroundCurrent: "#0A84FF"
+   SidebarTextCurrent:   "#0A84FF"

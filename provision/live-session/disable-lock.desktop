@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=peachOS live-session lock guard
+Comment=Disables screensaver auto-lock during a live/demo boot only (no-op once installed)
+Exec=/usr/local/bin/peachos-disable-live-lock
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

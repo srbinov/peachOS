@@ -188,7 +188,13 @@ done
 # "loading complete" with zero errors, only benign warnings matching the real Kubuntu
 # reference's own (e.g. partition's "unknown" filesystem meaning "let the user pick").
 echo "==> Installing Calamares installer -> peachOS branding"
-apt-get install -y --no-install-recommends calamares calamares-settings-ubuntu-common
+# qml6-module-qtquick-{controls,layouts}: NOT pulled in by the calamares package itself (it
+# runs fine without them, in its default all-widget mode) but required by peachOS's own
+# calamares-sidebar.qml/calamares-navigation.qml, which replace the stock left-hand widget
+# sidebar with custom QML panels -- confirmed missing live (`calamares --debug` logged
+# `module "QtQuick.Layouts" is not installed` until these were installed) rather than assumed.
+apt-get install -y --no-install-recommends calamares calamares-settings-ubuntu-common \
+    qml6-module-qtquick-controls qml6-module-qtquick-layouts
 install -d /etc/calamares/branding/peachos
 install -Dm644 "$REPO_DIR/provision/calamares/settings.conf" /etc/calamares/settings.conf
 for f in "$REPO_DIR"/provision/calamares/modules/*.conf; do
@@ -217,6 +223,15 @@ if [ -d /etc/penguins-eggs.d ]; then
     install -Dm755 "$REPO_DIR/provision/penguins-eggs/trust-desktop.sh" /etc/penguins-eggs.d/scripts/trust-desktop.sh
     install -Dm644 "$REPO_DIR/assets/logos/PeachICON_BLACK.svg" /usr/share/icons/peachos/install-peachos.svg
 fi
+
+# Live/demo-boot-only fix: without this, an idle live session locks via stock GNOME
+# screensaver defaults and asks for the "live" account's undocumented password (penguins-eggs'
+# own commented-out custom.yaml example, never shown to whoever's actually trying peachOS) --
+# see disable-lock.sh's own docstring for the full reasoning and its boot=live guard, which is
+# what keeps this a no-op on a real install rather than where the file lives.
+echo "==> Installing live-session lock guard (boot=live only, see disable-lock.sh)"
+install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
+install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
 
 # Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
 # -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top

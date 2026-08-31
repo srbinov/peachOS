@@ -1,4 +1,14 @@
 #!/bin/bash
+# Live/demo boot only -- this same autostart mechanism also ships onto a real install's disk
+# (penguins-eggs' trust-agent-autostart step puts it in the squashfs unconditionally, and
+# unpackfs copies the squashfs verbatim), so without this guard a real user's first login
+# would get an "Install peachOS" icon dropped onto their own Desktop for an install they
+# already completed. boot=live is live-boot's own kernel cmdline parameter -- absent once
+# installed to disk, so this is a guaranteed no-op post-install.
+if ! grep -qw 'boot=live' /proc/cmdline 2>/dev/null; then
+    exit 0
+fi
+
 # Trova la cartella Desktop corretta (Scrivania, Desktop, Bureau...)
 DESKTOP_DIR="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
 mkdir -p "$DESKTOP_DIR"

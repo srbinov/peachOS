@@ -1,0 +1,162 @@
+/*
+ * peachOS installer styling -- applies to the actual step content (welcome/locale/keyboard/
+ * partition/users/summary), which stays native Qt Widgets even with the QML sidebar/
+ * navigation panels swapped in above. Built from Calamares' own documented QSS surface
+ * (generic widget-class selectors, plus the handful of objectNames Calamares itself
+ * documents: #mainApp/#sidebarApp/#logoApp) -- see the stock branding/default/stylesheet.qss
+ * shipped with this Calamares install for that reference; every selector below is either a
+ * plain Qt widget class or one of those documented IDs, nothing invented.
+ *
+ * Same dark surface + blue accent language as the rest of peachOS (Control Center/
+ * notification glass target #1c1c1e, accent #0A84FF -- macOS system blue).
+ */
+
+#mainApp {
+    background-color: #1c1c1e;
+}
+
+QWidget {
+    color: #FFFFFF;
+    font-family: "Inter", "Helvetica Neue", "Segoe UI", sans-serif;
+    font-size: 11pt;
+    selection-background-color: #0A84FF;
+}
+
+QLabel {
+    background-color: transparent;
+}
+
+/* Generic buttons: quiet, rounded, subtle fill -- the QML nav bar carries the primary
+   Back/Continue actions, so widget-rendered buttons here (e.g. per-page helper buttons,
+   partition dialog actions) stay understated rather than competing with it. */
+QPushButton {
+    background-color: #2c2c2e;
+    color: #FFFFFF;
+    border: 1px solid #3a3a3c;
+    border-radius: 8px;
+    padding: 6px 16px;
+}
+QPushButton:hover {
+    background-color: #3a3a3c;
+}
+QPushButton:pressed {
+    background-color: #48484a;
+}
+QPushButton:disabled {
+    color: #6e6e73;
+    border-color: #2c2c2e;
+}
+
+/* The one primary action Calamares' own widget pages render directly (not through the QML
+   nav bar) is the final "Install Now" button on the summary page. */
+QPushButton#mainButton,
+QPushButton[default="true"] {
+    background-color: #0A84FF;
+    border: none;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+QPushButton#mainButton:hover,
+QPushButton[default="true"]:hover {
+    background-color: #3a9dff;
+}
+
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTextEdit {
+    background-color: #2c2c2e;
+    color: #FFFFFF;
+    border: 1px solid #3a3a3c;
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+    border: 1px solid #0A84FF;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+QComboBox QAbstractItemView {
+    background-color: #2c2c2e;
+    color: #FFFFFF;
+    selection-background-color: #0A84FF;
+    border: 1px solid #3a3a3c;
+}
+
+QRadioButton, QCheckBox {
+    background-color: transparent;
+    spacing: 8px;
+}
+QRadioButton::indicator, QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+QRadioButton::indicator:checked {
+    background-color: #0A84FF;
+    border: 1px solid #0A84FF;
+    border-radius: 8px;
+}
+QRadioButton::indicator:unchecked {
+    background-color: transparent;
+    border: 1px solid #6e6e73;
+    border-radius: 8px;
+}
+QCheckBox::indicator:checked {
+    background-color: #0A84FF;
+    border: 1px solid #0A84FF;
+    border-radius: 4px;
+}
+QCheckBox::indicator:unchecked {
+    background-color: transparent;
+    border: 1px solid #6e6e73;
+    border-radius: 4px;
+}
+
+QProgressBar {
+    background-color: #2c2c2e;
+    border: none;
+    border-radius: 6px;
+    height: 10px;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk {
+    background-color: #0A84FF;
+    border-radius: 6px;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #48484a;
+    border-radius: 5px;
+    min-height: 24px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #48484a;
+    border-radius: 5px;
+    min-width: 24px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+QListWidget, QTreeView, QTableView {
+    background-color: #232325;
+    border: 1px solid #3a3a3c;
+    border-radius: 8px;
+    alternate-background-color: #2c2c2e;
+}
+QListWidget::item:selected, QTreeView::item:selected, QTableView::item:selected {
+    background-color: #0A84FF;
+}
