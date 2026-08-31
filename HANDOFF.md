@@ -346,10 +346,13 @@ fixed. It was two separate real bugs, not a false claim, and both are worth unde
    extensions), the fix isn't real until it's in the actual `~/macOS-*` dev repo — check
    `gnome-extensions info <uuid>`'s `Path:` line if you're ever unsure which copy is live.**
 2. **Editing a GNOME Shell extension's `.js` files on disk does not affect an already-running
-   session** — the Shell loads extension code into its own long-running process once; a file
-   edit needs `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>` (works live on
-   Wayland, no logout needed) to actually take effect. Do this after every extension fix before
-   claiming it's verified, not just after deploying the file.
+   session** — the Shell loads extension code into its own long-running process once. Try
+   `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>` first, but **don't trust
+   it** — Phase 10 found this does NOT reliably reload a changed submodule (confirmed stale
+   through two full disable/enable cycles), only a genuine full logout/login did. Do this after
+   every extension fix before claiming it's verified, not just after deploying the file, and if
+   a live test still looks wrong after disable/enable, log out and back in before concluding the
+   *fix* itself is broken.
 3. **A second, independent bug on the destination side**: `peachos-settings sound` (Phase 7's own
    deep-linking mechanism) threw `GLib-GIO-CRITICAL: This application can not open files`, then
    `GDBus.Error...: Application does not handle command line arguments` from a stale pre-fix
@@ -369,6 +372,46 @@ plenty of real verification (the Gvc volume slider test against real hardware wa
 thorough) but never actually reloaded the extension or relaunched `peachos-settings` against a
 clean D-Bus state to confirm the *live, running* behavior changed — it checked the file contents
 and stopped there. Do the reload/relaunch step every time, not just for this specific bug class.
+
+### Phase 10: notification body text, a real selector bug, and two hard lessons
+User wanted real `.notification-banner`s to match the Settings app's own Liquid Glass preview
+(bold full-opacity title, dimmer 0.75-opacity body) — I initially did the reverse (changed the
+preview to match reality) before being corrected; reverted that and fixed the real thing in
+`notificationBannerGlass.js` instead. Two things happened worth knowing about before you touch
+this extension again:
+
+1. **`gnome-extensions disable/enable` is NOT reliable for reloading a changed submodule,
+   even run twice.** Phase 9's claim that it "works live on Wayland, no logout needed" turned
+   out to be wrong, or at least unproven for this extension — the generated
+   `~/.cache/macos-top-panel/notification-glass.css` kept reflecting stale code through two full
+   disable/enable cycles and repeated forced `_apply()` calls (nudging
+   `liquid-glass-intensity` back and forth). **Only a full logout/login actually picked up the
+   change.** If you edit `macos-top-panel@local.dev` again and a live test still shows old
+   behavior after disable/enable, don't trust it — do a real logout/login before concluding the
+   fix itself is wrong.
+2. **Do not use `Shell.Eval` (or any live JS injection into the gnome-shell process) to
+   introspect the actor tree — it crashed the user's session once already**, mid-investigation
+   of this exact bug. Whatever the cause (a bad property access deep in Clutter, `notify-send`'s
+   banner already gone by the time the eval ran, or something else), evaluating arbitrary code
+   inside the compositor's own process is not a safe debugging tool here. Introspect via static
+   source reading instead (fetch the real gnome-shell source from
+   `gitlab.gnome.org/GNOME/gnome-shell` — `js/ui/messageList.js`'s `Message` constructor and
+   `js/ui/messageTray.js`'s `NotificationBanner` are the relevant files) and reason about the
+   actor hierarchy from the actual source, not by poking the live scene graph.
+
+**The actual bug, for reference**: `.notification-banner .message .message-box .message-content
+.message-body` (space-separated, a descendant combinator) requires `.message` to be a *child* of
+`.notification-banner` — but they're the same single actor (`NotificationMessage extends
+Message`; the extra `notification-banner` class gets added to the same outer `St.Button` that
+`Message`'s own constructor already stamped `'message'` onto, not a separate wrapping node).
+Confirmed two ways: fetching `Message`'s real constructor from GNOME's own GitLab (traces every
+`style_class`-bearing widget from the root down to the body label), and noticing the theme's own
+already-working title-bold rule (`.message .message-box .message-content .message-title`) never
+prefixes `.notification-banner ` either — if it needed to be a descendant, that rule couldn't
+work. Fixed to a compound selector on the shared root instead:
+`.notification-banner.message .message-box .message-content .message-body` (no space).
+**If you add more banner-scoped CSS rules in `notificationBannerGlass.js`, use this same compound
+form, not a descendant combinator, for anything below the root.**
 
 ## Architecture reference (things you'll need repeatedly)
 
@@ -427,8 +470,16 @@ and stopped there. Do the reload/relaunch step every time, not just for this spe
   `~/.local/share/gnome-shell/extensions/macos-top-panel@local.dev` (a symlink to
   `~/macOS-TopBar-Gnome`), not `peachOS/extensions/` or `/usr/share/gnome-shell/extensions/`.
   Fixing only those other two copies changes nothing about the live session (Phase 9). After
-  editing the real copy, `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>`
-  reloads it live (works on Wayland, no logout needed) — editing `.js` on disk alone does not
+  editing the real copy, try `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>`
+  first, but don't fully trust it — Phase 10 found it does NOT reliably reload a changed
+  submodule (only a full logout/login confirmed did). Editing `.js` on disk alone does not
+  affect an already-running session either way — some form of reload is always required, just
+  verify the reload actually took (e.g. check a generated stylesheet/cache file's content, not
+  just that the extension reports ACTIVE) before trusting a live test. Also: never use
+  `Shell.Eval`/live JS injection into the gnome-shell process to debug this — it crashed the
+  session once already (Phase 10); read GNOME's real source instead
+  (`gitlab.gnome.org/GNOME/gnome-shell`, `js/ui/messageList.js` and `js/ui/messageTray.js` for
+  anything notification-related).
   affect an already-running Shell process.
 - **Local git corruption happened once this session, unrelated to any actual peachOS bug** —
   `git status`/`git log` started failing with `fatal: bad object HEAD` after an interrupted write
