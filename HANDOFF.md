@@ -410,8 +410,31 @@ already-working title-bold rule (`.message .message-box .message-content .messag
 prefixes `.notification-banner ` either — if it needed to be a descendant, that rule couldn't
 work. Fixed to a compound selector on the shared root instead:
 `.notification-banner.message .message-box .message-content .message-body` (no space).
-**If you add more banner-scoped CSS rules in `notificationBannerGlass.js`, use this same compound
-form, not a descendant combinator, for anything below the root.**
+**Update, same investigation, one more round**: the compound-selector fix above turned out to
+still show no visible effect even after a confirmed-genuine reload (real logout/login, generated
+stylesheet checked directly and did contain the new rule). St's CSS engine is a simplified,
+custom implementation, not a full browser one, and compound multi-class selectors
+(`.notification-banner.message`, no space) were never actually confirmed to be supported by it
+either — two selector forms in a row that were *structurally* reasonable but unverified against
+what this specific engine supports. Fixed for real by copying the ONE selector shape already
+DEMONSTRABLY working for this exact problem: gnome-shell.css's own bare
+`.message .message-box .message-content .message-title { font-weight: bold; }` (real bold titles
+are visibly correct today, so this shape is proven) — same shape verbatim, just
+`.message-title` → `.message-body`, no `.notification-banner`-specific scoping at all. Trade-off:
+now also colors Notification Center's own reused `.message-body` instances the same way
+(documented in `stylesheet.css`'s own updated comment) — accepted as consistent styling, not
+undone. **If you add more banner-scoped CSS rules here, use this same bare
+`.message .message-box .message-content .<leaf>` shape — it's the only one actually confirmed to
+render — rather than trying to scope more precisely to just the banner with an untested
+selector form.**
+
+Also worth knowing: partway through this, the user reported "it crashed my machine" after a live
+test. Checked `journalctl -b` directly rather than assuming — **no segfault, OOM-kill, or fatal
+signal anywhere in that boot's log**, just an ordinary session logout/restart sequence with some
+pre-existing, unrelated, benign "already disposed" warnings from Control Center code
+(`tileBlurController.js`/`controlCenterIndicator.js`) firing during normal teardown. Don't assume
+a reported "crash" was caused by whatever you just changed — check the actual logs for a real
+fatal signal before treating it as confirmed regression.
 
 ## Architecture reference (things you'll need repeatedly)
 
