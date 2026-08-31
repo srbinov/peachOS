@@ -66,6 +66,24 @@ echo "==> Disabling gnome-initial-setup (peachOS ships fully preconfigured, no w
 mkdir -p /etc/skel/.config
 touch /etc/skel/.config/gnome-initial-setup-done
 
+# The above marker skips gnome-initial-setup's whole wizard -- confirmed via its own compiled
+# binary's embedded page list (gis-appearance-page.ui/"Choose how Ubuntu looks" dark-light
+# toggle, gis-ubuntu-insights-page.ui, gis-software-page.ui/gis-apps-page.ui "Ubuntu's App
+# Center has a range of apps") that this covers the exact dark/light + data-sharing + app-store
+# prompts reported, not assumed. ubuntu-report is a genuinely SEPARATE mechanism though (no
+# reference to it anywhere in the gnome-initial-setup binary's own strings) -- its own systemd
+# path unit fires an interactive "send hardware/usage metrics" dialog whenever
+# ~/.cache/ubuntu-report/pending exists; whoopsie is the actual Canonical crash-report
+# submission daemon, woken by any change under /var/crash. Both confirmed live: a plain
+# `apt-get remove ubuntu-report whoopsie ...` cascades into removing gdm3/gnome-shell/
+# gnome-control-center/ubuntu-session entirely (ubuntu-desktop-minimal hard-depends on them),
+# so mask their triggers instead of touching the packages -- zero dependency risk, same
+# outcome. apport itself (local crash collection, not the submission step) is left enabled --
+# genuinely useful for peachOS's own debugging and doesn't itself phone home or prompt anyone.
+echo "==> Masking Canonical telemetry prompts (ubuntu-report, whoopsie) -- packages left alone, see above"
+systemctl mask whoopsie.path whoopsie.service
+systemctl --global mask ubuntu-report.path ubuntu-report.service
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
