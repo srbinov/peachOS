@@ -5,6 +5,7 @@ import gi
 gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+from PIL import Image
 
 from widgets import DropdownRow, make_hero_header
 
@@ -51,6 +52,104 @@ def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
     picture = Gtk.Picture.new_for_paintable(texture)
     picture.set_content_fit(Gtk.ContentFit.FILL)
     return picture
+
+
+# ---- Light/Dark mode preview compositing --------------------------------------------
+#
+# lightmode_icon_new.svg/darkmode_icon_new.svg (macOS_Tahoe_SYSICONS) are macOS Setup-
+# Assistant-style desktop mockups (menu bar, traffic lights, dock) painted over a solid
+# #00bf63 green-screen background instead of a fixed wallpaper -- the idea being these
+# preview tiles should always show the user's own actually-equipped wallpaper, not a
+# generic stock photo, matching how macOS's own Appearance page previews work. This is a
+# real chroma-key composite (soft-edged, not a hard cutoff, so the anti-aliased boundary
+# between the green screen and the menu bar/dock artwork doesn't leave a visible green
+# fringe) done at runtime against org.gnome.desktop.background's actual picture-uri/
+# picture-uri-dark -- which is also why this automatically handles dynamic wallpapers
+# correctly with no special-casing: those two keys already hold the right light/dark
+# image for whatever's currently equipped (a static wallpaper just has picture-uri ==
+# picture-uri-dark), exactly the same mechanism wallpaper_page.py's own _set_wallpaper()
+# writes to.
+GREEN_SCREEN_RGB = (0, 191, 99)  # #00bf63
+SCHEME_PREVIEW_SIZE = (224, 126)  # 2x SchemeOption.TILE_SIZE, for HiDPI sharpness
+
+
+def _pixbuf_to_pil(pixbuf: GdkPixbuf.Pixbuf) -> Image.Image:
+    mode = 'RGBA' if pixbuf.get_has_alpha() else 'RGB'
+    im = Image.frombytes(
+        mode, (pixbuf.get_width(), pixbuf.get_height()),
+        pixbuf.get_pixels(), 'raw', mode, pixbuf.get_rowstride(), 1,
+    )
+    return im.convert('RGB')
+
+
+def _rasterize_greenscreen_svg(path: str, width: int, height: int) -> Image.Image:
+    """The expensive, wallpaper-independent half of the composite (SVG parsing +
+    rasterizing the embedded artwork, ~0.2s measured) -- cached by the caller and only
+    ever redone once per mode, since it never changes."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, False)
+    return _pixbuf_to_pil(pixbuf)
+
+
+def _cover_crop_scale(path: str, width: int, height: int) -> Image.Image:
+    """Crops to the target aspect ratio before downscaling (same approach
+    provision/wallpaper-previews/gen_wallpaper_previews.py uses) rather than a plain
+    stretch -- correct regardless of the source wallpaper's own aspect ratio, since
+    unlike the green-screen artwork above it isn't guaranteed to already be 16:9."""
+    im = Image.open(path).convert('RGB')
+    src_ratio = im.width / im.height
+    tile_ratio = width / height
+    if src_ratio > tile_ratio:
+        new_w = int(im.height * tile_ratio)
+        x0 = (im.width - new_w) // 2
+        im = im.crop((x0, 0, x0 + new_w, im.height))
+    else:
+        new_h = int(im.width / tile_ratio)
+        y0 = (im.height - new_h) // 2
+        im = im.crop((0, y0, im.width, y0 + new_h))
+    return im.resize((width, height), Image.LANCZOS)
+
+
+def _composite_scheme_preview(fg: Image.Image, wallpaper_path) -> Gdk.Texture:
+    """fg is the already-rasterized green-screen artwork (see
+    _rasterize_greenscreen_svg). Replaces every pixel close to GREEN_SCREEN_RGB with the
+    corresponding pixel from wallpaper_path, cover-cropped to the same size; soft-blends
+    a band around the threshold so anti-aliased edges don't fringe. Falls back to the
+    green screen unmodified if wallpaper_path is missing/unreadable, rather than raising
+    -- a broken preview tile is a much smaller problem than a crashed Appearance page."""
+    width, height = fg.size
+    try:
+        bg = _cover_crop_scale(wallpaper_path, width, height) if wallpaper_path else None
+    except (GLib.Error, OSError):
+        bg = None
+
+    if bg is None:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_data(
+            fg.tobytes(), GdkPixbuf.Colorspace.RGB, False, 8, width, height, width * 3)
+        return Gdk.Texture.new_for_pixbuf(pixbuf)
+
+    fg_px = fg.load()
+    bg_px = bg.load()
+    out = Image.new('RGB', (width, height))
+    out_px = out.load()
+    gr, gg, gb = GREEN_SCREEN_RGB
+    for y in range(height):
+        for x in range(width):
+            r, g, b = fg_px[x, y]
+            dist = ((r - gr) ** 2 + (g - gg) ** 2 + (b - gb) ** 2) ** 0.5
+            if dist < 40:
+                out_px[x, y] = bg_px[x, y]
+            elif dist < 100:
+                t = (dist - 40) / 60
+                br, bgc, bb = bg_px[x, y]
+                out_px[x, y] = (
+                    int(r * t + br * (1 - t)), int(g * t + bgc * (1 - t)), int(b * t + bb * (1 - t)),
+                )
+            else:
+                out_px[x, y] = (r, g, b)
+
+    pixbuf = GdkPixbuf.Pixbuf.new_from_data(
+        out.tobytes(), GdkPixbuf.Colorspace.RGB, False, 8, width, height, width * 3)
+    return Gdk.Texture.new_for_pixbuf(pixbuf)
 
 
 # Real GNOME accent-color enum (org.gnome.desktop.interface accent-color) with
@@ -223,9 +322,9 @@ class SchemeOption(Gtk.Box):
     wrapping just the photo -- the label is a sibling outside it, not
     wrapped inside the clickable/ring area."""
 
-    TILE_SIZE = (112, 63)  # 16:9, matches the demo photos' aspect ratio
+    TILE_SIZE = (112, 63)  # 16:9, matches the green-screen artwork's own aspect ratio
 
-    def __init__(self, label: str, icon_filename: str, on_click):
+    def __init__(self, label: str, on_click):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         self._selected = False
 
@@ -241,8 +340,11 @@ class SchemeOption(Gtk.Box):
         # widgets with their own minimum-size floor didn't budge.
         photo_wrap.set_size_request(*self.TILE_SIZE)
         photo_wrap.set_overflow(Gtk.Overflow.HIDDEN)
-        picture = _load_scaled_picture(os.path.join(ICON_DIR, icon_filename), *self.TILE_SIZE)
-        photo_wrap.append(picture)
+        # No static picture here -- the real content is pushed in by
+        # AppearancePage via set_preview_texture() once the wallpaper-composited
+        # preview is ready (see the green-screen compositing block above).
+        self.picture = Gtk.Picture(content_fit=Gtk.ContentFit.FILL)
+        photo_wrap.append(self.picture)
         self.ring_box.append(photo_wrap)
         self.append(self.ring_box)
 
@@ -252,6 +354,9 @@ class SchemeOption(Gtk.Box):
         click.connect('released', lambda *_a: on_click(self))
         self.add_controller(click)
         self.set_cursor_from_name('pointer')
+
+    def set_preview_texture(self, texture: Gdk.Texture):
+        self.picture.set_paintable(texture)
 
     def get_selected(self) -> bool:
         return self._selected
@@ -367,7 +472,16 @@ class AppearancePage(Gtk.Box):
         # dropdowns) since this project's own Control Center/notifications already do their
         # own explicit light/dark overrides instead of relying on the shell theme at all.
         self._user_theme_settings = Gio.Settings.new('org.gnome.shell.extensions.user-theme')
+        self._bg_settings = Gio.Settings.new('org.gnome.desktop.background')
         self._icon_style_busy = False
+
+        # The expensive half of the Light/Dark preview composite (SVG rasterization,
+        # ~0.2s each measured) never changes -- cached once here so a wallpaper change
+        # later only re-does the cheap chroma-key + wallpaper crop step (~0.02s).
+        self._light_scheme_fg = _rasterize_greenscreen_svg(
+            os.path.join(ICON_DIR, 'lightmode_icon_new.svg'), *SCHEME_PREVIEW_SIZE)
+        self._dark_scheme_fg = _rasterize_greenscreen_svg(
+            os.path.join(ICON_DIR, 'darkmode_icon_new.svg'), *SCHEME_PREVIEW_SIZE)
 
         # Correct any pre-existing desync on open (e.g. dark mode was already on before
         # this sync existed) rather than only fixing it forward from the next toggle.
@@ -381,9 +495,12 @@ class AppearancePage(Gtk.Box):
         self._appearance_settings.connect('changed::icon-style', lambda *_: self._refresh_icon_style_selection())
         self._panel_settings.connect(
             'changed::liquid-glass-intensity', lambda *_: self._refresh_liquid_glass_preview())
+        self._bg_settings.connect('changed::picture-uri', lambda *_: self._refresh_scheme_previews())
+        self._bg_settings.connect('changed::picture-uri-dark', lambda *_: self._refresh_scheme_previews())
         self._refresh_all_selection()
         self._refresh_icon_style_selection()
         self._refresh_liquid_glass_preview()
+        self._refresh_scheme_previews()
 
     def _build_ui(self):
         self.append(make_hero_header(
@@ -406,8 +523,8 @@ class AppearancePage(Gtk.Box):
             orientation=Gtk.Orientation.HORIZONTAL, spacing=14, valign=Gtk.Align.CENTER,
             margin_end=14, margin_top=12, margin_bottom=12,
         )
-        self._light_option = SchemeOption('Light', 'lightmode_demophoto.svg', on_click=self._on_scheme_clicked)
-        self._dark_option = SchemeOption('Dark', 'darkmode_demophoto.svg', on_click=self._on_scheme_clicked)
+        self._light_option = SchemeOption('Light', on_click=self._on_scheme_clicked)
+        self._dark_option = SchemeOption('Dark', on_click=self._on_scheme_clicked)
         options_row.append(self._light_option)
         options_row.append(self._dark_option)
         appearance_card.append(options_row)
@@ -578,6 +695,31 @@ class AppearancePage(Gtk.Box):
         ring_hex = ACCENT_HEX.get(self._settings.get_string('accent-color'), '#0461BE')
         self._light_option.set_selected(not is_dark, ring_hex)
         self._dark_option.set_selected(is_dark, ring_hex)
+
+    def _current_wallpaper_path(self, key: str):
+        """Same picture-uri -> local path resolution wallpaper_page.py's own
+        _current_path() does, duplicated rather than imported -- these are two separate
+        page modules with independent lifecycles, not worth coupling over one helper."""
+        uri = self._bg_settings.get_string(key)
+        if not uri:
+            return None
+        try:
+            path, _ = GLib.filename_from_uri(uri)
+            return path
+        except GLib.Error:
+            return None
+
+    def _refresh_scheme_previews(self):
+        """Re-composites both Light/Dark preview tiles against whatever's actually
+        equipped right now. picture-uri/picture-uri-dark already resolve dynamic
+        wallpapers correctly on their own (see this module's green-screen-compositing
+        docstring above) -- no dynamic-vs-static branching needed here."""
+        light_path = self._current_wallpaper_path('picture-uri')
+        dark_path = self._current_wallpaper_path('picture-uri-dark')
+        self._light_option.set_preview_texture(
+            _composite_scheme_preview(self._light_scheme_fg, light_path))
+        self._dark_option.set_preview_texture(
+            _composite_scheme_preview(self._dark_scheme_fg, dark_path))
 
     # ---- Theme (accent-color) ------------------------------------------
 

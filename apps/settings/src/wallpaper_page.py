@@ -66,7 +66,7 @@ LIVE_WALLPAPERS = [
 # provision/wallpaper-previews/gen_wallpaper_previews.py), matching the pattern
 # LIVE_WALLPAPERS already used correctly.
 DYNAMIC_WALLPAPERS = [
-    ('peachOS Nectar', 'peachOS_Nectar.jpg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.png'),
+    ('peachOS Nectar', 'peachOS_Nectar.jpg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.jpg'),
     ('macOS Tahoe', 'macOS_Tahoe.jpg', 'macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
     ('macOS Sonoma', 'macOS_Sonoma.jpg', 'macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
     ('macOS Sequoia', 'macOS_Sequoia.jpg', 'macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),
