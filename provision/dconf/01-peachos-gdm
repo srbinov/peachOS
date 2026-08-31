@@ -49,12 +49,13 @@ icon-theme='MacTahoe'
 # actually paints on top. Once discovered, this needed zero extension code at all.
 # background-picture-uri is a snapshot of the user's actually-equipped wallpaper at
 # the time this was written, not the peachOS default -- it doesn't stay live-synced,
-# see lib/lockScreenLayout.js's module comment for why. Refreshed to match the desktop
-# wallpaper actually equipped right now (tahoe_beach_dawn) while re-checking everything
-# else in this file for the same staleness.
+# see lib/lockScreenLayout.js's module comment for why. Re-synced to the desktop
+# wallpaper actually equipped right now (lion_beach, confirmed against a full live-vs-baked
+# dconf diff across every peachOS-relevant path, not assumed) -- was still pointing at
+# tahoe_beach_dawn from an earlier snapshot that had drifted.
 [com/ubuntu/login-screen]
 background-color='#1c1c1e'
-background-picture-uri='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
+background-picture-uri='file:///usr/share/backgrounds/peachos/presets/lion_beach.jpg'
 background-repeat='no-repeat'
 background-size='cover'
 

@@ -41,8 +41,8 @@ toolkit-accessibility=false
 [org/gnome/desktop/background]
 color-shading-type='solid'
 picture-options='zoom'
-picture-uri='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
-picture-uri-dark='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_dawn.jpg'
+picture-uri='file:///usr/share/backgrounds/peachos/presets/lion_beach.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/peachos/presets/lion_beach.jpg'
 primary-color='#000000000000'
 secondary-color='#000000000000'
 
@@ -95,6 +95,7 @@ disable-user-extensions=false
 disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com']
 enabled-extensions=['blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'perfect-lockscreen@chris', 'macos-top-panel@local.dev', 'macos-dock-2026-peachos@peachos']
 favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_reminders.desktop', 'org.gnome.TextEditor.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
+last-selected-power-profile='power-saver'
 welcome-dialog-last-shown-version='50.1'
 
 [org/gnome/shell/extensions/blur-my-shell]
@@ -158,7 +159,7 @@ dock-padding=1.0
 edge-distance=0.37662337662337664
 icon-border-radius=3.0
 icon-shadow=false
-icon-size=0.11999999999999923
+icon-size=0.11546610169491525
 icon-spacing=-1.0
 items-pullout-angle=0.5
 label-background-color=(0.0, 0.0, 0.0, 0.0)

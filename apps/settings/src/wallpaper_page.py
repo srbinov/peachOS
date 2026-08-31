@@ -25,6 +25,7 @@ REPO_WALLPAPER_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'assets', 'wallpapers',
 ))
 CUSTOM_WALLPAPER_DIR = os.path.expanduser('~/.local/share/peachos/wallpapers/custom')
+CUSTOM_WALLPAPER_THUMB_DIR = os.path.join(CUSTOM_WALLPAPER_DIR, '.thumbnails')
 
 # Perfect Lock Screen (extensions/perfect-lockscreen@chris) owns the actual lock/login
 # screen rendering -- this page only ever reads/writes its GSettings, never touches GDM
@@ -42,6 +43,7 @@ REPO_LOCKSCREEN_VIDEO_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'assets', 'lockscreen',
 ))
 CUSTOM_LOCKSCREEN_WALLPAPER_DIR = os.path.expanduser('~/.local/share/peachos/wallpapers/lockscreen-custom')
+CUSTOM_LOCKSCREEN_WALLPAPER_THUMB_DIR = os.path.join(CUSTOM_LOCKSCREEN_WALLPAPER_DIR, '.thumbnails')
 
 # (display name, preview image, video filename) -- pushed to the icons repo as
 # LIVE_LOGIN_SCREEN_WALLPAPER.mp4; the preview is a pre-extracted poster frame
@@ -56,12 +58,19 @@ LIVE_WALLPAPERS = [
 
 # (display name, preview image, light wallpaper filename, dark wallpaper filename)
 # peachOS Nectar first per the reference layout / the distro's own default.
+#
+# preview_file used to point at the full-resolution wallpaper itself (two of these were a
+# full-5K SVG with an embedded raster image, 9-11MB each) -- decoded fresh on every single
+# Settings app wallpaper-page load, the dominant cost behind "takes forever to load" /
+# "Settings app not responding". Regenerated as small real JPEGs (see
+# provision/wallpaper-previews/gen_wallpaper_previews.py), matching the pattern
+# LIVE_WALLPAPERS already used correctly.
 DYNAMIC_WALLPAPERS = [
-    ('peachOS Nectar', 'peachOS_Nectar.svg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.png'),
-    ('macOS Tahoe', 'macOS_Tahoe.svg', 'macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
-    ('macOS Sonoma', 'macOS_Sonoma.svg', 'macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
-    ('macOS Sequoia', 'macOS_Sequoia.svg', 'macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),
-    ('macOS Golden Gate', 'macOS_GoldenGate.png', 'macOS_GoldenGate_Light.png', 'macOS_GoldenGate_Dark.png'),
+    ('peachOS Nectar', 'peachOS_Nectar.jpg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.png'),
+    ('macOS Tahoe', 'macOS_Tahoe.jpg', 'macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
+    ('macOS Sonoma', 'macOS_Sonoma.jpg', 'macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
+    ('macOS Sequoia', 'macOS_Sequoia.jpg', 'macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),
+    ('macOS Golden Gate', 'macOS_GoldenGate.jpg', 'macOS_GoldenGate_Light.png', 'macOS_GoldenGate_Dark.png'),
 ]
 
 # (display name, filename) -- single static images (not light/dark pairs),
@@ -132,6 +141,24 @@ def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
     picture = Gtk.Picture.new_for_paintable(_load_scaled_texture(path, width, height))
     picture.set_content_fit(Gtk.ContentFit.COVER)
     return picture
+
+
+def _ensure_thumbnail(source_path: str, thumb_dir: str, size=(224, 126)) -> str:
+    """Generate+cache a small preview once per user-added photo, alongside the same fix
+    applied to preset/dynamic wallpapers above -- without this, every custom "Your Photos"
+    tile re-decoded the full original (a phone photo can easily be 4000x3000+) on every
+    single page load. Returns source_path unchanged if generation fails, so a tile still
+    renders (just slower) rather than going blank."""
+    os.makedirs(thumb_dir, exist_ok=True)
+    thumb_path = os.path.join(thumb_dir, os.path.basename(source_path) + '.jpg')
+    if os.path.isfile(thumb_path) and os.path.getmtime(thumb_path) >= os.path.getmtime(source_path):
+        return thumb_path
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(source_path, size[0], size[1], False)
+        pixbuf.savev(thumb_path, 'jpeg', ['quality'], ['85'])
+    except GLib.Error:
+        return source_path
+    return thumb_path
 
 
 def _apply_css(widget: Gtk.Widget, css: str):
@@ -397,9 +424,18 @@ class WallpaperPage(Gtk.Box):
             path = os.path.join(preset_dir, filename)
             if not os.path.isfile(path):
                 continue
+            # Tile preview uses the small pre-generated thumbnail (see
+            # provision/wallpaper-previews/gen_wallpaper_previews.py) -- decoding these
+            # full-resolution source wallpapers directly, once per tile, on every page
+            # load was the dominant cost behind "takes forever to load"/"not responding".
+            # _tiles still stores the real full-res `path` -- that's what actually gets
+            # applied as the wallpaper via _set_wallpaper, unaffected by this.
+            preview_path = os.path.join(PREVIEW_DIR, f'preset_{os.path.splitext(filename)[0]}.jpg')
+            if not os.path.isfile(preview_path):
+                preview_path = path  # fall back to the full-res source rather than a blank tile
             # Single static image -- light and dark are the same file, same
             # as a custom photo tile below.
-            tile = WallpaperTile(name, path, self._on_preset_tile_clicked)
+            tile = WallpaperTile(name, preview_path, self._on_preset_tile_clicked)
             self._preset_flow.append(tile)
             self._tiles.append((tile, path, path))
 
@@ -421,7 +457,8 @@ class WallpaperPage(Gtk.Box):
 
     def _add_custom_photo_tile(self, path: str):
         name = os.path.splitext(os.path.basename(path))[0]
-        tile = WallpaperTile(name, path, self._on_custom_tile_clicked, on_right_click=self._on_custom_tile_right_click)
+        preview_path = _ensure_thumbnail(path, CUSTOM_WALLPAPER_THUMB_DIR)
+        tile = WallpaperTile(name, preview_path, self._on_custom_tile_clicked, on_right_click=self._on_custom_tile_right_click)
         # Insert before the trailing "Add Photo..." tile.
         insert_at = self._photos_flow.observe_children().get_n_items() - 1
         self._photos_flow.insert(tile, insert_at)
@@ -463,6 +500,10 @@ class WallpaperPage(Gtk.Box):
         self._tiles = [(t, l, d) for t, l, d in self._tiles if t is not tile]
         try:
             os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.remove(os.path.join(CUSTOM_WALLPAPER_THUMB_DIR, os.path.basename(path) + '.jpg'))
         except OSError:
             pass
 
@@ -592,8 +633,9 @@ class WallpaperPage(Gtk.Box):
 
     def _add_lockscreen_custom_photo_tile(self, path: str):
         name = os.path.splitext(os.path.basename(path))[0]
+        preview_path = _ensure_thumbnail(path, CUSTOM_LOCKSCREEN_WALLPAPER_THUMB_DIR)
         tile = WallpaperTile(
-            name, path, self._on_lockscreen_custom_tile_clicked,
+            name, preview_path, self._on_lockscreen_custom_tile_clicked,
             on_right_click=self._on_lockscreen_custom_tile_right_click,
         )
         # Insert before the trailing "Add Photo..." tile.
@@ -642,6 +684,10 @@ class WallpaperPage(Gtk.Box):
         self._lockscreen_tiles = [(t, k, p) for t, k, p in self._lockscreen_tiles if t is not tile]
         try:
             os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.remove(os.path.join(CUSTOM_LOCKSCREEN_WALLPAPER_THUMB_DIR, os.path.basename(path) + '.jpg'))
         except OSError:
             pass
 

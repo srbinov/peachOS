@@ -319,13 +319,13 @@ class WifiPage(Gtk.Box):
     def _connect_to(self, ap: NM.AccessPoint, known_connection):
         if known_connection is not None:
             self._client.activate_connection_async(
-                known_connection, self._device, ap.get_path(), None, self._on_activate_done,
+                known_connection, self._device, ap.get_path(), None, self._on_activate_existing_done,
             )
             return
 
         if not _ap_is_secured(ap):
             self._client.add_and_activate_connection_async(
-                None, self._device, ap.get_path(), None, self._on_activate_done,
+                None, self._device, ap.get_path(), None, self._on_activate_new_done,
             )
             return
 
@@ -366,22 +366,28 @@ class WifiPage(Gtk.Box):
             connection.add_setting(s_sec)
 
             self._client.add_and_activate_connection_async(
-                connection, self._device, ap.get_path(), None, self._on_activate_done,
+                connection, self._device, ap.get_path(), None, self._on_activate_new_done,
             )
 
         dialog.connect('response', on_response)
         dialog.present(self.get_root())
 
-    def _on_activate_done(self, client, result):
+    # Split into two unambiguous callbacks (one per async call site) instead of one shared
+    # handler that tried to guess which finish() to call by catching TypeError -- a mismatched
+    # GAsyncResult/GTask finish() call in PyGObject surfaces as GLib.Error (an invalid-task
+    # GError), not TypeError, so that guess never actually caught the mismatch it was meant to.
+    def _on_activate_new_done(self, client, result):
         try:
             client.add_and_activate_connection_finish(result)
-        except TypeError:
-            try:
-                client.activate_connection_finish(result)
-            except GLib.Error as e:
-                self._status_label.set_label(f'Could not connect: {e.message}')
-                self._status_label.set_visible(True)
-                return
+        except GLib.Error as e:
+            self._status_label.set_label(f'Could not connect: {e.message}')
+            self._status_label.set_visible(True)
+            return
+        self._refresh()
+
+    def _on_activate_existing_done(self, client, result):
+        try:
+            client.activate_connection_finish(result)
         except GLib.Error as e:
             self._status_label.set_label(f'Could not connect: {e.message}')
             self._status_label.set_visible(True)
