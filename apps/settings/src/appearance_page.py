@@ -235,30 +235,33 @@ class LiquidGlassPreview(Gtk.Box):
         self.set_overflow(Gtk.Overflow.HIDDEN)
 
         self._card = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
             valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER,
             css_classes=['liquid-glass-preview-card'],
         )
         # Matches the real .notification-banner's own proportions (stylesheet.css in
-        # macOS-TopBar-Gnome): min-height 42px, the app icon there is explicitly 20%
-        # bigger than MacTahoe's stock 48px (-> 58px), and -- unlike an earlier version of
-        # this preview, which stretched the card to fill whatever width the Settings
-        # window happened to have -- a real notification banner is a fixed, fairly narrow
-        # 28.8em bar (~460px at the toolkit's default 16px root em) that never stretches
-        # regardless of screen width. halign=CENTER + this width keeps the backdrop box
-        # itself full-width (still reads as "desktop behind the banner"), only the card
-        # itself is pinned to realistic proportions.
+        # macOS-TopBar-Gnome) -- calibrated against a real macOS Tahoe notification
+        # screenshot (user-supplied reference), not guessed: 48px icon (the theme's own
+        # stock size -- an earlier +20% override to 58px was an unreferenced aesthetic
+        # guess and measured too large once a real screenshot existed to check against),
+        # 14px padding around the card's content (was 4px), 12px icon-to-text gap (was
+        # 4px). Unlike an earlier version of this preview, which stretched the card to
+        # fill whatever width the Settings window happened to have, a real notification
+        # banner is a fixed, fairly narrow 28.8em bar (~460px at the toolkit's default
+        # 16px root em) that never stretches regardless of screen width. halign=CENTER +
+        # this width keeps the backdrop box itself full-width (still reads as "desktop
+        # behind the banner"), only the card itself is pinned to realistic proportions.
         self._card.set_size_request(460, -1)
-        self._card.set_margin_top(8)
-        self._card.set_margin_bottom(8)
-        self._card.set_margin_start(12)
-        self._card.set_margin_end(16)
+        self._card.set_margin_top(14)
+        self._card.set_margin_bottom(14)
+        self._card.set_margin_start(14)
+        self._card.set_margin_end(14)
 
         # Same curated icon BlueBubbles itself uses (its default/light-mode variant) --
         # a real sample notification, not a generic placeholder glyph.
         messages_gicon = Gio.icon_new_for_string(os.path.join(ICON_DIR, 'messages_preview.svg'))
         self._icon = Gtk.Image.new_from_gicon(messages_gicon)
-        self._icon.set_pixel_size(58)
+        self._icon.set_pixel_size(48)
         self._card.append(self._icon)
 
         text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, valign=Gtk.Align.CENTER)
