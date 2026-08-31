@@ -914,7 +914,16 @@ class SettingsWindow(Adw.ApplicationWindow):
 
 class SettingsApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        # HANDLES_COMMAND_LINE is required for do_command_line() below to actually receive
+        # argv at all -- without it, GApplication's own default local-command-line handling
+        # treats a bare non-option argument like "sound" as a file URI to open instead
+        # (confirmed live: DEFAULT_FLAGS alone produced a real
+        # "GLib-GIO-CRITICAL: This application can not open files" warning when launched as
+        # `peachos-settings sound`, not assumed from documentation).
+        super().__init__(
+            application_id=APP_ID,
+            flags=Gio.ApplicationFlags.DEFAULT_FLAGS | Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+        )
         self._target_page = None
 
     def do_command_line(self, command_line):
