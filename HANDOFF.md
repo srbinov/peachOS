@@ -328,6 +328,48 @@ gotcha in Architecture reference below before assuming `git status` failing mean
 did is wrong.** It wasn't; it was pre-existing local repository corruption from earlier in the
 night, recovered cleanly, no work was lost.
 
+### Phase 9: the Phase 7 gnome-control-center fix wasn't actually fixed — a real deployment gap
+User re-reported the *exact same* "Sound Settings…" bug the morning after Phase 7 claimed it
+fixed. It was two separate real bugs, not a false claim, and both are worth understanding:
+
+1. **Phase 7 only fixed `peachOS/extensions/`'s copy and the system-wide deployed copy at
+   `/usr/share/gnome-shell/extensions/` — never `~/macOS-TopBar-Gnome` itself.** This is the
+   *exact* dev-symlink gap from Phase 1's Root Cause #1, and it bit again: `gnome-extensions info
+   macos-top-panel@local.dev` shows `Path: /home/user/.local/share/gnome-shell/extensions/
+   macos-top-panel@local.dev`, which is a symlink to `~/macOS-TopBar-Gnome` — **that's what this
+   live dev session's actual running GNOME Shell loads, not either of the copies that got fixed.**
+   Editing/deploying the other two copies changes nothing about what's actually running until you
+   also fix the real dev repo. Fixed all five call sites there too, confirmed byte-identical
+   against the `peachOS/extensions/` mirror afterward, committed and pushed to
+   `macOS-TopBar-Gnome` separately (its own repo, own remote, `master` branch not `main`).
+   **Whenever you fix something in `macos-top-panel@local.dev` (or the dock/lockscreen
+   extensions), the fix isn't real until it's in the actual `~/macOS-*` dev repo — check
+   `gnome-extensions info <uuid>`'s `Path:` line if you're ever unsure which copy is live.**
+2. **Editing a GNOME Shell extension's `.js` files on disk does not affect an already-running
+   session** — the Shell loads extension code into its own long-running process once; a file
+   edit needs `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>` (works live on
+   Wayland, no logout needed) to actually take effect. Do this after every extension fix before
+   claiming it's verified, not just after deploying the file.
+3. **A second, independent bug on the destination side**: `peachos-settings sound` (Phase 7's own
+   deep-linking mechanism) threw `GLib-GIO-CRITICAL: This application can not open files`, then
+   `GDBus.Error...: Application does not handle command line arguments` from a stale pre-fix
+   instance still holding the D-Bus name. Root cause: `SettingsApp`'s `Gio.ApplicationFlags` never
+   included `HANDLES_COMMAND_LINE` — without it, `do_command_line()` (added in Phase 7
+   specifically to receive argv) never actually gets called at all; GApplication's own default
+   local-command-line handling intercepts non-option arguments as files to open instead. Fixed by
+   adding the flag. **Verify this class of fix properly**: confirmed live via `ps aux` that the
+   launched process's argv actually carried the page argument through, and via a direct in-process
+   test (`SettingsWindow()._go_to('sound', ...)`, checking `_placeholder_stack.get_visible_child_name()`
+   actually flips to `'sound'`) rather than just trusting the code looked right a second time —
+   that's the same mistake that let this ship broken the first time.
+
+**Lesson for whatever comes next**: "I deployed the fix and the file on disk is correct" is not
+the same as "I verified the fix works in the actual running session." Last night's Phase 7 did
+plenty of real verification (the Gvc volume slider test against real hardware was genuinely
+thorough) but never actually reloaded the extension or relaunched `peachos-settings` against a
+clean D-Bus state to confirm the *live, running* behavior changed — it checked the file contents
+and stopped there. Do the reload/relaunch step every time, not just for this specific bug class.
+
 ## Architecture reference (things you'll need repeatedly)
 
 - **`provision/provision.sh`** is the single source of truth for how this dev VM (and thus what
@@ -380,6 +422,14 @@ night, recovered cleanly, no work was lost.
   (cheap, ~0.02s at a 224×126 tile size). Implementation lives in `appearance_page.py`
   (`_rasterize_greenscreen_svg`/`_cover_crop_scale`/`_composite_scheme_preview`) — lift it
   directly rather than reinventing if another green-screen asset shows up.
+- **`gnome-extensions info <uuid>`'s `Path:` line tells you which copy of an extension is
+  actually running** — for `macos-top-panel@local.dev` specifically that's
+  `~/.local/share/gnome-shell/extensions/macos-top-panel@local.dev` (a symlink to
+  `~/macOS-TopBar-Gnome`), not `peachOS/extensions/` or `/usr/share/gnome-shell/extensions/`.
+  Fixing only those other two copies changes nothing about the live session (Phase 9). After
+  editing the real copy, `gnome-extensions disable <uuid> && gnome-extensions enable <uuid>`
+  reloads it live (works on Wayland, no logout needed) — editing `.js` on disk alone does not
+  affect an already-running Shell process.
 - **Local git corruption happened once this session, unrelated to any actual peachOS bug** —
   `git status`/`git log` started failing with `fatal: bad object HEAD` after an interrupted write
   (mid-commit, cause not fully confirmed) left three loose objects truncated to 0 bytes, one of
