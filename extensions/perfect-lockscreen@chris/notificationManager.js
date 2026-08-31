@@ -191,33 +191,15 @@ export class NotificationManager {
         return count;
     }
 
+    // GNOME's own stock MPRIS notification card -- nowPlaying.js's Now Playing card
+    // (extension.js's _setupUnlockDialog) is a full replacement for this, not an addition
+    // to it, so every media card stays hidden unconditionally instead of picking one to
+    // show. This used to pick the most-recently-playing player's card and show only that
+    // one; now it's still tracked (getNativeNotifCount()/hasVisibleNotifs() etc. still need
+    // to know these actors exist), it just never becomes visible.
     _enforceMediaLimit(nb) {
-        const players = [...nb._players.entries()];
-
-        for (const [, msg] of players) msg.visible = false;
-
-        if (this._lastPlayingPlayer) {
-            const msg = nb._players.get(this._lastPlayingPlayer);
-            if (msg && this._lastPlayingPlayer.status === 'Playing') {
-                msg.visible = true;
-                return;
-            }
-        }
-
-        for (const [player, msg] of players) {
-            if (player.status === 'Playing') {
-                msg.visible = true;
-                return;
-            }
-        }
-
-        if (this._lastPlayingPlayer) {
-            const msg = nb._players.get(this._lastPlayingPlayer);
-            if (msg) { msg.visible = true; return; }
-        }
-
-        const firstMsg = nb._players.values().next().value;
-        if (firstMsg) firstMsg.visible = true;
+        for (const msg of nb._players.values())
+            msg.visible = false;
     }
 
     setupNotifBlur(nb) {

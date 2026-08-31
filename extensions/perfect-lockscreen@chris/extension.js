@@ -38,6 +38,7 @@ import { WackCupertinoRestPrompt } from './cupertinoPrompt.js';
 import { getWallpaperAlpha, getWallpaperPromptColor, clearCache, initCache } from './alphaManager.js';
 import { WackLayout } from './layoutManager.js';
 import { NotificationManager } from './notificationManager.js';
+import { NowPlayingWidget } from './nowPlaying.js';
 import {
     PROMPT_BLUR_RADIUS,
     PROMPT_BLUR_BRIGHTNESS,
@@ -46,6 +47,7 @@ import {
     CROSSFADE_TIME,
     DATETIME_TOP_FRACTION,
     HINT_VERTICAL_FRACTION,
+    NOW_PLAYING_VERTICAL_FRACTION,
     HINT_NOTIF_MARGIN,
     FADE_OUT_SCALE,
     DATE_LABEL_HEIGHT,
@@ -163,6 +165,20 @@ export default class WackLockscreenClockExtension extends Extension {
         const shield = Main.screenShield;
         if (!shield)
             return;
+
+        // macOS-TopBar-Gnome's own notification slide (lib/notificationTray.js) sets this
+        // same property to put banners top-right instead of GNOME's stock top-center --
+        // media-playing widgets included, since MPRIS notifications go through the exact
+        // same Main.messageTray banner system, not a separate widget. That extension only
+        // runs in "user" session mode though, so it gets disabled the instant the screen
+        // locks -- this extension (which DOES cover "unlock-dialog") sets the same
+        // property independently so the lock screen doesn't fall back to stock
+        // top-center. Plain property assignment, not a signal connection or monkey-patched
+        // method, so there's no ownership conflict with the other extension also setting
+        // the identical value during "user" mode -- and nothing here needs restoring on
+        // disable, since top-right is what's wanted in both places anyway.
+        if (Main.messageTray)
+            Main.messageTray.bannerAlignment = Clutter.ActorAlign.END;
 
         if (!this._origEnsureUnlockDialog) {
             this._origEnsureUnlockDialog = shield._ensureUnlockDialog.bind(shield);
@@ -396,7 +412,7 @@ export default class WackLockscreenClockExtension extends Extension {
                         });
                     }
 
-                    const actorsToFade = [this._clockWrapper, this._hintContainer, this._mainBox, this._customWallpaperOverlay].filter(a => a != null);
+                    const actorsToFade = [this._clockWrapper, this._hintContainer, this._nowPlaying?.actor, this._mainBox, this._customWallpaperOverlay].filter(a => a != null);
                     actorsToFade.forEach(actor => {
                         actor.ease({ opacity: 0, duration, mode });
                     });
@@ -584,6 +600,21 @@ export default class WackLockscreenClockExtension extends Extension {
         this._overflowActive = false;
         this._hintContainer.add_child(this._overflowLabel);
 
+        // ── Now Playing Setup ────────────────────────────────────────────
+        // Guarded, matching this file's own convention for anything not essential to the
+        // core lock/unlock flow (see the dialog._updateBackgroundEffects/
+        // _updateUserSwitchVisibility guards above) -- a failure building this (MPRIS/
+        // D-Bus setup, in particular) shouldn't be able to abort the rest of dialog setup
+        // and leave the stock GNOME dialog showing instead.
+        try {
+            this._nowPlaying = new NowPlayingWidget();
+            lockDialogGroup.add_child(this._nowPlaying.actor);
+            this._positionNowPlaying();
+        } catch (e) {
+            logError(e, '[WACK] failed to set up Now Playing widget');
+            this._nowPlaying = null;
+        }
+
         this._notifManager.setupNotifBlur(dialog._notificationsBox);
         this._promptActor = dialog._promptBox ?? dialog._stack;
         this._promptActor?.set_pivot_point(0.5, 0.5);
@@ -643,6 +674,7 @@ export default class WackLockscreenClockExtension extends Extension {
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._positionClock();
             this._positionHint();
+            this._positionNowPlaying();
             this._notifManager.positionOverflow();
             this._applyPromptModeLayout();
             this._syncLockscreenMessageLayout();
@@ -2099,6 +2131,24 @@ export default class WackLockscreenClockExtension extends Extension {
         this._hint.set_width(natWidth);
     }
 
+    _positionNowPlaying() {
+        if (!this._nowPlaying)
+            return;
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+
+        const actor = this._nowPlaying.actor;
+        actor.set_width(-1);
+        const [, natWidth] = actor.get_preferred_width(-1);
+        const [, natHeight] = actor.get_preferred_height(-1);
+
+        const centerY = monitor.y + Math.floor(monitor.height * NOW_PLAYING_VERTICAL_FRACTION);
+        const x = monitor.x + Math.floor((monitor.width - natWidth) / 2);
+        const y = centerY - Math.floor(natHeight / 2);
+        actor.set_position(x, y);
+    }
+
     _tempSessionModeOverride() {
         if (this._origSessionModeProps) return;
         this._origSessionModeProps = {
@@ -2391,6 +2441,12 @@ export default class WackLockscreenClockExtension extends Extension {
             this._hintContainer = null;
         }
 
+        if (this._nowPlaying) {
+            lockDialogGroup?.remove_child(this._nowPlaying.actor);
+            this._nowPlaying.destroy();
+            this._nowPlaying = null;
+        }
+
         if (this._dateLabel) {
             this._dateLabel.disconnectObject(this);
             this._dateLabel = null;
@@ -2421,24 +2477,40 @@ export default class WackLockscreenClockExtension extends Extension {
         }
 
         if (this._mainBox && this._origLayout) {
-            const oldLayout = this._mainBox.layout_manager;
-            if (this._lockscreenMessageLabel) {
-                this._lockscreenMessageLabel.destroy();
+            // Same class of bug as cupertinoPrompt.js's own _updateHintLabel() fix (see its
+            // comment): these are all still-non-null JS references, but the actual C-level
+            // actors can already be disposed if Main.screenShield rebuilt _dialog (and
+            // everything under it) before this teardown got a chance to run against the
+            // *previous* dialog. Any of remove_child()/destroy()/property access below can
+            // throw "already disposed" in that case -- wrapping the whole block, not just
+            // one call, since a partial run (e.g. label destroyed, then throwing before
+            // _mainBox.layout_manager gets restored) would leave _mainBox in a half-reset
+            // state that's worse than doing nothing further.
+            try {
+                const oldLayout = this._mainBox.layout_manager;
+                if (this._lockscreenMessageLabel) {
+                    this._lockscreenMessageLabel.destroy();
+                    this._lockscreenMessageLabel = null;
+                }
+                if (this._lockscreenMessageContent) {
+                    this._lockscreenMessageContent.destroy();
+                    this._lockscreenMessageContent = null;
+                }
+                if (this._lockscreenMessageScrollView) {
+                    this._mainBox.remove_child(this._lockscreenMessageScrollView);
+                    this._lockscreenMessageScrollView.destroy();
+                    this._lockscreenMessageScrollView = null;
+                }
+                this._mainBox.layout_manager = this._origLayout;
+                if (oldLayout && oldLayout !== this._origLayout) oldLayout._extension = null;
+                this._mainBox.opacity = 255;
+                this._mainBox.queue_relayout();
+            } catch (e) {
+                // Disposed out from under us -- nothing left to clean up.
                 this._lockscreenMessageLabel = null;
-            }
-            if (this._lockscreenMessageContent) {
-                this._lockscreenMessageContent.destroy();
                 this._lockscreenMessageContent = null;
-            }
-            if (this._lockscreenMessageScrollView) {
-                this._mainBox.remove_child(this._lockscreenMessageScrollView);
-                this._lockscreenMessageScrollView.destroy();
                 this._lockscreenMessageScrollView = null;
             }
-            this._mainBox.layout_manager = this._origLayout;
-            if (oldLayout && oldLayout !== this._origLayout) oldLayout._extension = null;
-            this._mainBox.opacity = 255;
-            this._mainBox.queue_relayout();
         }
 
         this._dialog = null;

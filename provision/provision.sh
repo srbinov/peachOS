@@ -18,6 +18,39 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# OS identity -- this was never set anywhere in this project before, so every distro-name
+# surface (GNOME Settings' "About", neofetch-style tools, the actual TTY login banner, and
+# critically the Calamares welcome screen, which reads os-release for its own branding
+# strings) was silently showing "Ubuntu 26.04" the whole time. ID_LIKE keeps BOTH "ubuntu"
+# and "debian" (not just one) -- this is genuinely Ubuntu-based, and plenty of scripts
+# (including some of peachOS's own, and apt tooling) branch on ID_LIKE to detect that family;
+# dropping it entirely to look "more custom" would silently break real compatibility checks
+# for zero branding benefit, since ID itself (checked first, always) already says "peachos".
+echo "==> Setting OS identity -> peachOS 10.0 (not Ubuntu)"
+cat > /etc/os-release <<'EOF'
+PRETTY_NAME="peachOS 10.0"
+NAME="peachOS"
+VERSION_ID="10.0"
+VERSION="10.0 (Nectar)"
+VERSION_CODENAME=nectar
+ID=peachos
+ID_LIKE=ubuntu debian
+HOME_URL="https://github.com/srbinov/peachOS"
+SUPPORT_URL="https://github.com/srbinov/peachOS/issues"
+BUG_REPORT_URL="https://github.com/srbinov/peachOS/issues"
+UBUNTU_CODENAME=resolute
+LOGO=distributor-logo
+EOF
+
+cat > /etc/lsb-release <<'EOF'
+DISTRIB_ID=peachOS
+DISTRIB_RELEASE=10.0
+DISTRIB_CODENAME=nectar
+DISTRIB_DESCRIPTION="peachOS 10.0"
+EOF
+
+printf 'peachOS 10.0 \\n \\l\n\n' > /etc/issue
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -149,6 +182,26 @@ done
 for f in "$REPO_DIR"/provision/calamares/branding/peachos/*; do
     install -Dm644 "$f" "/etc/calamares/branding/peachos/$(basename "$f")"
 done
+
+# penguins-eggs itself ships stock branding baked into its own compiled binary/config that
+# provisioning must override on the same host that runs `eggs remaster` (this config lives
+# under /etc/penguins-eggs.d/, is NOT part of what gets squashed into the ISO, and is read
+# fresh by the eggs binary on every remaster -- so these overrides only take effect on a
+# build host that already has penguins-eggs installed; skip cleanly otherwise). Two overrides:
+# (1) splash.png -- used verbatim for BOTH the GRUB and isolinux/BIOS boot menu backgrounds
+# (generate-menus.sh), replacing the stock penguins-on-ice photo. (2) trust-desktop.sh -- the
+# live-session autostart script that copies the installer launcher to the Desktop and marks
+# it trusted; its LAUNCHER_SRC (/usr/share/applications/install-system.desktop) is regenerated
+# every remaster by eggs' own hardcoded "create-live-launcher" step ("Install System" name,
+# penguin icon) and is NOT itself editable, so this override writes peachOS's branded
+# Desktop-Entry content directly in the script rather than fighting that step. Its Icon= points
+# at install-peachos.svg, installed system-wide here too so the reference resolves at first boot.
+if [ -d /etc/penguins-eggs.d ]; then
+    echo "==> Rebranding penguins-eggs boot/install assets -> peachOS"
+    install -Dm644 "$REPO_DIR/assets/boot/grub-splash.png" /etc/penguins-eggs.d/brain.d/assets/splash.png
+    install -Dm755 "$REPO_DIR/provision/penguins-eggs/trust-desktop.sh" /etc/penguins-eggs.d/scripts/trust-desktop.sh
+    install -Dm644 "$REPO_DIR/assets/logos/PeachICON_BLACK.svg" /usr/share/icons/peachos/install-peachos.svg
+fi
 
 # Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
 # -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top

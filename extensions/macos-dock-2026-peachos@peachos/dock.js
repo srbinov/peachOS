@@ -7,6 +7,7 @@ import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 import Shell from 'gi://Shell';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Graphene from 'gi://Graphene';
 import St from 'gi://St';
@@ -783,7 +784,22 @@ export let Dock = GObject.registerClass(
             }
             if (c._label) {
               c._showLabel();
+              this._positionLabelTail(c);
             }
+          };
+        }
+        // Plain method-wrapping, same as showLabel above -- deliberately NOT
+        // label.connect('destroy'/'notify::...', ...): a persistent GObject signal
+        // closure held on the dash-label was the actual cause of a real crash (GNOME
+        // Shell aborting with SIGABRT, journalctl showing "Attempting to call back into
+        // JSAPI during the sweeping phase of GC ... not destroying a Clutter actor ...
+        // with ::destroy signals connected" right before it). This wrapper approach holds
+        // no reference into the label's own signal system at all.
+        if (!c._hideLabel && c.hideLabel) {
+          c._hideLabel = c.hideLabel;
+          c.hideLabel = () => {
+            c._hideLabel();
+            this._destroyLabelTail(c);
           };
         }
         c._icon.track_hover = true;
@@ -843,6 +859,112 @@ export let Dock = GObject.registerClass(
       });
 
       return this._icons;
+    }
+
+    /**
+     * macOS Tahoe dock tooltip has a small triangular tail pointing down at the icon --
+     * GNOME's own dash-label has no such thing, and St can't draw an arbitrary rotated-
+     * square speech-bubble tail purely in CSS, so this positions a small pre-rendered
+     * triangle asset (icons/dock-label-tail.png) as a sibling of the real label instead.
+     *
+     * Deliberately holds NO GObject signal connection on the label (no .connect() at all
+     * here) -- an earlier version connected 'notify::allocation' / 'notify::opacity' /
+     * 'destroy' closures directly on the dash-label to keep the tail in sync, and that was
+     * a real, reproducible crash: GNOME Shell aborting with SIGABRT, journalctl showing
+     * "Attempting to call back into JSAPI during the sweeping phase of GC ... not
+     * destroying a Clutter actor ... with ::destroy signals connected" right before each
+     * one. A persistent closure held on a dash-label -- an actor whose own lifecycle isn't
+     * fully under this code's control -- is exactly the pattern that warning describes.
+     * hideLabel is wrapped (below) to destroy the tail directly instead, the same
+     * plain-method-wrapping approach showLabel already uses safely.
+     */
+    _positionLabelTail(c) {
+      let label = c._label;
+      if (!label) return;
+      let parent = label.get_parent();
+      if (!parent) return;
+
+      if (!c._labelTail) {
+        c._labelTailLight = Gio.icon_new_for_string(
+          `${this.extension.path}/icons/dock-label-tail.png`
+        );
+        c._labelTailDark = Gio.icon_new_for_string(
+          `${this.extension.path}/icons/dock-label-tail-dark.png`
+        );
+        c._labelTail = new St.Icon({
+          gicon: c._labelTailLight,
+          style_class: 'macos-dock-label-tail',
+        });
+        parent.add_child(c._labelTail);
+        parent.set_child_below_sibling(c._labelTail, label);
+      }
+
+      this._syncLabelTail(c);
+
+      // A label's position/size aren't necessarily settled the instant _showLabel()
+      // returns, so this re-syncs once more on the next main-loop iteration to catch that
+      // -- a one-shot, self-removing GLib timeout, not a persistent signal connection like
+      // the crash above. Guarded against overlapping hover-in/out by clearing any pending
+      // one first, and the callback itself re-checks c._label/_labelTail still exist
+      // before touching them, in case the icon was un-hovered in the meantime.
+      if (c._labelTailSyncId) {
+        GLib.source_remove(c._labelTailSyncId);
+      }
+      c._labelTailSyncId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 0, () => {
+        c._labelTailSyncId = 0;
+        this._syncLabelTail(c);
+        return GLib.SOURCE_REMOVE;
+      });
+    }
+
+    _syncLabelTail(c) {
+      let label = c._label;
+      if (!label || !c._labelTail) return;
+
+      const TAIL_SIZE = 8;
+      const OVERLAP = 4; // how far the tail tucks up behind the bubble's bottom edge
+      let [lx, ly] = label.get_position();
+      c._labelTail.set_size(TAIL_SIZE, TAIL_SIZE);
+      c._labelTail.set_position(
+        Math.round(lx + label.width / 2 - TAIL_SIZE / 2),
+        Math.round(ly + label.height - OVERLAP)
+      );
+      c._labelTail.opacity = label.opacity;
+
+      // Own, self-contained settings read (matches AppearanceController's own pattern in
+      // macOS-TopBar-Gnome) rather than reaching into this.extension's internals, whose
+      // exact shape from here isn't guaranteed -- wrapped defensively either way so a
+      // failure here can only ever affect which color is picked, never the position set
+      // above.
+      try {
+        if (!this._interfaceSettingsForLabels) {
+          this._interfaceSettingsForLabels = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.interface',
+          });
+        }
+        let isDark =
+          this._interfaceSettingsForLabels.get_string('color-scheme') === 'prefer-dark';
+        if (isDark) {
+          label.add_style_class_name('macos-dock-label-dark');
+          c._labelTail.gicon = c._labelTailDark;
+        } else {
+          label.remove_style_class_name('macos-dock-label-dark');
+          c._labelTail.gicon = c._labelTailLight;
+        }
+      } catch (e) {
+        logError(e, '[macos-dock] label dark-mode check failed');
+      }
+    }
+
+    _destroyLabelTail(c) {
+      if (c._labelTailSyncId) {
+        GLib.source_remove(c._labelTailSyncId);
+        c._labelTailSyncId = 0;
+      }
+      if (c._labelTail) {
+        c._labelTail.destroy();
+        c._labelTail = null;
+      }
     }
 
     _updateExtraIcons() {

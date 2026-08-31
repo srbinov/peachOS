@@ -29,3 +29,48 @@
 #dash .dash-item-container {
   /*border: 2px solid magenta;*/
 }
+
+/*###############################################*/
+/*     macOS Tahoe dock hover label (tooltip)     */
+/*###############################################*/
+/*
+ * GNOME's own dash-label mechanism (BaseIcon.showLabel()/hideLabel(), wrapped in dock.js)
+ * already handles all the actual behavior -- creating the St.Label, setting its text,
+ * positioning it above the hovered icon, fading it in/out. This just restyles the label
+ * itself to match real macOS Tahoe's dock tooltip (see icons/dock-label-tail.png's own
+ * source screenshot): a rounded gray capsule with dark text, not GNOME's default flat
+ * rectangle. Color/measurements sampled directly off that reference screenshot.
+ *
+ * !important throughout: #dashtodockcontainer *, #d2daDock * { margin/padding: 0 !important }
+ * above would otherwise zero out this rule's own padding if the label ever ends up parented
+ * under either of those (same reasoning as that block's own use of !important).
+ */
+.dash-label {
+  background-color: rgba(173, 173, 173, 0.94) !important;
+  color: #1c1c1e !important;
+  border-radius: 6px !important;
+  padding: 2px 8px !important;
+  margin: 0 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  text-shadow: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Dark-mode variant -- dark bubble, light text, mirroring the light recipe above exactly.
+   Toggled in JS (dock.js's _positionLabelTail()) off liquid-glass-mode, which already
+   tracks org.gnome.desktop.interface's color-scheme reactively for the dock's background
+   -- this reuses that same signal rather than watching color-scheme a second time. */
+.dash-label.macos-dock-label-dark {
+  background-color: rgba(60, 60, 62, 0.92) !important;
+  color: #f5f5f7 !important;
+}
+
+/* Tail (icons/dock-label-tail.png / -dark.png), positioned in JS right under the label --
+   see dock.js's showLabel wrapper. St has no clean way to draw an arbitrary rotated-square
+   speech-bubble tail purely in CSS, so this is a small pre-rendered triangle asset instead;
+   the light/dark swap happens on the actor's gicon in JS, not here (two different image
+   files, not something a CSS class alone can pick between). */
+.macos-dock-label-tail {
+  icon-size: 8px;
+}

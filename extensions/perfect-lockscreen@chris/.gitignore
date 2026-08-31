@@ -1,0 +1,10 @@
+venv
+.venv
+AGENT.md
+CLAUDE.md
+GEMINI.md
+schemas/gschemas.compiled
+locale/
+*.zip
+checkthisthingblyat
+*.bak

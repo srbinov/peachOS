@@ -109,6 +109,22 @@ export const WackCupertinoRestPrompt = GObject.registerClass(
             // Escape the text to prevent markup injection errors
             const safeText = GLib.markup_escape_text(this._currentText, -1);
 
+            // Real, reproducible bug the try/catch below exists for: this._hintLabel being
+            // non-null only proves the JS wrapper is still alive, not that the underlying
+            // St.Label/Clutter.Text hasn't already been disposed at the C/GObject level --
+            // a screen re-lock can tear down and rebuild Main.screenShield._dialog (and
+            // everything under it, this whole WackCupertinoRestPrompt included) out from
+            // under an in-flight setNotifCount()/setHintText() call that was queued against
+            // the *previous* dialog's instance before this extension's own teardown had a
+            // chance to null the reference out (extension.js's _destroyCupertinoRestPrompt()
+            // does null it, but only for teardown IT drives -- not for the dialog object
+            // itself disappearing independently). Accessing .clutter_text on a disposed
+            // St.Label threw "can't access property ... is null" straight out of here
+            // uncaught, feeding a teardown/re-setup cascade that hit the *next* dialog's own
+            // actors mid-construction -- which is what actually produced "the lock screen
+            // reverted to stock Ubuntu": the custom dialog kept failing to finish building.
+            try {
+
             // Always use the same markup structure so Pango's line metrics are
             // constant whether or not the bell emoji is present. Without this,
             // switching between "N 🔔 · hint" and plain hint nudges the widget
@@ -121,6 +137,9 @@ export const WackCupertinoRestPrompt = GObject.registerClass(
             } else {
                 this._hintLabel.clutter_text.use_markup = true;
                 this._hintLabel.clutter_text.set_markup(this._currentText);
+            }
+            } catch (e) {
+                // Disposed out from under us -- nothing left to update.
             }
         }
     });

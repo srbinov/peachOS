@@ -7,6 +7,12 @@ export const CROSSFADE_TIME = 500; // Animation duration for transitions
 // Visual positioning constants
 export const DATETIME_TOP_FRACTION = 0.09; // Date/Time offset from the top (percentage of screen height)
 export const HINT_VERTICAL_FRACTION = 0.875; // Hint offset from the top
+export const NOW_PLAYING_VERTICAL_FRACTION = 0.5; // Now Playing card center Y -- the literal
+    // middle of the screen, which is also the middle of the (large) gap between the clock
+    // (starts at DATETIME_TOP_FRACTION) and the password prompt regardless of which of the
+    // two very different prompt layouts (stock "wack" mode vs. CUPERTINO_PROMPT_VERTICAL_
+    // FRACTION's own low-and-idle Cupertino mode) is active, since this doesn't need to
+    // know either prompt's exact live position to stay clear of both.
 export const HINT_NOTIF_MARGIN = 16; // Minimum vertical gap between hint and notifications
 export const FADE_OUT_SCALE = 0.3; // Scale factor when the clock shrinks during unlock transition
 

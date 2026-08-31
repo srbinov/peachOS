@@ -62,6 +62,72 @@
     text-shadow: 0 0px 12px 2px rgba(0, 0, 0, 0.08);
 }
 
+/* Now Playing card (nowPlaying.js) -- same glass-card recipe as .media-message/
+   .unlock-dialog-notification-source above (this project's own established lock-screen
+   glass look), not too big: a small thumbnail, one line of title/artist, small transport
+   buttons. Sits between the clock and the password prompt (see extension.js's
+   _positionNowPlaying()). */
+.wack-now-playing {
+    /* Fixed, not just a natural-size fit -- title/artist ellipsize inside it instead of
+       resizing the card, so it never needs repositioning (recentering) on a track change,
+       just a content update. */
+    width: 300px;
+    background-color: rgba(255, 255, 255, 0.1125) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.04);
+    border-radius: 16px;
+    padding: 10px 14px;
+    spacing: 12px;
+}
+
+.wack-now-playing-art {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.25);
+}
+
+.wack-now-playing-art StIcon {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.wack-now-playing-text {
+    spacing: 2px;
+}
+
+.wack-now-playing-title {
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 600;
+    font-size: 14px;
+    text-shadow: 0 0px 12px 2px rgba(0, 0, 0, 0.08);
+}
+
+.wack-now-playing-artist {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    text-shadow: 0 0px 12px 2px rgba(0, 0, 0, 0.08);
+}
+
+.wack-now-playing-transport {
+    spacing: 2px;
+}
+
+.wack-now-playing-button {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.wack-now-playing-button:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+.wack-now-playing-button:active {
+    background-color: rgba(255, 255, 255, 0.22);
+}
+
 
 /* ── Password Prompts ────────────────────────────────────────────────────
    macOS-inspired password prompt styles, adjust to taste    */
