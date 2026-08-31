@@ -5,6 +5,10 @@ new laptop tomorrow, building a fresh ISO, and continuing work live on real hard
 via a different agent/session at that point). Read this whole file before touching anything —
 it is trying to save you from re-discovering things the hard way.
 
+**Updated:** same day, later — added Phase 8 (Nectar wallpaper refresh + real chroma-key
+compositing on the Appearance page's Light/Dark previews) and a real local git-corruption
+incident + recovery pattern, both after the "first draft" of this doc was already committed.
+
 ## What peachOS is
 
 A macOS-styled Linux distro built on Ubuntu 26.04 + GNOME Shell 50. Custom top bar (traffic
@@ -40,7 +44,8 @@ set of fixes and actually boot-tested on real hardware.** The most recent ISO th
 disk (`/home/eggs/egg-of-peachos-nectar-peachos-amd64-2026-08-30_2109.iso`, 8.53 GiB) only has
 an early subset of tonight's fixes baked in (branding + extensions sync + onboarding-disable) —
 it predates the live-session lockout fix, the real-install security fix, the installer UI
-redesign, the Wi-Fi/wallpaper/dconf audit, and the gnome-control-center/volume-slider fixes.
+redesign, the Wi-Fi/wallpaper/dconf audit, the gnome-control-center/volume-slider fixes, and
+(newest) the Nectar wallpaper refresh + Appearance-page green-screen compositing (Phase 8).
 **Do not treat that file, or the GitHub release `peachos-iso-2026-08-30-v2`, as current** — the
 release is actually empty (an upload was started, then interrupted before any chunk finished,
 see below). A fresh `eggs remaster` is needed before anything gets tested on the new laptop.
@@ -266,6 +271,63 @@ it wrote the exact expected raw volume value and correctly auto-unmuted. Restore
 original volume/mute state afterward. **If you touch `sound_page.py` again, you have a real
 device to test against on this VM — use it, don't just trust the code.**
 
+### Phase 8: Nectar wallpaper refresh + real chroma-key compositing on Appearance previews
+Two asks. First, simple: the user pushed two new commits to `~/macOS_Tahoe_SYSICONS`
+(`f628406`/`83d6447` — **always `git fetch` that repo and check `HEAD..origin/main` before
+assuming "new asset X isn't there yet" means it doesn't exist**, that's exactly what happened
+here) with a refreshed peachOS Nectar light/dark wallpaper pair and a matching dynamic-preview
+SVG. Swapped them in wholesale (old files deleted, not left alongside) — see
+`wallpaper_page.py`'s `DYNAMIC_WALLPAPERS` table and regenerated
+`apps/settings/data/wallpaper-previews/peachOS_Nectar.jpg` via the same
+`gen_wallpaper_previews.py` crop+scale pipeline as everything else there. Nectar's dark variant
+is `.jpg` now, not `.png` — the source file changed format, the table entry was updated to match
+rather than force a pointless reencode.
+
+Second, genuinely new capability: the user added `lightmode_icon_new.svg`/`darkmode_icon_new.svg`
+(same icons repo) — macOS Setup-Assistant-style desktop mockups (menu bar, traffic lights, dock)
+painted over a **solid `#00bf63` green-screen background** instead of a fixed photo, with the ask
+being "make that green area become whatever wallpaper is currently equipped, dynamic wallpapers
+included." Implemented real chroma-key compositing in `appearance_page.py`:
+- Rasterize the green-screen SVG once via `GdkPixbuf` (cached — it never changes, ~0.2s each,
+  the expensive half).
+- On every page load and every wallpaper change, crop the user's real wallpaper to match
+  (`_cover_crop_scale`, same crop-before-scale approach as the preview-thumbnail generator, not
+  a naive stretch), then replace every green-screen pixel with the corresponding wallpaper pixel
+  — soft-blending a distance-based band around the threshold so the anti-aliased boundary between
+  the green screen and the menu-bar/dock artwork doesn't leave a visible green fringe (~0.02s,
+  the cheap half).
+- The Light tile composites `org.gnome.desktop.background`'s `picture-uri`, the Dark tile
+  composites `picture-uri-dark`. **This is what makes dynamic wallpapers "just work" with zero
+  special-casing** — those two keys already hold the correct light/dark image for whatever's
+  currently equipped (a static wallpaper simply has both keys pointing at the same file); this is
+  the exact same pair `wallpaper_page.py`'s own `_set_wallpaper()` writes to, so no new concept
+  was needed, just reading the keys that were already the source of truth.
+- Reactive: `changed::picture-uri`/`changed::picture-uri-dark` on the same `Gio.Settings` trigger
+  a re-composite (cheap, since the rasterized foreground is cached) — confirmed live by actually
+  changing the wallpaper while a constructed page was running and checking the texture object
+  changed, not just that the code looks right.
+
+**Verified concretely at every step, not assumed** (same discipline as the rest of this doc):
+measured the composite cost directly (0.2s rasterize + 0.02s chroma-key per tile, ~1.3s for the
+whole Appearance page including everything else it already builds — nowhere near GTK's
+"not-responding" territory), round-tripped a known RGB value through the PIL↔`GdkPixbuf`
+conversion to rule out channel/stride corruption before trusting it, rendered both composited
+tiles to PNG and actually looked at them (clean edges, correct wallpaper, no green fringing), and
+ran the reactive-update test above against a real constructed page rather than just trusting the
+signal connection would fire correctly.
+
+**Reusable pattern**: any future "composite the user's real wallpaper/photo into a preview"
+feature should reuse this exact approach — `_rasterize_greenscreen_svg` /
+`_cover_crop_scale` / `_composite_scheme_preview` in `appearance_page.py` are written generically
+enough to lift if a similar green-screen asset shows up elsewhere (e.g. a lock-screen preview,
+a dock-background preview). `python3-pil` is already a provisioned system dependency (the icon
+masker daemon uses it — see `provision.sh`), so this didn't need a new dependency.
+
+**A real git corruption happened during this phase, unrelated to any of the above — read the new
+gotcha in Architecture reference below before assuming `git status` failing means something you
+did is wrong.** It wasn't; it was pre-existing local repository corruption from earlier in the
+night, recovered cleanly, no work was lost.
+
 ## Architecture reference (things you'll need repeatedly)
 
 - **`provision/provision.sh`** is the single source of truth for how this dev VM (and thus what
@@ -311,10 +373,30 @@ device to test against on this VM — use it, don't just trust the code.**
   needing to check for the literal `live` username (which itself is now a forbidden name for a
   real account, see Phase 3). Used in `disable-lock.sh` and `trust-desktop.sh`; reuse it for
   anything similar.
+- **Green-screen chroma-key compositing** (Phase 8): the reusable pattern for "make this preview
+  asset show the user's real wallpaper/photo instead of a fixed stock image" — a `#00bf63`
+  green-screen SVG rasterized once via `GdkPixbuf` (cache it, it's the expensive part, ~0.2s),
+  then a soft-thresholded per-pixel distance-from-green blend against a cover-cropped real image
+  (cheap, ~0.02s at a 224×126 tile size). Implementation lives in `appearance_page.py`
+  (`_rasterize_greenscreen_svg`/`_cover_crop_scale`/`_composite_scheme_preview`) — lift it
+  directly rather than reinventing if another green-screen asset shows up.
+- **Local git corruption happened once this session, unrelated to any actual peachOS bug** —
+  `git status`/`git log` started failing with `fatal: bad object HEAD` after an interrupted write
+  (mid-commit, cause not fully confirmed) left three loose objects truncated to 0 bytes, one of
+  them the HEAD commit itself. **Working-tree files were completely unaffected** — git object
+  corruption only touches `.git/`'s internal database, never the actual checked-out files, so
+  nothing was at risk of being lost. Recovery pattern, if this happens again: (1) `cp -r .git
+  .git-backup` before touching anything, (2) `git fsck --full` to find the exact scope (ignore
+  `dangling blob`/`dangling commit` lines, those are normal), (3) `git ls-remote origin main` to
+  confirm the remote has a good copy of whatever HEAD is supposed to be, (4) delete just the
+  empty/corrupt loose object files under `.git/objects/`, (5) `git fetch origin main` — git
+  redownloads fresh copies of exactly what's missing, no `reset --hard` needed and no working-tree
+  risk, since the ref itself was already correct and just needed its target object to exist. If
+  `git fsck` comes back clean afterward, delete the backup.
 
 ## What's still genuinely open / not yet done
 
-1. **A fresh `eggs remaster` incorporating everything through Phase 7, then an actual boot test
+1. **A fresh `eggs remaster` incorporating everything through Phase 8, then an actual boot test
    on real hardware** — this is almost certainly the very next step, and per the user's plan,
    probably what tomorrow with the new laptop is for. Clean `/home/eggs` first if reusing this
    VM.
