@@ -51,6 +51,21 @@ EOF
 
 printf 'peachOS 10.0 \\n \\l\n\n' > /etc/issue
 
+# Skip GNOME's own first-login wizard (gnome-initial-setup) entirely for every account --
+# the live user (via penguins-eggs' create-live-home, which copies /etc/skel/. verbatim at
+# remaster time) and any account Calamares creates during a real install (useradd -m also
+# seeds from /etc/skel). peachOS ships fully preconfigured through the dconf defaults
+# installed below -- theme, dock, top bar, wallpaper, every extension enabled -- so there is
+# nothing left for that wizard to ask, and left enabled it would show generic Adwaita chrome
+# plus stock Ubuntu-specific pages (Ubuntu Pro/Livepatch/Online Accounts) that clash with the
+# rest of peachOS and undercut the fully-custom out-of-box experience.
+# gnome-initial-setup-first-login.service's own ConditionPathExists=!%E/gnome-initial-setup-done
+# (%E = $XDG_CONFIG_HOME) is the documented, standard skip mechanism -- no systemd units need
+# masking, and it's what other GNOME-based distros with fully preset defaults rely on too.
+echo "==> Disabling gnome-initial-setup (peachOS ships fully preconfigured, no wizard needed)"
+mkdir -p /etc/skel/.config
+touch /etc/skel/.config/gnome-initial-setup-done
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
