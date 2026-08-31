@@ -3,7 +3,7 @@ import os
 import gi
 
 gi.require_version('Gvc', '1.0')
-from gi.repository import Gio, GLib, Gtk, Gvc
+from gi.repository import Gio, GLib, GObject, Gtk, Gvc
 
 from widgets import make_hero_header, ToggleRow
 
@@ -69,6 +69,34 @@ class SoundPage(Gtk.Box):
         effects_card.append(feedback_row)
 
         self.append(effects_card)
+
+        # Volume slider + mute -- the single most expected control on a sound settings page,
+        # and the thing this page was missing entirely. Same Gvc API/pattern as the top bar's
+        # own working sound-menu slider (macos-top-panel's soundIndicator.js: stream.volume,
+        # stream.push_volume(), stream.change_is_muted(), control.get_vol_max_norm(),
+        # notify::volume/notify::is-muted) -- mirrored here rather than reinvented, since that
+        # code is already proven against real audio hardware and this one isn't (no audio
+        # device on the machine this was written on to test against directly).
+        volume_card = Gtk.Box(css_classes=['wifi-card'])
+        volume_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+            margin_start=14, margin_end=14, margin_top=12, margin_bottom=12,
+        )
+        volume_row.append(Gtk.Image.new_from_icon_name('audio-volume-low-symbolic'))
+        self._volume_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self._volume_scale.set_draw_value(False)
+        self._volume_scale.set_hexpand(True)
+        self._volume_scale_handler = self._volume_scale.connect('value-changed', self._on_volume_changed)
+        volume_row.append(self._volume_scale)
+        volume_row.append(Gtk.Image.new_from_icon_name('audio-volume-high-symbolic'))
+        self._mute_btn = Gtk.ToggleButton(icon_name='audio-volume-muted-symbolic', css_classes=['flat'])
+        self._mute_btn_handler = self._mute_btn.connect('toggled', self._on_mute_toggled)
+        volume_row.append(self._mute_btn)
+        volume_card.append(volume_row)
+        self.append(volume_card)
+
+        self._volume_stream = None
+        self._volume_stream_signal_ids = []
 
         self.append(Gtk.Label(label='Output & Input', xalign=0, css_classes=['heading']))
 
@@ -157,7 +185,59 @@ class SoundPage(Gtk.Box):
             self._device_list.select_row(selected_row)
             selected_row._syncing = False
 
+        self._bind_volume_stream(default)
+
+    # ---- Volume slider + mute --------------------------------------------
+
+    def _bind_volume_stream(self, stream):
+        if self._volume_stream:
+            for signal_id in self._volume_stream_signal_ids:
+                self._volume_stream.disconnect(signal_id)
+        self._volume_stream_signal_ids = []
+        self._volume_stream = stream
+
+        if stream:
+            self._volume_stream_signal_ids.append(
+                stream.connect('notify::volume', lambda *_a: self._update_volume_ui()))
+            self._volume_stream_signal_ids.append(
+                stream.connect('notify::is-muted', lambda *_a: self._update_volume_ui()))
+        self._update_volume_ui()
+
+    def _update_volume_ui(self):
+        has_stream = self._volume_stream is not None
+        self._volume_scale.set_sensitive(has_stream)
+        self._mute_btn.set_sensitive(has_stream)
+        if not has_stream:
+            return
+
+        max_volume = self._mixer.get_vol_max_norm()
+        percent = round((self._volume_stream.get_volume() / max_volume) * 100) if max_volume else 0
+
+        with GObject.signal_handler_block(self._volume_scale, self._volume_scale_handler):
+            self._volume_scale.set_value(percent)
+        with GObject.signal_handler_block(self._mute_btn, self._mute_btn_handler):
+            self._mute_btn.set_active(self._volume_stream.get_is_muted())
+
+    def _on_volume_changed(self, scale):
+        if not self._volume_stream:
+            return
+        max_volume = self._mixer.get_vol_max_norm()
+        percent = scale.get_value()
+        self._volume_stream.set_volume(round((percent / 100) * max_volume))
+        self._volume_stream.push_volume()
+        if percent > 0 and self._volume_stream.get_is_muted():
+            self._volume_stream.change_is_muted(False)
+            with GObject.signal_handler_block(self._mute_btn, self._mute_btn_handler):
+                self._mute_btn.set_active(False)
+
+    def _on_mute_toggled(self, btn):
+        if self._volume_stream:
+            self._volume_stream.change_is_muted(btn.get_active())
+
     def _on_destroy(self, _widget):
         for signal_id in (self._mixer_state_id, self._mixer_default_sink_id, self._mixer_default_source_id):
             if signal_id:
                 self._mixer.disconnect(signal_id)
+        if self._volume_stream:
+            for signal_id in self._volume_stream_signal_ids:
+                self._volume_stream.disconnect(signal_id)

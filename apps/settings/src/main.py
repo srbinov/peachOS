@@ -915,6 +915,19 @@ class SettingsWindow(Adw.ApplicationWindow):
 class SettingsApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self._target_page = None
+
+    def do_command_line(self, command_line):
+        # DEFAULT_FLAGS makes this a normal single-instance GApplication -- a second
+        # `peachos-settings <page>` invocation while the window's already open (e.g.
+        # clicking "Sound Settings" in the top bar's sound menu while Settings is open on
+        # some other page) is delivered here too, via D-Bus, NOT as a fresh do_activate()
+        # with args -- do_activate() never receives argv at all, only this does. That's
+        # the whole reason this override exists rather than just reading sys.argv in main().
+        args = command_line.get_arguments()
+        self._target_page = args[1] if len(args) > 1 else None
+        self.activate()
+        return 0
 
     def do_activate(self):
         provider = Gtk.CssProvider()
@@ -928,6 +941,9 @@ class SettingsApp(Adw.Application):
         win = self.props.active_window
         if not win:
             win = SettingsWindow(application=self)
+        if self._target_page:
+            win._go_to(self._target_page, record_history=True)
+            self._target_page = None
         win.present()
 
 
