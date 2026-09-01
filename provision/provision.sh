@@ -697,6 +697,31 @@ update-desktop-database /usr/share/applications
 sed -i '/^\[Desktop Entry\]/a NoDisplay=true' /usr/share/applications/org.gnome.TextEditor.desktop
 update-desktop-database /usr/share/applications
 
+# GNOME Calendar (Flathub): pinned in the dock's own favorite-apps (see provision/dconf/
+# 01-peachos) but never actually installed by this script -- confirmed missing entirely from
+# /usr/share/applications on this dev VM too (only present via flatpak's own export dir and a
+# leftover per-user copy in ~/.local/share/applications that only exists on this one account).
+# Same reasoning as Weather below applies: needs an explicit copy in /usr/share/applications
+# since peachos-icon-appearance/-icon-watcherd never scan Flatpak's own export dir.
+echo "==> Installing GNOME Calendar (Flathub)"
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install -y --system --noninteractive flathub org.gnome.Calendar
+
+cat > /usr/share/applications/org.gnome.Calendar.desktop <<'EOF'
+[Desktop Entry]
+Name=Calendar
+Comment=Access and manage your calendars
+Exec=/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=gnome-calendar --file-forwarding org.gnome.Calendar @@u %U @@
+Icon=org.gnome.Calendar
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=GNOME;GTK;Office;Calendar;Core;
+MimeType=text/calendar;
+DBusActivatable=true
+X-Flatpak=org.gnome.Calendar
+EOF
+
 # GNOME Weather (Flathub): same story as Calculator above -- no curated light icon, keeps
 # whatever peachos-icon-watcherd's padding pass gives it, dark mode is curated via
 # CURATED_DARK_SLUGS. Flatpak, though, so unlike Calculator it needs an explicit copy in
