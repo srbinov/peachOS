@@ -94,7 +94,7 @@ custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybin
 
 [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ulauncher]
 binding='<Primary>space'
-command='/home/user/peachOS/apps/ulauncher/bin/ulauncher toggle'
+command='/usr/bin/ulauncher toggle'
 name='Show peachySearch'
 
 [org/gnome/shell]

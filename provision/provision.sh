@@ -66,7 +66,23 @@ echo "==> Disabling gnome-initial-setup (peachOS ships fully preconfigured, no w
 mkdir -p /etc/skel/.config
 touch /etc/skel/.config/gnome-initial-setup-done
 
-# The above marker skips gnome-initial-setup's whole wizard -- confirmed via its own compiled
+# Found on a real first-boot test (2026-09-01): the marker above blocks
+# gnome-initial-setup-first-login.service as intended, but gnome-initial-setup-upgrade-
+# login.service has the OPPOSITE condition on that exact same file --
+# `ConditionPathExists=%E/gnome-initial-setup-done` (requires it to EXIST) alongside
+# `ConditionPathExists=!%E/gnome-initial-setup/upgrade-26.04-done` (requires THIS one to
+# NOT exist) -- so seeding the first marker to stop the first-login wizard was, by itself,
+# exactly what satisfies the upgrade wizard's own trigger instead. Same wizard UI either way
+# (same Ubuntu-branded appearance/telemetry/app-store pages this file already documents
+# below), just reached through the "upgrade" entry point rather than "first login" -- which
+# is exactly what a live/demo boot showed: the marker was present (from /etc/skel), but the
+# wizard still ran. Second marker closes that gap. "26.04" is a literal, non-templated string
+# in that unit file (Ubuntu's own base version this build is on) -- confirm it still matches
+# if the base Ubuntu version this project tracks ever changes.
+mkdir -p /etc/skel/.config/gnome-initial-setup
+touch /etc/skel/.config/gnome-initial-setup/upgrade-26.04-done
+
+# The above markers skip gnome-initial-setup's whole wizard -- confirmed via its own compiled
 # binary's embedded page list (gis-appearance-page.ui/"Choose how Ubuntu looks" dark-light
 # toggle, gis-ubuntu-insights-page.ui, gis-software-page.ui/gis-apps-page.ui "Ubuntu's App
 # Center has a range of apps") that this covers the exact dark/light + data-sharing + app-store
@@ -112,6 +128,40 @@ apt-get install -y --no-install-recommends mpv
 # Clipboard mode shells out to wl-copy/wl-paste instead of using Gtk.Clipboard directly.
 echo "==> Installing peachySearch (ulauncher) runtime dependencies"
 apt-get install -y --no-install-recommends python3-gi-cairo python3-xlib wl-clipboard
+
+# peachySearch itself was never actually installed anywhere -- only its runtime deps were.
+# The dconf default wiring the <Primary>space keybinding to it (see provision/dconf/01-peachos)
+# pointed straight at $REPO_DIR/apps/ulauncher/bin/ulauncher, which only ever existed on this
+# dev VM's own checkout (/home/user/peachOS/...) -- confirmed missing entirely on a real boot
+# test, since a fresh account never has that dev path. bin/ulauncher (vendored upstream script)
+# auto-detects its own project root from wherever it's actually run from (checks for a sibling
+# `ulauncher/` package dir, sets PYTHONPATH accordingly) -- it doesn't need to be run from a
+# git checkout specifically, just needs its own directory structure (bin/, ulauncher/, data/)
+# copied intact, which is what this does. The dconf keybinding command itself points at this
+# same system path, not the dev one -- see 01-peachos.
+echo "==> Installing peachySearch (ulauncher) system-wide -> /usr/lib/peachos/ulauncher"
+mkdir -p /usr/lib/peachos/ulauncher
+rsync -a --delete "$REPO_DIR/apps/ulauncher/bin/" /usr/lib/peachos/ulauncher/bin/
+rsync -a --delete "$REPO_DIR/apps/ulauncher/ulauncher/" /usr/lib/peachos/ulauncher/ulauncher/
+rsync -a --delete "$REPO_DIR/apps/ulauncher/data/" /usr/lib/peachos/ulauncher/data/
+
+# /usr/bin/ulauncher is what upstream's own .desktop/.service files (io.ulauncher.Ulauncher.
+# desktop's TryExec, io.ulauncher.Ulauncher.service's Exec, ulauncher.service's ExecStart --
+# all three, unmodified from upstream) actually expect -- installing a real wrapper here means
+# those files can be deployed exactly as upstream wrote them instead of hand-patching a path
+# into each one, which is what silently broke portability in the first place (a hand-edit to
+# the *repo's own* io.ulauncher.Ulauncher.desktop pointed TryExec at this dev VM's own checkout
+# path, /home/user/peachOS/..., invisible until a real fresh-account boot test: TryExec failing
+# hides a .desktop entry from menus/app-grids entirely, which is why peachySearch didn't show
+# up anywhere, not just why the keybinding failed).
+install -Dm755 /dev/stdin /usr/bin/ulauncher <<'EOF'
+#!/bin/sh
+exec /usr/lib/peachos/ulauncher/bin/ulauncher "$@"
+EOF
+install -Dm644 "$REPO_DIR/apps/ulauncher/io.ulauncher.Ulauncher.desktop" /usr/share/applications/io.ulauncher.Ulauncher.desktop
+install -Dm644 "$REPO_DIR/apps/ulauncher/io.ulauncher.Ulauncher.service" /usr/share/dbus-1/services/io.ulauncher.Ulauncher.service
+install -Dm644 "$REPO_DIR/apps/ulauncher/ulauncher.service" /usr/lib/systemd/user/ulauncher.service
+update-desktop-database /usr/share/applications
 
 # Settings app (apps/settings) runtime dep: gir1.2-goa-1.0 gives the Internet Accounts tab
 # real GNOME Online Accounts bindings -- gnome-online-accounts itself (the goa-daemon and
@@ -449,6 +499,21 @@ install_icloud_desktop maps      "/usr/bin/apple-maps"                          
 install_icloud_desktop tv        "/usr/bin/apple-tv"                             "Apple TV"
 update-desktop-database /usr/share/applications
 
+# These four were never actually installed by this script -- only their .desktop rebrands and
+# icon overrides were, further down, which silently assumed the underlying snap already
+# existed. Confirmed missing entirely on a real boot test (Orchard/BlueBubbles/App Center all
+# absent) -- this dev VM had them installed manually at some point outside provision.sh
+# entirely, which is why the gap went unnoticed here. `--classic` only where actually needed
+# (desktop-security-center and firmware-updater are Canonical's own confined snaps, no classic
+# flag); plain `snap install firefox`/`bluebubbles`/`snap-store` pull their own required base/
+# content snaps (core22, gnome-42-2204, etc.) automatically, same as this VM's own install did.
+echo "==> Installing snap packages the app rebrands below expect to already exist"
+snap install firefox
+snap install bluebubbles
+snap install snap-store
+snap install desktop-security-center
+snap install firmware-updater
+
 # peachOS-branded rebrands of stock apps: Files -> Peachy, Firefox -> Orchard. Firefox's real
 # .desktop is regenerated by snapd on every refresh (/var/lib/snapd/desktop/applications), so a
 # direct edit there would get silently reverted -- instead this installs an override of the same
@@ -752,7 +817,32 @@ update-desktop-database /usr/share/applications
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"
-"$WORK_DIR/gtk-theme/install.sh" -d /usr/share/themes
+# -t all: generates every accent-color variant (not just one baked-in color) -- confirmed
+# against a real boot test that a plain install (no -t/-b) leaves window titlebar buttons
+# looking like stock GNOME/Adwaita instead of the theme's own traffic-light graphics. -b:
+# blur variant, needed alongside the shell extension's own blur (a different thing -- this is
+# the theme's own translucent-surface CSS, not blur-my-shell's compositor effect).
+"$WORK_DIR/gtk-theme/install.sh" -d /usr/share/themes -t all -b
+
+# The theme's own -l/--libadwaita flag (installs a GTK4 CSS override into ~/.config/gtk-4.0/,
+# the standard mechanism libaswaita apps -- Files, Calendar, Text Editor, this project's own
+# Settings app -- actually respect, unlike a legacy GTK theme name alone) refuses to run as
+# root, and it seeds a single user's home, not something new accounts inherit automatically
+# either way. Rather than re-run the generator during every provision (needs a non-root user
+# context this script doesn't have mid-provision), assets/gtk4-libadwaita/ ships the exact,
+# verified output of `install.sh -l` run once (confirmed byte-identical against this dev VM's
+# own already-working ~/.config/gtk-4.0/, which is what this project's actual look has been
+# running on) -- same pattern as assets/firefox-theme/ below. Seeded via /etc/skel like
+# everything else here, RELATIVE symlinks only (the tool itself generates absolute ones tied
+# to whatever $HOME it ran against, which would silently point at the wrong user's home once
+# copied into skel and expanded for a different account -- confirmed this was actually the
+# case on the dev VM's own copy before fixing it here).
+echo "==> Installing GTK4/libadwaita theme override -> /etc/skel/.config/gtk-4.0"
+mkdir -p /etc/skel/.config/gtk-4.0
+rsync -a --delete "$REPO_DIR/assets/gtk4-libadwaita/" /etc/skel/.config/gtk-4.0/
+ln -sf gtk-Dark.css /etc/skel/.config/gtk-4.0/gtk.css
+ln -sf gtk-Dark.css /etc/skel/.config/gtk-4.0/gtk-dark.css
+ln -sf gtk-Light.css /etc/skel/.config/gtk-4.0/gtk-light.css
 
 echo "==> Installing MacTahoe icon theme system-wide -> /usr/share/icons"
 git clone --quiet "$MACTAHOE_ICON_REPO" "$WORK_DIR/icon-theme"
