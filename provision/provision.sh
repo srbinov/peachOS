@@ -817,12 +817,19 @@ update-desktop-database /usr/share/applications
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
 git -C "$WORK_DIR/gtk-theme" checkout --quiet "$MACTAHOE_GTK_COMMIT"
-# -t all: generates every accent-color variant (not just one baked-in color) -- confirmed
-# against a real boot test that a plain install (no -t/-b) leaves window titlebar buttons
-# looking like stock GNOME/Adwaita instead of the theme's own traffic-light graphics. -b:
-# blur variant, needed alongside the shell extension's own blur (a different thing -- this is
-# the theme's own translucent-surface CSS, not blur-my-shell's compositor effect).
-"$WORK_DIR/gtk-theme/install.sh" -d /usr/share/themes -t all -b
+# Reverted `-t all -b` after a real boot test on a 2012 MacBook Pro froze the desktop
+# completely -- renders once, cursor moves, nothing else responds, permanently. Root cause not
+# conclusively provable from this sandbox (headless testing can't reproduce real-GPU rendering
+# bugs), but `-t all -b` was the single largest, most novel change between a working build and
+# the frozen one, on hardware old enough that extra CSS variants + a blur render path are a
+# real risk. It also turned out to be *unnecessary*: directly diffed a plain install against
+# the `-t all -b` one -- identical titlebutton SVGs, identical 89 button-CSS references in
+# gtk.css. Traffic lights were never missing because of a missing accent/blur variant; this
+# project's own dconf theme names (MacTahoe-Light/MacTahoe-Dark, no color suffix) never
+# referenced the extra variants `-t all` generates in the first place. The actual traffic-light
+# fix is the `-l`/libadwaita seeding below, confirmed unrelated to this flag and independently
+# tested against fresh accounts already.
+"$WORK_DIR/gtk-theme/install.sh" -d /usr/share/themes
 
 # The theme's own -l/--libadwaita flag (installs a GTK4 CSS override into ~/.config/gtk-4.0/,
 # the standard mechanism libaswaita apps -- Files, Calendar, Text Editor, this project's own
