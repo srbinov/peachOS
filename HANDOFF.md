@@ -581,7 +581,71 @@ another live test cycle -- it gives a real, numeric answer in under a minute.
   risk, since the ref itself was already correct and just needed its target object to exist. If
   `git fsck` comes back clean afterward, delete the backup.
 
+### Phase 12: Phase 11's "verified" fix was still wrong -- AT-SPI was measuring the wrong actor
+
+Phase 11 ended with the container's inner content correctly sized (141x68, measured via AT-SPI)
+and was reported to the user as fixed. The user's next live test showed the icon/text floating
+with padding on both sides inside a still-wide card ("UM WTF IS THIS", twice, with screenshots).
+Re-running the exact same AT-SPI check against the user's own live session gave identical
+correct numbers to the isolated test -- meaning the fix's own claim was true and still not what
+the user was seeing, a genuinely confusing state to be in.
+
+**The actual bug: AT-SPI's tree walk found the wrong node first.** The verification script
+matched the first node with accessible role `"notification"` and reported everything below it.
+That role belongs to `this._banner` itself (the `MessageList.Message` class sets
+`accessible_role: Atk.Role.NOTIFICATION` on itself, per the real GNOME source) -- but
+`this._banner` is a `St.Button` with a single child (`vbox`, via `set_child()`) that reports its
+own generic `"panel"` role. Every previous Phase 11 measurement that looked at "the panel" was
+actually looking at `vbox` -- one level *inside* the real card -- and never actually measured
+`this._banner`'s own size, which is the thing with the `.notification-banner` CSS class, the
+actual background/border/padding the user sees on screen. `vbox` really was correctly sized the
+whole time; the outer card just wasn't, and nothing had checked it.
+
+**Why the outer card stayed wide even after Phase 11's `x_align`/`x_expand` fixes**: those fixes
+address a *different* bug (`Clutter.BinLayout` stretching a child to fill its parent) that
+doesn't apply here. `this._banner` has an *explicit* CSS `width` from GNOME's own stock
+`_notifications.scss` (`.notification-banner { width: 34em; }`) -- confirmed by fetching that
+exact file, not guessed. St short-circuits an `St.Widget`'s preferred-width computation to an
+explicit CSS width whenever one is set, full stop, regardless of how small its children actually
+are. `stylesheet.css`'s own `max-width: 28.8em !important` override doesn't get bypassed by this
+(it's a real, working property, contrary to a wrong hypothesis considered mid-Phase-12) -- it
+does clamp the stock 34em down -- but a clamped *ceiling* is still a fixed value having nothing
+to do with content size, so a short "test" notification and a long one both render at exactly
+28.8em wide. This is also why every Phase-11-era CSS-only attempt reportedly produced "zero
+visible change": CSS was never going to make the card content-sized, only cap its worst case.
+
+**The fix** (`lib/notificationTray.js`, `patchedUpdateShowingNotification`): don't read
+`this._banner.get_preferred_width()` at all -- it's permanently poisoned by that CSS width. Read
+`this._banner.get_child()` (i.e. `vbox`, confirmed via GNOME's real `messageList.js` source to be
+the actual content container: hidden header + the icon/text `message-box` row) and measure *its*
+preferred width instead, since it has no CSS width of its own and genuinely reflects content. Add
+`this._banner`'s own theme padding back in (`get_horizontal_padding()`) since `vbox` doesn't
+include it, then assign that total to `this._banner.width`, still clamped against the theme's
+`max-width` for pathologically long content.
+
+**Verified via the same isolated-headless + AT-SPI technique from Phase 11, but this time
+explicitly checking the outer `"notification"`-role node, not just its child**: card went from
+338x98 (clamped to the 28.8em ceiling regardless of content -- ~98-144px of dead padding on each
+side, exactly matching what the user's screenshots showed) to 169x98, a uniform ~15px on every
+side around the 139x68 content -- matching `this._banner`'s own 14px CSS padding almost exactly.
+Committed as `macOS-TopBar-Gnome@f2cea50` / `peachOS@20faa53`.
+
+**Lesson for next time, stated plainly**: a technique being real (AT-SPI genuinely returns exact
+pixel geometry, no guessing involved) does not make a *specific measurement* correct -- always
+confirm which actor a role/name actually corresponds to in the real source before trusting what
+it reports, especially in a tree with several generically-named `"panel"` nodes at different
+depths. This fix has NOT yet been confirmed against the user's own live hardware/session as of
+this writing -- AT-SPI called it fixed once already in Phase 11 and was wrong about what it had
+actually verified, so treat this as "the automated measurement now shows the right actor at the
+right size," not as a substitute for the user's own eyes.
+
 ## What's still genuinely open / not yet done
+
+0. **The Phase 12 notification-width fix needs a real live confirmation from the user** -- it's
+   deployed (both repos pushed) but per Phase 12's own closing lesson, don't treat AT-SPI's
+   numbers alone as proof; a full logout/login is still required for the extension to actually
+   pick up the change (Phase 9/10 finding: disable/enable is not reliable), and the user needs to
+   actually look at a real notification afterward.
 
 1. **A fresh `eggs remaster` incorporating everything through Phase 8, then an actual boot test
    on real hardware** — this is almost certainly the very next step, and per the user's plan,
