@@ -11,6 +11,14 @@
 # macos-dock-2026-peachos and lockscreen swap to perfect-lockscreen), and the previous
 # capture had never been refreshed since. Two real bugs found and fixed while rebuilding it,
 # not carried forward:
+#
+# Re-synced a second time (2026-08-31, ahead of a fresh remaster) after actually diffing
+# every key here against live `dconf read`, not assuming the previous sync still held --
+# it didn't: color-scheme/user-theme/wallpaper had drifted to dark mode + the Nectar
+# wallpaper (Phase 8 of this session's own work, never synced back here), liquid-glass-mode
+# and liquid-glass-intensity had both been retuned live during this session's own testing,
+# app-picker-layout was missing the installer launcher, and enabled-extensions had a
+# harmless but real order difference. All eight fixed to match live exactly.
 #   - perfect-lockscreen's lockscreen-wallpaper-path pointed at a /tmp scratchpad test file
 #     that wouldn't exist on any other machine -- disabled the custom-photo override here so
 #     it correctly falls back to the (real, shipped) rolling-hills.mp4 video background.
@@ -27,7 +35,7 @@
 [org/gnome/desktop/interface]
 accent-color='blue'
 clock-format='12h'
-color-scheme='default'
+color-scheme='prefer-dark'
 cursor-theme='MacTahoe'
 document-font-name='Inter Light 11 @wght=300'
 enable-hot-corners=false
@@ -41,8 +49,8 @@ toolkit-accessibility=false
 [org/gnome/desktop/background]
 color-shading-type='solid'
 picture-options='zoom'
-picture-uri='file:///usr/share/backgrounds/peachos/presets/lion_beach.jpg'
-picture-uri-dark='file:///usr/share/backgrounds/peachos/presets/lion_beach.jpg'
+picture-uri='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Light.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Dark.jpg'
 primary-color='#000000000000'
 secondary-color='#000000000000'
 
@@ -90,10 +98,10 @@ command='/home/user/peachOS/apps/ulauncher/bin/ulauncher toggle'
 name='Show peachySearch'
 
 [org/gnome/shell]
-app-picker-layout=[{'Utilities': <{'position': <0>}>, 'System': <{'position': <1>}>, '73622667-ace0-4bad-b83e-75f75ddf4dc9': <{'position': <2>}>, '67e6e87c-06db-4661-aa71-0db1602c05ed': <{'position': <3>}>, 'org.localsend.localsend_app.desktop': <{'position': <4>}>, 'org.gnome.Weather.desktop': <{'position': <5>}>, 'org.gnome.Ptyxis.desktop': <{'position': <6>}>}]
+app-picker-layout=[{'Utilities': <{'position': <0>}>, 'System': <{'position': <1>}>, '73622667-ace0-4bad-b83e-75f75ddf4dc9': <{'position': <2>}>, '67e6e87c-06db-4661-aa71-0db1602c05ed': <{'position': <3>}>, 'org.localsend.localsend_app.desktop': <{'position': <4>}>, 'org.gnome.Weather.desktop': <{'position': <5>}>, 'org.gnome.Ptyxis.desktop': <{'position': <6>}>, 'install-system.desktop': <{'position': <7>}>}]
 disable-user-extensions=false
 disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com']
-enabled-extensions=['blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'perfect-lockscreen@chris', 'macos-top-panel@local.dev', 'macos-dock-2026-peachos@peachos']
+enabled-extensions=['blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'perfect-lockscreen@chris', 'macos-dock-2026-peachos@peachos', 'macos-top-panel@local.dev']
 favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_reminders.desktop', 'org.gnome.TextEditor.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
 last-selected-power-profile='power-saver'
 welcome-dialog-last-shown-version='50.1'
@@ -165,7 +173,7 @@ items-pullout-angle=0.5
 label-background-color=(0.0, 0.0, 0.0, 0.0)
 label-border-color=(1.0, 1.0, 1.0, 0.0)
 liquid-glass=true
-liquid-glass-mode=1
+liquid-glass-mode=0
 msg-to-ext=''
 preferred-monitor=0
 pressure-sense=false
@@ -180,7 +188,7 @@ battery-show-percentage=true
 clock-24-hour=false
 clock-show-date=true
 clock-show-seconds=false
-liquid-glass-intensity=90
+liquid-glass-intensity=74
 show-bluetooth-icon=true
 show-spotlight-icon=true
 show-wifi-icon=true
@@ -200,7 +208,7 @@ last-version-installed=54
 tiling-popup-all-workspace=true
 
 [org/gnome/shell/extensions/user-theme]
-name='MacTahoe-Light'
+name='MacTahoe-Dark'
 
 [org/gnome/Ptyxis]
 default-profile-uuid='5fb19a772832546755f0e0e16a825b5f'

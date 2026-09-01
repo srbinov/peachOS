@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=peachOS Firefox theme setup
+Comment=Seeds the MacTahoe Firefox theme into a new profile on first login (no-op once applied)
+Exec=/usr/local/bin/peachos-setup-firefox-theme
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

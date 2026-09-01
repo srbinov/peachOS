@@ -251,6 +251,22 @@ echo "==> Installing live-session lock guard (boot=live only, see disable-lock.s
 install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
 install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
 
+# Firefox's MacTahoe theme (userChrome.css/userContent.css) only ever lived inside this dev
+# VM's own snap Firefox profile -- no install step anywhere seeded it for a new account,
+# meaning a fresh install or live boot would show completely stock Firefox. The theme assets
+# themselves are shipped system-wide here (any account can reference them); the actual
+# per-profile seeding (chrome symlink + the legacyUserProfileCustomizations pref, since a new
+# profile's random salt can't be known ahead of time) happens at first login instead -- see
+# setup-firefox-theme.sh's own docstring for the full reasoning and what was/wasn't
+# re-provable inside this dev sandbox.
+echo "==> Installing Firefox MacTahoe theme assets -> /usr/share/peachos/firefox-theme"
+mkdir -p /usr/share/peachos/firefox-theme
+cp -r "$REPO_DIR"/assets/firefox-theme/. /usr/share/peachos/firefox-theme/
+chmod -R a+rX /usr/share/peachos/firefox-theme
+echo "==> Installing Firefox theme first-login seeder"
+install -Dm755 "$REPO_DIR/provision/live-session/setup-firefox-theme.sh" /usr/local/bin/peachos-setup-firefox-theme
+install -Dm644 "$REPO_DIR/provision/live-session/setup-firefox-theme.desktop" /etc/skel/.config/autostart/peachos-setup-firefox-theme.desktop
+
 # Boot splash: peachOS's own Plymouth theme (two-step module) instead of stock Ubuntu's bgrt
 # -- black or white full-screen fill, the peachOS mark (same peach-icon-symbolic.svg the top
 # bar's own KiwiMenuButton uses at index 19, kiwimenu.js/icons.json) centered above a simple
