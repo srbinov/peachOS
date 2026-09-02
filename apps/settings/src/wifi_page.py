@@ -24,11 +24,14 @@ def _signal_icon_name(strength: int) -> str:
 
 
 def _ap_is_secured(ap: NM.AccessPoint) -> bool:
-    if ap.get_wpa_flags() != NM.AccessPointSecurityFlags.NONE:
+    # This libnm's GI does not expose NM.AccessPointSecurityFlags / NM.AccessPointFlags;
+    # the WPA/RSN flag getters return a plain bitmask (0 == open) and the privacy bit is
+    # stable ABI (NM_802_11_AP_FLAGS_PRIVACY = 0x1).
+    if ap.get_wpa_flags() != 0:
         return True
-    if ap.get_rsn_flags() != NM.AccessPointSecurityFlags.NONE:
+    if ap.get_rsn_flags() != 0:
         return True
-    return bool(ap.get_flags() & NM.AccessPointFlags.PRIVACY)
+    return bool(ap.get_flags() & 0x1)
 
 
 def _ap_ssid(ap: NM.AccessPoint):
