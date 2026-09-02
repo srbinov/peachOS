@@ -161,6 +161,10 @@ EOF
 install -Dm644 "$REPO_DIR/apps/ulauncher/io.ulauncher.Ulauncher.desktop" /usr/share/applications/io.ulauncher.Ulauncher.desktop
 install -Dm644 "$REPO_DIR/apps/ulauncher/io.ulauncher.Ulauncher.service" /usr/share/dbus-1/services/io.ulauncher.Ulauncher.service
 install -Dm644 "$REPO_DIR/apps/ulauncher/ulauncher.service" /usr/lib/systemd/user/ulauncher.service
+# Run peachySearch as a persistent per-user daemon so <Primary>space / the menu-bar
+# magnifier toggle it instantly instead of cold-starting the Python process each time
+# (Spotlight-style). --global enables it for every user's graphical session.
+systemctl --global enable ulauncher.service
 update-desktop-database /usr/share/applications
 
 # Settings app (apps/settings) runtime dep: gir1.2-goa-1.0 gives the Internet Accounts tab

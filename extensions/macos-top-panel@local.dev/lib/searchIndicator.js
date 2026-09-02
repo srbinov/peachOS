@@ -5,12 +5,10 @@ import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
-// peachySearch (apps/ulauncher in the peachOS repo) isn't packaged/installed as a system-wide
-// command yet -- it's still run from its dev checkout, the same "known next step" status the
-// peachOS README documents for the Settings app. This is the same hardcoded absolute path
-// already used for the GNOME custom keybinding in provision/dconf/01-peachos, so there's one
-// real path to update (not two) once it's actually installed system-wide.
-const PEACHY_SEARCH_TOGGLE_CMD = ['/home/user/peachOS/apps/ulauncher/bin/ulauncher', 'toggle'];
+// peachySearch (apps/ulauncher in the peachOS repo) is installed system-wide by
+// provision.sh: /usr/bin/ulauncher is a thin wrapper around /usr/lib/peachos/ulauncher.
+// Same command the <Primary>space keybinding uses (provision/dconf/01-peachos).
+const PEACHY_SEARCH_TOGGLE_CMD = ['/usr/bin/ulauncher', 'toggle'];
 
 export const SearchIndicator = GObject.registerClass(
 class SearchIndicator extends PanelMenu.Button {

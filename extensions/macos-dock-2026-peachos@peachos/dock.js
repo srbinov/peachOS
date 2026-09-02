@@ -596,6 +596,16 @@ export let Dock = GObject.registerClass(
             let app = c._appwell.app;
             let appId = app ? app.get_id() : '';
 
+            // peachySearch (ulauncher) is a Spotlight-style overlay, not an app. Its
+            // Wayland window can't set skip_taskbar, so the stock Dash counts it as a
+            // running app the moment it opens -- filter that icon out of the dock here.
+            if (appId === 'io.ulauncher.Ulauncher.desktop' && !this._favorite_ids?.includes(appId)) {
+              c._appwell.visible = false;
+              c.width = -1;
+              c.height = -1;
+              return false;
+            }
+
             // hide icons if favorites only
             if (
               !c.custom_icon &&
