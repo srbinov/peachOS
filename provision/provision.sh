@@ -468,6 +468,16 @@ install -Dm755 "$WORK_DIR/icloud-build/icloud-for-linux" /usr/bin/icloud-for-lin
 install -Dm755 "$WORK_DIR/icloud-for-linux/scripts/apple-maps" /usr/bin/apple-maps
 install -Dm755 "$WORK_DIR/icloud-for-linux/scripts/apple-tv" /usr/bin/apple-tv
 
+# icloud-for-linux is a single choc/GTK3 binary with no GtkApplication, so its Wayland
+# app_id (and X11 WM_CLASS) is derived from argv[0]'s basename -- every app it opens would
+# otherwise report "icloud-for-linux" and neither the shell nor the dock can tell Mail from
+# Photos from TV (windows collapse into one generic entry). Launch each through a per-app
+# symlink named exactly the StartupWMClass its .desktop declares.
+install -d /usr/lib/peachos/icloud
+for slug in mail contacts calendar photos drive notes reminders pages numbers keynote find maps tv; do
+    ln -sfn /usr/bin/icloud-for-linux "/usr/lib/peachos/icloud/icloud-for-linux.$slug"
+done
+
 echo "==> Installing iCloud app icons -> /usr/share/icons/icloud-for-linux"
 for icon in mail contacts calendar photos drive notes reminders pages numbers keynote find maps tv; do
     install -Dm644 "$WORK_DIR/icloud-for-linux/snap/gui/${icon}.svg" \
@@ -476,7 +486,7 @@ done
 
 echo "==> Installing iCloud app desktop entries -> /usr/share/applications"
 install_icloud_desktop() {
-    local slug="$1" exec_cmd="$2" name="$3"
+    local slug="$1" args="$2" name="$3"
     cat > "/usr/share/applications/icloud-for-linux_${slug}.desktop" <<EOF
 [Desktop Entry]
 Name=${name}
@@ -485,24 +495,25 @@ Comment=${name}
 Type=Application
 Categories=Office
 Icon=/usr/share/icons/icloud-for-linux/${slug}.svg
-Exec=${exec_cmd}
+Exec=/usr/lib/peachos/icloud/icloud-for-linux.${slug} ${args}
 StartupWMClass=icloud-for-linux.${slug}
 Terminal=false
+StartupNotify=true
 EOF
 }
-install_icloud_desktop mail      "/usr/bin/icloud-for-linux mail Mail"           "iCloud Mail"
-install_icloud_desktop contacts  "/usr/bin/icloud-for-linux contacts Contacts"   "iCloud Contacts"
-install_icloud_desktop calendar  "/usr/bin/icloud-for-linux calendar Calendar"   "iCloud Calendar"
-install_icloud_desktop photos    "/usr/bin/icloud-for-linux photos Photos"       "iCloud Photos"
-install_icloud_desktop drive     "/usr/bin/icloud-for-linux iclouddrive Drive"   "iCloud Drive"
-install_icloud_desktop notes     "/usr/bin/icloud-for-linux notes Notes"         "iCloud Notes"
-install_icloud_desktop reminders "/usr/bin/icloud-for-linux reminders Reminders" "iCloud Reminders"
-install_icloud_desktop pages     "/usr/bin/icloud-for-linux pages Pages"         "iCloud Pages"
-install_icloud_desktop numbers   "/usr/bin/icloud-for-linux numbers Numbers"     "iCloud Numbers"
-install_icloud_desktop keynote   "/usr/bin/icloud-for-linux keynote Keynote"     "iCloud Keynote"
-install_icloud_desktop find      "/usr/bin/icloud-for-linux find Find"           "iCloud Find"
-install_icloud_desktop maps      "/usr/bin/apple-maps"                           "Apple Maps"
-install_icloud_desktop tv        "/usr/bin/apple-tv"                             "Apple TV"
+install_icloud_desktop mail      "mail Mail"                            "iCloud Mail"
+install_icloud_desktop contacts  "contacts Contacts"                    "iCloud Contacts"
+install_icloud_desktop calendar  "calendar Calendar"                    "iCloud Calendar"
+install_icloud_desktop photos    "photos Photos"                        "iCloud Photos"
+install_icloud_desktop drive     "iclouddrive Drive"                    "iCloud Drive"
+install_icloud_desktop notes     "notes Notes"                          "iCloud Notes"
+install_icloud_desktop reminders "reminders Reminders"                  "iCloud Reminders"
+install_icloud_desktop pages     "pages Pages"                          "iCloud Pages"
+install_icloud_desktop numbers   "numbers Numbers"                      "iCloud Numbers"
+install_icloud_desktop keynote   "keynote Keynote"                      "iCloud Keynote"
+install_icloud_desktop find      "find Find"                            "iCloud Find"
+install_icloud_desktop maps      'https://maps.apple.com/ "Apple Maps"' "Apple Maps"
+install_icloud_desktop tv        'https://tv.apple.com/ "Apple TV"'     "Apple TV"
 update-desktop-database /usr/share/applications
 
 # These four were never actually installed by this script -- only their .desktop rebrands and
