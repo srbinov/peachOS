@@ -15,11 +15,14 @@ import {WifiPasswordDialog} from './wifiPasswordDialog.js';
 const RESCAN_INTERVAL_SECONDS = 8;
 
 function apIsSecured(ap) {
-    if (ap.get_wpa_flags() !== NM.AccessPointSecurityFlags.NONE)
+    // This libnm's GI does not expose NM.AccessPointSecurityFlags / NM.AccessPointFlags;
+    // the flag getters return a plain bitmask (0 == open) and the privacy bit is stable
+    // ABI (NM_802_11_AP_FLAGS_PRIVACY = 0x1).
+    if (ap.get_wpa_flags() !== 0)
         return true;
-    if (ap.get_rsn_flags() !== NM.AccessPointSecurityFlags.NONE)
+    if (ap.get_rsn_flags() !== 0)
         return true;
-    return !!(ap.get_flags() & NM.AccessPointFlags.PRIVACY);
+    return !!(ap.get_flags() & 0x1);
 }
 
 function apSsid(ap) {
@@ -42,6 +45,12 @@ class WifiIndicator extends PanelMenu.Button {
 
         this._toggleItem = new PopupMenu.PopupSwitchMenuItem('Wi-Fi', false);
         this._toggleItem.connect('toggled', (item, state) => {
+            // See bluetoothIndicator.js: the programmatic setToggleState() in _update()
+            // re-emits 'toggled' in this Shell build, which without this guard would flip
+            // the Wi-Fi radio on/off in a tight loop (NM notify::wireless-enabled -> _update
+            // -> setToggleState -> 'toggled' -> wireless_set_enabled -> ...).
+            if (this._syncingToggle)
+                return;
             if (this._client)
                 this._client.wireless_set_enabled(state);
         });
@@ -110,6 +119,10 @@ class WifiIndicator extends PanelMenu.Button {
             this._client = null;
             this._device = null;
             this._stopRescanTimer();
+            if (this._updateTimerId) {
+                GLib.source_remove(this._updateTimerId);
+                this._updateTimerId = 0;
+            }
             this._activeDialog?.close();
             this._activeDialog = null;
         });
@@ -137,7 +150,21 @@ class WifiIndicator extends PanelMenu.Button {
     }
 
     _update() {
-        if (!this._client)
+        // Debounce: access-point-added/removed fire once per AP during a scan; a full
+        // _renderNetworkList() (destroy_all_children + rebuild) per signal thrashes layout.
+        if (this._isDestroyed || this._updateQueued)
+            return;
+        this._updateQueued = true;
+        this._updateTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+            this._updateTimerId = 0;
+            this._updateQueued = false;
+            this._updateNow();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _updateNow() {
+        if (this._isDestroyed || !this._client)
             return;
 
         const ap = this._currentAccessPoint();
@@ -158,7 +185,9 @@ class WifiIndicator extends PanelMenu.Button {
             ? 'network-wireless-signal-excellent-symbolic'
             : 'network-wireless-offline-symbolic';
         this._statusItem.label.text = state.statusLabel;
+        this._syncingToggle = true;
         this._toggleItem.setToggleState(state.enabled);
+        this._syncingToggle = false;
 
         this._renderNetworkList(state.enabled, ssid);
     }

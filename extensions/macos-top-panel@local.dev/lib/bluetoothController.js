@@ -54,17 +54,45 @@ export class BluetoothController {
     }
 
     _refresh() {
+        if (this._isDestroyed)
+            return;
+        // Coalesce bursts. BlueZ fires InterfacesAdded/InterfacesRemoved once per device
+        // seen during active discovery (many per second); doing a blocking sync
+        // GetManagedObjects per signal stalls the compositor's own main loop and hard-locks
+        // weak hardware. One debounced async read instead.
+        if (this._refreshQueued)
+            return;
+        this._refreshQueued = true;
+        this._refreshTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+            this._refreshTimerId = 0;
+            this._refreshQueued = false;
+            this._doRefresh();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _doRefresh() {
         if (!this._objectManager || this._isDestroyed)
             return;
+        this._objectManager.call(
+            'GetManagedObjects', null, Gio.DBusCallFlags.NONE, -1, null,
+            (proxy, result) => {
+                if (this._isDestroyed)
+                    return;
+                let objects;
+                try {
+                    [objects] = proxy.call_finish(result).deep_unpack();
+                } catch (e) {
+                    logError(e, '[macos-top-panel] control center: failed to read BlueZ objects');
+                    return;
+                }
+                this._processObjects(objects);
+            });
+    }
 
-        let objects;
-        try {
-            const result = this._objectManager.call_sync('GetManagedObjects', null, Gio.DBusCallFlags.NONE, -1, null);
-            [objects] = result.deep_unpack();
-        } catch (e) {
-            logError(e, '[macos-top-panel] control center: failed to read BlueZ objects');
+    _processObjects(objects) {
+        if (this._isDestroyed)
             return;
-        }
 
         let adapterPath = null;
         let connectedDeviceName = null;
@@ -140,14 +168,19 @@ export class BluetoothController {
         if (!this._adapterPath)
             return;
         const powered = this._adapterProxy?.get_cached_property('Powered')?.unpack() ?? false;
-        try {
-            Gio.DBus.system.call_sync(
-                BLUEZ_BUS_NAME, this._adapterPath, PROPERTIES_IFACE, 'Set',
-                new GLib.Variant('(ssv)', [ADAPTER_IFACE, 'Powered', new GLib.Variant('b', !powered)]),
-                null, Gio.DBusCallFlags.NONE, -1, null);
-        } catch (e) {
-            logError(e, '[macos-top-panel] control center: failed to toggle Bluetooth power');
-        }
+        // Async: a Broadcom adapter mid-reset can make this Set block for seconds, and a
+        // sync call here stalls the compositor main loop (same reason discovery/connect
+        // below are async).
+        Gio.DBus.system.call(
+            BLUEZ_BUS_NAME, this._adapterPath, PROPERTIES_IFACE, 'Set',
+            new GLib.Variant('(ssv)', [ADAPTER_IFACE, 'Powered', new GLib.Variant('b', !powered)]),
+            null, Gio.DBusCallFlags.NONE, -1, null, (connection, result) => {
+                try {
+                    connection.call_finish(result);
+                } catch (e) {
+                    logError(e, '[macos-top-panel] control center: failed to toggle Bluetooth power');
+                }
+            });
     }
 
     // Discovery, connect and disconnect all involve real radio/negotiation time (seconds,
@@ -222,6 +255,10 @@ export class BluetoothController {
 
     destroy() {
         this._isDestroyed = true;
+        if (this._refreshTimerId) {
+            GLib.source_remove(this._refreshTimerId);
+            this._refreshTimerId = 0;
+        }
         for (const [obj, id] of this._signalIds)
             obj.disconnect(id);
         this._signalIds = [];

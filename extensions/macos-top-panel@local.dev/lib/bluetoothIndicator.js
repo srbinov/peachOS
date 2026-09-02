@@ -27,7 +27,16 @@ class BluetoothIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._toggleItem = new PopupMenu.PopupSwitchMenuItem('Bluetooth', false);
-        this._toggleItem.connect('toggled', () => this._controller.toggle());
+        this._toggleItem.connect('toggled', () => {
+            // Guard against the programmatic setToggleState() in _update() re-emitting
+            // 'toggled': without this, BlueZ state -> _update -> setToggleState -> 'toggled'
+            // -> controller.toggle() -> writes Powered -> BlueZ 'g-properties-changed' ->
+            // _update ... is an infinite adapter power-cycle loop that pegs bluetoothd and
+            // gnome-shell (hundreds of power-downs/min, hard-locks weak hardware).
+            if (this._syncingToggle)
+                return;
+            this._controller.toggle();
+        });
         this.menu.addMenuItem(this._toggleItem);
 
         this._devicesSeparator = new PopupMenu.PopupSeparatorMenuItem();
@@ -85,7 +94,9 @@ class BluetoothIndicator extends PanelMenu.Button {
         this._powered = state.powered;
         this._icon.icon_name = state.powered ? 'bluetooth-active-symbolic' : 'bluetooth-disabled-symbolic';
         this._statusItem.label.text = state.statusLabel;
+        this._syncingToggle = true;
         this._toggleItem.setToggleState(state.powered);
+        this._syncingToggle = false;
 
         this._devicesSeparator.visible = state.powered;
         this._devicesScrollItem.visible = state.powered;
