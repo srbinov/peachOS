@@ -34,7 +34,7 @@ VERSION_ID="10.0"
 VERSION="10.0 (Nectar)"
 VERSION_CODENAME=nectar
 ID=peachos
-ID_LIKE=ubuntu debian
+ID_LIKE="ubuntu debian"
 HOME_URL="https://github.com/srbinov/peachOS"
 SUPPORT_URL="https://github.com/srbinov/peachOS/issues"
 BUG_REPORT_URL="https://github.com/srbinov/peachOS/issues"
@@ -184,6 +184,12 @@ echo "==> Installing peachOS icon masker daemon -> /usr/lib/peachos/iconmasker"
 install -d /usr/lib/peachos/iconmasker
 install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_mask.py" /usr/lib/peachos/iconmasker/peachos_icon_mask.py
 install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_resolve.py" /usr/lib/peachos/iconmasker/peachos_icon_resolve.py
+# peachos_icon_resolve.py imports peachos_icon_presets_registry (and that pulls in the two
+# peachos_icon_preset* helpers) -- without them the watcher daemon dies on startup with
+# ModuleNotFoundError and systemd restart-loops it forever. Ship the whole module set.
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_presets_registry.py" /usr/lib/peachos/iconmasker/peachos_icon_presets_registry.py
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_preset.py" /usr/lib/peachos/iconmasker/peachos_icon_preset.py
+install -Dm644 "$REPO_DIR/apps/iconmasker/peachos_icon_preset_batch.py" /usr/lib/peachos/iconmasker/peachos_icon_preset_batch.py
 install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-watcherd" /usr/lib/peachos/iconmasker/peachos-icon-watcherd
 install -d /usr/share/icons/peachos-auto
 install -Dm644 "$REPO_DIR/apps/iconmasker/peachos-icon-watcherd.service" /etc/systemd/system/peachos-icon-watcherd.service
@@ -428,7 +434,7 @@ ICLOUD_REPO="https://github.com/srbinov/icloud-for-linux.git"
 ICLOUD_COMMIT="329c519"
 
 echo "==> Installing iCloud apps build dependencies"
-apt-get install -y --no-install-recommends cmake g++ pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+apt-get install -y --no-install-recommends make cmake g++ pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 
 echo "==> Building iCloud apps from source -> /usr/bin"
 git clone --quiet --recurse-submodules "$ICLOUD_REPO" "$WORK_DIR/icloud-for-linux"
@@ -892,8 +898,17 @@ for ext_dir in "$REPO_DIR"/extensions/*/; do
     rsync -a "$ext_dir" "$dest/"
     if [[ -d "$dest/schemas" ]]; then
         glib-compile-schemas "$dest/schemas/"
+        # macos-top-panel's lib/*.js use raw `new Gio.Settings({schema_id})`, which resolves
+        # ONLY against the global schema source, not the extension's own schemas/ dir (only
+        # extension.js's this.getSettings() checks the local dir). Without the schemas also
+        # in /usr/share/glib-2.0/schemas the extension throws "schema not found" on enable and
+        # never loads -- no top bar. The Settings app's Menu Bar page reads the same schema
+        # and crashes for the same reason. Install every extension schema globally too.
+        install -d /usr/share/glib-2.0/schemas
+        install -m644 "$dest"/schemas/*.gschema.xml /usr/share/glib-2.0/schemas/
     fi
 done
+glib-compile-schemas /usr/share/glib-2.0/schemas/
 
 # Perfect Lock Screen needs more than the plain file copy the loop above just did: GDM
 # only loads a login-screen extension once metadata.json lists 'gdm' in session-modes,
