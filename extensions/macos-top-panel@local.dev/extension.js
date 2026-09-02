@@ -19,7 +19,6 @@ import {DockOrderGuard} from './lib/dockOrderGuard.js';
 import {SoundIndicator} from './lib/soundIndicator.js';
 import {MenuManager} from './lib/menuManager.js';
 import {ControlCenterIndicator} from './lib/controlCenterIndicator.js';
-import {WindowColorBlend} from './lib/windowColorBlend.js';
 import {PanelBackground} from './lib/panelBackground.js';
 import {KiwiMenu} from './src/kiwimenu.js';
 import {QuickSettingsActionsController} from './src/hideQSbuttons.js';
@@ -108,36 +107,22 @@ export default class MacosTopPanelExtension extends Extension {
             // lib/dockOrderGuard.js for why this has to live here, in the Shell process.
             this._dockOrderGuard = new DockOrderGuard();
 
-            this._blendColor = null;
             this._panelForeground = 'white';
 
-            // Owns the menu-bar background (transparent, or a frosted wallpaper-slice
-            // blur when menu-bar-blur is on). Set up before the panel style is first
-            // applied so _applyPanelStyle() can see whether blur is active.
-            this._panelBackground = new PanelBackground(this._panelSettings);
+            // Owns the menu-bar background (transparent, or a frosted wallpaper-slice blur
+            // when menu-bar-blur is on) AND the panel text colour, chosen from the
+            // luminance of the wallpaper behind the bar -- no Shell.Screenshot.pick_color,
+            // which is unreliable on the GPUs peachOS targets and was the source of the
+            // "panel goes black when a window touches the top" behaviour.
+            this._panelBackground = new PanelBackground(this._panelSettings, fg => {
+                this._panelForeground = fg;
+                this._applyPanelStyle();
+                this._applyPanelForeground(fg);
+            });
             this._panelBackground.enable();
 
-            this._windowColorBlend = new WindowColorBlend(
-                () => this._panelRect(),
-                ({blendColor, foreground}) => {
-                    this._blendColor = blendColor;
-                    this._panelForeground = foreground;
-                    this._applyPanelStyle();
-                    this._applyPanelForeground(foreground);
-                });
-            // Not an unconditional enable() -- honor whatever window-color-blend-enabled is
-            // already set to at startup, same as every later toggle (see
-            // _syncWindowColorBlend()). Enabling the sampler regardless of the setting was
-            // exactly the "toggle only skips paint, sampler keeps running" bug: the bar's own
-            // background stayed correctly transparent while off, but icon/text color still
-            // shifted between black and white as windows moved underneath it, because
-            // _applyPanelForeground() isn't gated on the setting -- only the CSS fill is.
-            this._syncWindowColorBlend();
-
             this._panelSettingsChangedId = this._panelSettings.connect('changed', (_settings, key) => {
-                if (key === 'window-color-blend-enabled')
-                    this._syncWindowColorBlend();
-                else if (key === 'panel-height' || key === 'menu-bar-blur')
+                if (key === 'panel-height' || key === 'menu-bar-blur')
                     this._applyPanelStyle();
                 else if (key.startsWith('show-') && key.endsWith('-icon'))
                     this._applyIconVisibility();
@@ -192,27 +177,6 @@ export default class MacosTopPanelExtension extends Extension {
         return {x, y, width, height};
     }
 
-    // Turns the window-color-blend-enabled setting on/off for real, not just for painting.
-    // Toggling it off used to leave WindowColorBlend running -- background-color correctly
-    // stayed unset (see _applyPanelStyle()'s own blendEnabled check), but the sampler kept
-    // calling pick_color() every debounce cycle and kept pushing black/white foreground into
-    // every panel indicator based on whatever window was underneath, so icon/text color still
-    // visibly shifted with "off" selected. Off now means: sampler actually disabled, no
-    // stale blend color left cached, foreground reset to the idle default, panel repainted
-    // to match.
-    _syncWindowColorBlend() {
-        const enabled = this._panelSettings.get_boolean('window-color-blend-enabled');
-        if (enabled) {
-            this._windowColorBlend.enable();
-        } else {
-            this._windowColorBlend.disable();
-            this._blendColor = null;
-            this._panelForeground = 'white';
-            this._applyPanelStyle();
-            this._applyPanelForeground('white');
-        }
-    }
-
     _applyPanelStyle() {
         const declarations = [];
 
@@ -220,31 +184,14 @@ export default class MacosTopPanelExtension extends Extension {
         if (height > 0)
             declarations.push(`height: ${height}px`);
 
-        // menu-bar-blur owns the background whenever it's on (the PanelBackground actor
-        // paints the frosted wallpaper slice); the panel itself must stay transparent so
-        // that shows through, and it also beats window-color-blend.
-        const blurOn = this._panelBackground?.isBlurOn?.() ?? false;
-        const blendEnabled = this._panelSettings.get_boolean('window-color-blend-enabled');
-        const showBlend = !blurOn && blendEnabled && !!this._blendColor;
-        if (showBlend) {
-            // Opaque window-chrome color (see windowTouchFill()) plus an explicit
-            // border/box-shadow reset -- no rim/highlight class goes on the panel at all (a
-            // 1px liquid-glass rim reads as a stray white hairline across a thin full-width
-            // bar, not depth; that recipe is for small Control Center-style cards). The reset
-            // is belt-and-suspenders so the theme's own #panel rule can't leave a seam behind
-            // even if it ever sets a border/shadow of its own.
-            declarations.push(`background-color: ${this._blendColor}`);
-            declarations.push('border: none');
-            declarations.push('box-shadow: none');
-        } else {
-            // Force the panel transparent regardless of what the shell theme's #panel rule
-            // resolves to -- it has intermittently rendered opaque black (HANDOFF). The
-            // wallpaper (blur off) or the PanelBackground actor (blur on) shows through.
-            declarations.push('background: none');
-            declarations.push('background-color: transparent');
-            declarations.push('border: none');
-            declarations.push('box-shadow: none');
-        }
+        // The panel itself is always transparent -- forced here regardless of what the
+        // shell theme's #panel rule resolves to (it has intermittently rendered opaque
+        // black, HANDOFF). What shows through is the wallpaper (blur off) or the
+        // PanelBackground actor's frosted strip (blur on).
+        declarations.push('background: none');
+        declarations.push('background-color: transparent');
+        declarations.push('border: none');
+        declarations.push('box-shadow: none');
 
         const fg = this._panelForeground === 'black' ? 'black' : 'white';
         declarations.push(`color: ${fg}`);
@@ -371,11 +318,8 @@ export default class MacosTopPanelExtension extends Extension {
         Main.panel.translation_y = 0;
         this._panelHidden = false;
 
-        this._windowColorBlend?.disable();
-        this._windowColorBlend = null;
         this._panelBackground?.disable();
         this._panelBackground = null;
-        this._blendColor = null;
         this._panelForeground = null;
         Main.panel.remove_style_class_name('macos-panel-fg-black');
         Main.panel.remove_style_class_name('macos-panel-fg-white');

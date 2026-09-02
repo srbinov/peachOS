@@ -1,17 +1,21 @@
 /*
- * Owns the menu-bar background.
+ * Owns the menu-bar background AND the menu-bar text colour.
  *
- *   menu-bar-blur = false  ->  fully transparent (wallpaper shows straight through)
- *   menu-bar-blur = true   ->  a soft frosted blur of the wallpaper slice behind the panel
+ *   menu-bar-blur = false  ->  panel fully transparent (wallpaper shows straight through)
+ *   menu-bar-blur = true   ->  a frosted software blur of the wallpaper slice behind it
  *
- * A dedicated backdrop actor is inserted as Main.panel's first child rather than styling
- * #panel via CSS: the shell theme's own transparent #panel rule has intermittently lost to
- * a stock opaque-black default (HANDOFF "Top bar background bug, parked"), and a child actor
- * is painted after the panel's own background but before every panel widget, so it wins
- * regardless. The blur itself is a one-shot software render (peachos-menubar-blur, PIL) --
- * no Shell.BlurEffect, which is a real freeze risk on the GPUs peachOS still targets.
+ * In both cases the panel foreground (black vs white text/icons) is chosen from the
+ * luminance of that same wallpaper slice, so it stays legible -- computed by the same
+ * helper, no Shell.Screenshot.pick_color (unreliable on the GPUs peachOS targets).
+ *
+ * GNOME 50's Panel.vfunc_allocate only lays out its own left/center/right boxes, so a
+ * child added straight to Main.panel is never allocated. The backdrop therefore lives in
+ * Main.layoutManager.panelBox as an absolutely-positioned actor inside a zero-size holder
+ * (so the vertical box gives it no space), painted below Main.panel.
  */
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
@@ -23,32 +27,45 @@ const REGEN_DEBOUNCE_MS = 350;
 const CACHE_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'peachos-menubar']);
 
 export class PanelBackground {
-    /** @param {Gio.Settings} panelSettings */
-    constructor(panelSettings) {
+    /**
+     * @param {Gio.Settings} panelSettings
+     * @param {(fg: 'black'|'white') => void} onForeground
+     */
+    constructor(panelSettings, onForeground) {
         this._panelSettings = panelSettings;
+        this._onForeground = onForeground ?? (() => {});
+        this._holder = null;
         this._actor = null;
         this._bgSettings = null;
         this._ifaceSettings = null;
         this._signalIds = [];
         this._regenId = 0;
+        this._regenInFlight = false;
         this._nonce = 0;
+        this._currentPath = null;
         this._destroyed = false;
     }
 
     enable() {
         this._destroyed = false;
+
+        this._holder = new Clutter.Actor({width: 0, height: 0});
         this._actor = new St.Widget({
             style_class: 'macos-panel-backdrop',
             reactive: false,
             can_focus: false,
-            track_hover: false,
         });
-        this._actor.add_constraint(new Clutter.BindConstraint({
-            source: Main.panel,
-            coordinate: Clutter.BindCoordinate.SIZE,
-        }));
-        Main.panel.insert_child_at_index(this._actor, 0);
+        this._actor.set_content_gravity(Clutter.ContentGravity.RESIZE_FILL);
+        this._actor.hide();
+        this._holder.add_child(this._actor);
+        Main.layoutManager.panelBox.insert_child_below(this._holder, Main.panel);
+        this._syncGeometry();
 
+        this._connect(Main.panel, 'notify::allocation', () => this._syncGeometry());
+        this._connect(Main.layoutManager, 'monitors-changed', () => {
+            this._syncGeometry();
+            this._scheduleRegen();
+        });
         try {
             this._bgSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
             this._ifaceSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
@@ -58,9 +75,11 @@ export class PanelBackground {
         } catch (e) {
             logError(e, '[macos-top-panel] menu-bar blur: could not watch wallpaper settings');
         }
-        this._connect(Main.layoutManager, 'monitors-changed', () => this._scheduleRegen());
         this._connect(this._panelSettings, 'changed::menu-bar-blur', () => this._apply());
-        this._connect(this._panelSettings, 'changed::panel-height', () => this._scheduleRegen());
+        this._connect(this._panelSettings, 'changed::panel-height', () => {
+            this._syncGeometry();
+            this._scheduleRegen();
+        });
 
         this._apply();
     }
@@ -76,8 +95,9 @@ export class PanelBackground {
         this._signalIds = [];
         this._bgSettings = null;
         this._ifaceSettings = null;
-        if (this._actor) {
-            this._actor.destroy();
+        if (this._holder) {
+            this._holder.destroy();  // also destroys _actor
+            this._holder = null;
             this._actor = null;
         }
     }
@@ -91,39 +111,47 @@ export class PanelBackground {
         this._signalIds.push([obj, obj.connect(signal, cb)]);
     }
 
+    _syncGeometry() {
+        if (!this._actor)
+            return;
+        // panelBox coordinate space; Main.panel is normally at its origin.
+        this._actor.set_position(Main.panel.x, Main.panel.y);
+        this._actor.set_size(
+            Main.panel.width || Main.layoutManager.primaryMonitor?.width || 0,
+            Main.panel.height || 40);
+    }
+
     _apply() {
         if (!this._actor)
             return;
-        if (this.isBlurOn()) {
-            this._regenAndShow();
-        } else {
-            this._actor.style = 'background-color: transparent;';
+        if (!this.isBlurOn()) {
+            this._actor.set_content(null);
             this._actor.hide();
         }
+        // Always regenerate: even blur-off needs the luminance verdict for text colour,
+        // since the wallpaper shows straight through a transparent panel.
+        this._scheduleRegen(true);
     }
 
-    _scheduleRegen() {
-        if (!this.isBlurOn())
-            return;
+    _scheduleRegen(immediate = false) {
         if (this._regenId)
             GLib.source_remove(this._regenId);
-        this._regenId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, REGEN_DEBOUNCE_MS, () => {
-            this._regenId = 0;
-            this._regenAndShow();
-            return GLib.SOURCE_REMOVE;
-        });
+        this._regenId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT, immediate ? 1 : REGEN_DEBOUNCE_MS, () => {
+                this._regenId = 0;
+                this._regenAndApply();
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
-    _regenAndShow() {
-        if (this._destroyed || !this._actor || !this.isBlurOn() || this._regenInFlight)
+    _regenAndApply() {
+        if (this._destroyed || !this._actor || this._regenInFlight)
+            return;
+        const mon = Main.layoutManager.primaryMonitor;
+        if (!mon)
             return;
         this._regenInFlight = true;
 
-        const mon = Main.layoutManager.primaryMonitor;
-        if (!mon) {
-            this._regenInFlight = false;
-            return;
-        }
         const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
         const w = Math.round(mon.width * scale);
         const h = Math.round(mon.height * scale);
@@ -132,8 +160,6 @@ export class PanelBackground {
             ph = Main.panel.height || 40;
         ph = Math.round(ph * scale);
 
-        // Fresh filename each render so St's texture cache (keyed by path) actually
-        // reloads it; last render's file is removed once the new one is in place.
         this._nonce += 1;
         const prevPath = this._currentPath;
         const outPath = GLib.build_filenamev([CACHE_DIR, `panel-blur-${this._nonce}.png`]);
@@ -142,8 +168,7 @@ export class PanelBackground {
         try {
             proc = Gio.Subprocess.new(
                 [HELPER, String(w), String(h), String(ph), outPath],
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
-            );
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
         } catch (e) {
             this._regenInFlight = false;
             logError(e, '[macos-top-panel] menu-bar blur: could not run helper');
@@ -151,7 +176,7 @@ export class PanelBackground {
         }
         proc.communicate_utf8_async(null, null, (p, res) => {
             this._regenInFlight = false;
-            if (this._destroyed || !this._actor || !this.isBlurOn())
+            if (this._destroyed || !this._actor)
                 return;
             let ok, stdout;
             try {
@@ -159,26 +184,52 @@ export class PanelBackground {
             } catch (e) {
                 return;
             }
-            const path = (stdout || '').trim();
-            if (!ok || !path || !GLib.file_test(path, GLib.FileTest.EXISTS)) {
-                // Wallpaper unreadable / helper failed -- leave the panel transparent
-                // rather than showing a broken tile.
-                this._actor.style = 'background-color: transparent;';
-                this._actor.show();
+            const [pngPath = '', verdict = ''] = (stdout || '').trim().split('\n');
+
+            // Text colour: contrast against whatever's behind the (transparent) panel.
+            this._onForeground(verdict.trim() === 'light' ? 'black' : 'white');
+
+            if (!this.isBlurOn()) {
+                this._actor.set_content(null);
+                this._actor.hide();
                 return;
             }
-            this._actor.style =
-                `background-image: url("file://${path}"); ` +
-                'background-size: cover; background-position: center;';
-            this._actor.show();
-            this._currentPath = path;
-            if (prevPath && prevPath !== path) {
+            if (!ok || !pngPath || !GLib.file_test(pngPath, GLib.FileTest.EXISTS)) {
+                this._actor.set_content(null);
+                this._actor.hide();
+                return;
+            }
+            this._setImage(pngPath);
+            this._currentPath = pngPath;
+            if (prevPath && prevPath !== pngPath) {
                 try {
                     Gio.File.new_for_path(prevPath).delete_async(GLib.PRIORITY_LOW, null, null);
                 } catch (e) {
-                    // harmless -- a stale cache file, cleaned up next boot at worst
+                    // stale cache file -- harmless
                 }
             }
         });
+    }
+
+    _setImage(path) {
+        let pixbuf;
+        try {
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
+        } catch (e) {
+            logError(e, '[macos-top-panel] menu-bar blur: could not load strip');
+            this._actor.hide();
+            return;
+        }
+        // Clutter.Image was removed in GNOME 50 -- use St.ImageContent + Cogl bytes.
+        const coglContext = global.stage.context.get_backend().get_cogl_context();
+        const content = St.ImageContent.new_with_preferred_size(
+            pixbuf.get_width(), pixbuf.get_height());
+        content.set_bytes(
+            coglContext,
+            pixbuf.read_pixel_bytes(),
+            pixbuf.get_has_alpha() ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
+            pixbuf.get_width(), pixbuf.get_height(), pixbuf.get_rowstride());
+        this._actor.set_content(content);
+        this._actor.show();
     }
 }

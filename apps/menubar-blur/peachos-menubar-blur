@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Generates the blurred wallpaper strip shown behind the peachOS menu bar when
-"Background Blur" is on (macos-top-panel@local.dev, lib/panelBackground.js).
+"""Generates the frosted wallpaper strip shown behind the peachOS menu bar when
+"Background Blur" is on, and reports whether the strip is light or dark so the panel
+can pick contrasting text (macos-top-panel@local.dev, lib/panelBackground.js).
 
-GPU-free on purpose -- Shell.BlurEffect / blur-my-shell's live panel blur is a real
-freeze risk on the weak GPUs peachOS still targets. This software-blurs just the slice
-of the wallpaper that sits behind the panel, regenerated only when the wallpaper, the
-light/dark scheme or the monitor geometry changes.
+GPU-free on purpose -- Shell.BlurEffect / blur-my-shell's live panel blur and
+Shell.Screenshot.pick_color are both unreliable on the GPUs peachOS still targets.
 
-Usage: peachos-menubar-blur <monitor_w> <monitor_h> <panel_h> [out_path]  (device px)
-Prints the path of the PNG it wrote.
+Usage: peachos-menubar-blur <monitor_w> <monitor_h> <panel_h> [out_path]   (device px)
+Prints two lines:  <png path or "">   then   light | dark
 """
 import os
 import sys
@@ -16,7 +15,7 @@ import sys
 import gi
 gi.require_version('Gio', '2.0')
 from gi.repository import Gio  # noqa: E402
-from PIL import Image, ImageEnhance, ImageFilter  # noqa: E402
+from PIL import Image, ImageEnhance, ImageFilter, ImageStat  # noqa: E402
 
 OUT_DIR = os.path.join(
     os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache'),
@@ -49,21 +48,32 @@ def main():
     iface = Gio.Settings.new('org.gnome.desktop.interface')
     dark = iface.get_string('color-scheme') == 'prefer-dark'
     uri = (bg.get_string('picture-uri-dark') if dark else '') or bg.get_string('picture-uri')
-    if not uri:
-        return 1
-    path = Gio.File.new_for_uri(uri).get_path()
-    if not path or not os.path.isfile(path):
-        return 1
 
-    im = Image.open(path).convert('RGB')
-    im = _cover_crop(im, mon_w, mon_h)                      # what this monitor shows
-    strip = im.crop((0, 0, mon_w, min(panel_h, mon_h)))    # the bit behind the panel
+    strip = None
+    if uri:
+        path = Gio.File.new_for_uri(uri).get_path()
+        if path and os.path.isfile(path):
+            im = Image.open(path).convert('RGB')
+            im = _cover_crop(im, mon_w, mon_h)                    # what this monitor shows
+            strip = im.crop((0, 0, mon_w, min(panel_h, mon_h)))   # bit behind the panel
 
-    strip = strip.filter(ImageFilter.GaussianBlur(max(8, panel_h * 0.7)))
-    strip = ImageEnhance.Brightness(strip).enhance(0.80 if dark else 1.08)
-    strip = ImageEnhance.Color(strip).enhance(1.05)
-    scrim = Image.new('RGB', strip.size, (10, 10, 12) if dark else (250, 250, 252))
-    strip = Image.blend(strip, scrim, 0.22)
+    if strip is None:
+        # No readable wallpaper: no image, and fall back to the scheme for text colour.
+        print('')
+        print('dark' if dark else 'light')
+        return 0
+
+    # luminance verdict from the *raw* strip (before we tint it)
+    lum = sum(c * w for c, w in zip(ImageStat.Stat(strip).mean, (0.2126, 0.7152, 0.0722)))
+    verdict = 'light' if lum >= 128 else 'dark'
+
+    frosted = strip.filter(ImageFilter.GaussianBlur(max(8, panel_h * 0.7)))
+    frosted = ImageEnhance.Brightness(frosted).enhance(0.80 if dark else 1.08)
+    frosted = ImageEnhance.Color(frosted).enhance(1.05)
+    scrim = Image.new('RGB', frosted.size, (10, 10, 12) if dark else (250, 250, 252))
+    frosted = Image.blend(frosted, scrim, 0.22)
+
+    frosted = frosted.convert('RGBA')  # panelBackground.js uploads as RGBA_8888
 
     if out_path:
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -71,8 +81,9 @@ def main():
     else:
         os.makedirs(OUT_DIR, exist_ok=True)
         target = os.path.join(OUT_DIR, f'panel-blur-{"dark" if dark else "light"}.png')
-    strip.save(target)
+    frosted.save(target)
     print(target)
+    print(verdict)
     return 0
 
 
