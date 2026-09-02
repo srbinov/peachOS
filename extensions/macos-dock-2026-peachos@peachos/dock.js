@@ -1300,12 +1300,14 @@ export let Dock = GObject.registerClass(
           (Main.overview.visible || this.extension._inOverview) &&
           this.extension.overview_transparent_topbar_background;
 
-        if (
-          transparent_topbar &&
-          (Main.panel.style == '' || Main.panel.style == null)
-        ) {
-          Main.panel.style = 'border: 0px; background: transparent;';
-        } else if (!(Main.panel.style == '' || Main.panel.style == null)) {
+        // Only ever touch Main.panel.style if WE own it right now. peachOS runs
+        // macos-top-panel@local.dev, which manages Main.panel.style itself -- the old
+        // `else { Main.panel.style = '' }` here blew that away on every dock tick, and
+        // when the shell theme wasn't masking it that left the bar stock-opaque-black.
+        const OURS = 'border: 0px; background: transparent;';
+        if (transparent_topbar && (Main.panel.style == '' || Main.panel.style == null)) {
+          Main.panel.style = OURS;
+        } else if (!transparent_topbar && Main.panel.style == OURS) {
           Main.panel.style = '';
         }
       }

@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -127,9 +128,46 @@ export default class MacosTopPanelExtension extends Extension {
                 else if (key.startsWith('show-') && key.endsWith('-icon'))
                     this._applyIconVisibility();
             });
+
+            // ---- Keep the bar transparent no matter who clears our style ----
+            // The recurring "panel randomly goes solid black" bug: something wipes the
+            // inline #panel style we set below, leaving the bar to fall back to the
+            // theme's own #panel rule -- and stock gnome-shell's is opaque black.
+            // Known culprits: a shell-theme / stylesheet reload (user-theme swapping
+            // MacTahoe-Light<->Dark, GNOME reloading CSS on resume), the racy
+            // disable()/enable() this ["user"]-mode extension goes through on every
+            // screen lock, and macos-dock's own _updateTransparenies() which blindly
+            // does `Main.panel.style = ''`. Rather than chase each one, re-assert:
+
+            // 1. the instant our style is changed by anyone but us (no visible flash)
+            this._reassertingPanelStyle = false;
+            this._panelStyleNotifyId = Main.panel.connect('notify::style', () => {
+                if (this._reassertingPanelStyle)
+                    return;
+                const style = Main.panel.style ?? '';
+                if (!style.includes('background-color: transparent'))
+                    this._applyPanelStyle();
+            });
+
+            // 2. on every shell-theme reload
+            this._themeContext = St.ThemeContext.get_for_stage(global.stage);
+            this._themeChangedId = this._themeContext.connect(
+                'changed', () => this._applyPanelStyle());
+
             this._applyPanelStyle();
             this._applyPanelForeground(this._panelForeground);
             this._applyIconVisibility();
+
+            // 3. a slow backstop poll, in case something clears the style in a way that
+            //    somehow doesn't emit notify::style -- the bar can never *stay* black
+            //    for more than a second. One cheap string check per tick.
+            this._transparencyWatchdogId = GLib.timeout_add_seconds(
+                GLib.PRIORITY_DEFAULT, 1, () => {
+                    const style = Main.panel.style ?? '';
+                    if (!style.includes('background-color: transparent'))
+                        this._applyPanelStyle();
+                    return GLib.SOURCE_CONTINUE;
+                });
 
             // Auto-hide in full screen: driven entirely by our own code (not relying on
             // whatever Mutter/Shell might otherwise do to Main.panel in full screen), so
@@ -188,15 +226,21 @@ export default class MacosTopPanelExtension extends Extension {
         // shell theme's #panel rule resolves to (it has intermittently rendered opaque
         // black, HANDOFF). What shows through is the wallpaper (blur off) or the
         // PanelBackground actor's frosted strip (blur on).
-        declarations.push('background: none');
+        // Only individually-named background-* properties -- St's CSS parser does NOT
+        // understand the `background` shorthand, and a `background: none` in the string
+        // used to just be silently dropped.
         declarations.push('background-color: transparent');
+        declarations.push('background-image: none');
         declarations.push('border: none');
         declarations.push('box-shadow: none');
 
         const fg = this._panelForeground === 'black' ? 'black' : 'white';
         declarations.push(`color: ${fg}`);
 
+        // Guard the notify::style listener above from reacting to our own write.
+        this._reassertingPanelStyle = true;
         Main.panel.style = declarations.length ? `${declarations.join('; ')};` : null;
+        this._reassertingPanelStyle = false;
 
         Main.panel.remove_style_class_name('macos-panel-fg-black');
         Main.panel.remove_style_class_name('macos-panel-fg-white');
@@ -313,6 +357,19 @@ export default class MacosTopPanelExtension extends Extension {
         if (this._fullscreenPollId) {
             GLib.source_remove(this._fullscreenPollId);
             this._fullscreenPollId = null;
+        }
+        if (this._transparencyWatchdogId) {
+            GLib.source_remove(this._transparencyWatchdogId);
+            this._transparencyWatchdogId = null;
+        }
+        if (this._panelStyleNotifyId) {
+            Main.panel.disconnect(this._panelStyleNotifyId);
+            this._panelStyleNotifyId = null;
+        }
+        if (this._themeChangedId) {
+            this._themeContext.disconnect(this._themeChangedId);
+            this._themeChangedId = null;
+            this._themeContext = null;
         }
         Main.panel.remove_all_transitions();
         Main.panel.translation_y = 0;
