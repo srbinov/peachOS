@@ -202,11 +202,14 @@ export class PanelBackground {
             this._setImage(pngPath);
             this._currentPath = pngPath;
             if (prevPath && prevPath !== pngPath) {
-                try {
-                    Gio.File.new_for_path(prevPath).delete_async(GLib.PRIORITY_LOW, null, null);
-                } catch (e) {
-                    // stale cache file -- harmless
-                }
+                Gio.File.new_for_path(prevPath).delete_async(
+                    GLib.PRIORITY_LOW, null, (f, r) => {
+                        try {
+                            f.delete_finish(r);
+                        } catch (e) {
+                            // stale cache file already gone -- harmless
+                        }
+                    });
             }
         });
     }
