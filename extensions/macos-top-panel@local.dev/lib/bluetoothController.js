@@ -9,6 +9,29 @@ const ADAPTER_IFACE = 'org.bluez.Adapter1';
 const DEVICE_IFACE = 'org.bluez.Device1';
 const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 
+// Most cap on how many discovered devices a scan in a dense RF area is allowed to
+// push into the menu. gnome-control-center shows a comparable handful.
+const MAX_DEVICES = 20;
+
+/**
+ * BlueZ synthesises Name/Alias as the device's own MAC (dashed form) for anything
+ * broadcasting no friendly name -- in a busy area that's ~150 junk rows, all with a
+ * truthy "name". A real name is one that isn't just the address. Matches the same
+ * check gnome-control-center and the peachOS Settings app's bluetooth_page.py use.
+ *
+ * @param {Object<string, GLib.Variant>} device  the org.bluez.Device1 property map
+ * @returns {string|null}  the friendly name, or null if BlueZ only has the MAC
+ */
+function deviceRealName(device) {
+    const name = device.Alias?.unpack() || device.Name?.unpack() || '';
+    if (!name)
+        return null;
+    const address = (device.Address?.unpack() || '').toUpperCase();
+    if (name.replace(/-/g, ':').toUpperCase() === address)
+        return null;
+    return name;
+}
+
 export class BluetoothController {
     /**
      * @param {(state: object) => void} onChange
@@ -108,14 +131,16 @@ export class BluetoothController {
 
             const connected = device.Connected?.unpack() === true;
             const paired = device.Paired?.unpack() === true || device.Bonded?.unpack() === true;
-            const name = device.Name?.unpack() ?? device.Alias?.unpack() ?? null;
+            const name = deviceRealName(device);
 
             if (connected && !connectedDeviceName)
-                connectedDeviceName = name;
+                connectedDeviceName = name ?? device.Name?.unpack() ?? device.Alias?.unpack() ?? null;
 
-            // Real devices only -- BlueZ's ObjectManager also returns pure discovery
-            // artifacts with neither a name nor a pairing/connection state worth showing
-            // in a picker (they disappear again a few seconds later on their own).
+            // Show a device only if the user actually has a relationship with it
+            // (paired/connected) OR the scan turned up a real, non-MAC name for it.
+            // Everything else BlueZ's ObjectManager hands back is a pure discovery
+            // artifact -- a bare-MAC beacon that vanishes again seconds later -- and
+            // in a dense area there are ~150 of them, enough to bury the real ones.
             if (name || paired || connected)
                 devices.push({path, name, connected, paired});
         }
@@ -128,7 +153,8 @@ export class BluetoothController {
             : false;
 
         this._onChange(parseBluetoothState({powered, connectedDeviceName}));
-        this._onDevicesChange(powered ? sortBluetoothDevices(devices) : []);
+        this._onDevicesChange(
+            powered ? sortBluetoothDevices(devices).slice(0, MAX_DEVICES) : []);
     }
 
     _trackAdapter(path) {
