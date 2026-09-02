@@ -638,6 +638,10 @@ update-desktop-database /usr/share/applications
 # machine, since an existing user's home was already copied from the OLD /etc/skel before
 # this file existed in it.
 echo "==> Installing LocalSend (Flathub) -> curated AirDrop-style icon"
+# flatpak itself is not in Ubuntu 26.04's default desktop install -- the dev VM had it, a
+# clean box does not, and the bare `flatpak` calls below (LocalSend/Calendar/Weather) then
+# abort the whole run under `set -euo pipefail`.
+apt-get install -y --no-install-recommends flatpak
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install -y --system --noninteractive flathub org.localsend.localsend_app
 
