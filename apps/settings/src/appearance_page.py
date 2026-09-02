@@ -25,6 +25,20 @@ DOCK_ORDER_GUARD_BUS_NAME = 'org.peachos.DockOrderGuard'
 DOCK_ORDER_GUARD_OBJECT_PATH = '/org/peachos/DockOrderGuard'
 
 
+def _optional_settings(schema_id: str):
+    """Gio.Settings.new() on a schema that isn't in the global registry doesn't raise --
+    it calls g_error() and aborts the whole process. That happens on a clean peachOS
+    install when a vendored GNOME Shell extension's schema was never also copied into
+    /usr/share/glib-2.0/schemas (provision.sh does this now, but a machine provisioned
+    before that fix, or with the gnome-shell-extensions distro package absent, won't have
+    e.g. org.gnome.shell.extensions.user-theme there). Look the schema up first and return
+    None if it's genuinely missing, so the page still opens instead of taking the app down."""
+    source = Gio.SettingsSchemaSource.get_default()
+    if source is None or source.lookup(schema_id, True) is None:
+        return None
+    return Gio.Settings.new(schema_id)
+
+
 def _call_dock_order_guard(method_name: str):
     """Fire-and-forget call into lib/dockOrderGuard.js (see that file for why this has to
     round-trip into the Shell process). Silently does nothing if the extension isn't loaded
@@ -509,7 +523,7 @@ class AppearancePage(Gtk.Box):
         # Same schema id menubar_page.py already uses Gio.Settings.new() against directly
         # (it's in the global schema registry on a real peachOS install) -- matching that
         # instead of widgets.py's load_extension_settings() helper for consistency.
-        self._panel_settings = Gio.Settings.new('org.gnome.shell.extensions.macos-top-panel')
+        self._panel_settings = _optional_settings('org.gnome.shell.extensions.macos-top-panel')
         # User Themes (already vendored/enabled in peachOS -- extensions/user-theme@...) is
         # what actually decides which gnome-shell.css the Shell loads. Real gap found
         # investigating "dropdown menus don't respect dark mode": this key was NEVER wired
@@ -519,7 +533,7 @@ class AppearancePage(Gtk.Box):
         # on; only affects genuine system-styled popups (like the top-left/global menu's
         # dropdowns) since this project's own Control Center/notifications already do their
         # own explicit light/dark overrides instead of relying on the shell theme at all.
-        self._user_theme_settings = Gio.Settings.new('org.gnome.shell.extensions.user-theme')
+        self._user_theme_settings = _optional_settings('org.gnome.shell.extensions.user-theme')
         self._bg_settings = Gio.Settings.new('org.gnome.desktop.background')
         self._icon_style_busy = False
 
@@ -541,8 +555,9 @@ class AppearancePage(Gtk.Box):
         self._settings.connect('changed::color-scheme', lambda *_: self._refresh_liquid_glass_preview())
         self._settings.connect('changed::accent-color', lambda *_: self._refresh_all_selection())
         self._appearance_settings.connect('changed::icon-style', lambda *_: self._refresh_icon_style_selection())
-        self._panel_settings.connect(
-            'changed::liquid-glass-intensity', lambda *_: self._refresh_liquid_glass_preview())
+        if self._panel_settings is not None:
+            self._panel_settings.connect(
+                'changed::liquid-glass-intensity', lambda *_: self._refresh_liquid_glass_preview())
         self._bg_settings.connect('changed::picture-uri', lambda *_: self._on_wallpaper_changed())
         self._bg_settings.connect('changed::picture-uri-dark', lambda *_: self._on_wallpaper_changed())
         self._refresh_all_selection()
@@ -641,7 +656,8 @@ class AppearancePage(Gtk.Box):
         self._liquid_glass_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self._liquid_glass_scale.set_draw_value(False)
         self._liquid_glass_scale.set_hexpand(True)
-        self._liquid_glass_scale.set_value(self._panel_settings.get_int('liquid-glass-intensity'))
+        self._liquid_glass_scale.set_value(
+            self._panel_settings.get_int('liquid-glass-intensity') if self._panel_settings is not None else 0)
         self._liquid_glass_scale.connect('value-changed', self._on_liquid_glass_scale_changed)
         glass_slider_row.append(self._liquid_glass_scale)
         glass_slider_row.append(Gtk.Label(label='Liquid Glass', css_classes=['dim-label']))
@@ -716,6 +732,8 @@ class AppearancePage(Gtk.Box):
         self._refresh_scheme_selection()
 
     def _sync_shell_theme(self, is_dark):
+        if self._user_theme_settings is None:
+            return  # User Themes schema not in the global registry -- nothing to sync.
         try:
             self._user_theme_settings.set_string('name', 'MacTahoe-Dark' if is_dark else 'MacTahoe-Light')
         except GLib.Error:
@@ -875,11 +893,14 @@ class AppearancePage(Gtk.Box):
 
     def _on_liquid_glass_scale_changed(self, scale):
         intensity = round(scale.get_value())
-        self._panel_settings.set_int('liquid-glass-intensity', intensity)
+        if self._panel_settings is not None:
+            self._panel_settings.set_int('liquid-glass-intensity', intensity)
         self._refresh_liquid_glass_preview()
 
     def _refresh_liquid_glass_preview(self):
-        intensity = self._panel_settings.get_int('liquid-glass-intensity')
+        intensity = (
+            self._panel_settings.get_int('liquid-glass-intensity')
+            if self._panel_settings is not None else round(self._liquid_glass_scale.get_value()))
         if round(self._liquid_glass_scale.get_value()) != intensity:
             self._liquid_glass_scale.set_value(intensity)
         is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
