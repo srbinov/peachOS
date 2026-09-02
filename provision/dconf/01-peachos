@@ -198,6 +198,11 @@ window-color-blend-enabled=false
 background-source='video'
 background-video-path='/usr/share/peachos/lockscreen/rolling-hills.mp4'
 lockscreen-wallpaper-enable=false
+# No "Welcome to ..." text on the lock/login screen -- peachOS ships it clean.
+# (Schema default is already off; pinned here so a stray earlier value or an
+# upstream default change can't bring it back.)
+cupertino-lockscreen-message-enable=false
+cupertino-lockscreen-message-text=''
 
 [org/gnome/shell/extensions/rounded-windows]
 keep-rounded-maximized=true

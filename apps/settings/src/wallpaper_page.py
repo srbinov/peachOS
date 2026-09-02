@@ -619,6 +619,16 @@ class WallpaperPage(Gtk.Box):
     def _on_live_tile_clicked(self, tile):
         for t, kind, path in self._lockscreen_tiles:
             if t is tile and kind == 'video':
+                # Picking a live wallpaper is a deliberate "try it" -- clear any marker
+                # perfect-lockscreen@chris left after a previous failed playback attempt
+                # on this hardware, so it gives video another go before falling back.
+                try:
+                    marker = os.path.join(
+                        GLib.get_user_cache_dir(), 'peachos-lockscreen', 'video-unsupported')
+                    if os.path.exists(marker):
+                        os.remove(marker)
+                except OSError:
+                    pass
                 self._lockscreen_settings.set_string('background-video-path', path)
                 self._lockscreen_settings.set_string('background-source', 'video')
                 return

@@ -893,10 +893,53 @@ export default class WackLockscreenClockExtension extends Extension {
         return this._desktopWallpaperUri();
     }
 
+    // Marker written once a live-video lock background has demonstrably failed to
+    // render on this machine (mpv crashes or never produces frames -- e.g. an old
+    // GPU on a software/nouveau driver). While it exists we skip the video attempt
+    // entirely and go straight to the desktop wallpaper, so the lock screen is never
+    // left on the bare shield waiting for a player that will never paint. Delete the
+    // file to let the extension try live video again.
+    _videoUnsupportedMarkerPath() {
+        return GLib.build_filenamev(
+            [GLib.get_user_cache_dir(), 'peachos-lockscreen', 'video-unsupported']);
+    }
+
+    _isVideoKnownUnsupported() {
+        return GLib.file_test(this._videoUnsupportedMarkerPath(), GLib.FileTest.EXISTS);
+    }
+
+    _markVideoUnsupported(reason) {
+        try {
+            const path = this._videoUnsupportedMarkerPath();
+            GLib.mkdir_with_parents(GLib.path_get_dirname(path), 0o755);
+            GLib.file_set_contents(
+                path, `${new Date().toISOString()} ${reason ?? 'player-failed'}\n`);
+        } catch (e) {
+            // Best-effort -- worst case we retry the (failing) video path next lock.
+        }
+    }
+
+    // Force GNOME's own UnlockDialog to (re)build its per-monitor backgrounds from
+    // org.gnome.desktop.background. Without this, a failed/torn-down video attempt
+    // leaves the shield showing the bare 'screen-shield-background' CSS colour (the
+    // "default Ubuntu lock screen" look) instead of the user's actual wallpaper.
+    _repaintNativeBackground() {
+        try {
+            const dialog = Main.screenShield?._dialog ?? this._dialog;
+            dialog?._updateBackgrounds?.();
+        } catch (e) {
+            console.error(`PerfectLockScreen: native background repaint failed: ${e}`);
+        }
+    }
+
     async _syncLiveBackground() {
         if (this._liveBackground) {
             this._liveBackground.destroy();
             this._liveBackground = null;
+        }
+        if (this._liveBackgroundWatchdogId) {
+            GLib.source_remove(this._liveBackgroundWatchdogId);
+            this._liveBackgroundWatchdogId = 0;
         }
 
         const source = this._settings?.get_string('background-source') ?? 'desktop';
@@ -921,9 +964,12 @@ export default class WackLockscreenClockExtension extends Extension {
             stillExists: this._fileExists(stillPath),
             onBattery,
             disableOnBattery: this._settings?.get_boolean('general-disable-on-battery') ?? false,
-            playerAvailable: isPlayerAvailable(),
+            // A prior failure on this hardware sticks -- go straight to the wallpaper.
+            playerAvailable: isPlayerAvailable() && !this._isVideoKnownUnsupported(),
         });
         this._resolvedBackground = resolved;
+
+        let videoFailed = false;
 
         if (resolved.kind === 'video') {
             try {
@@ -941,17 +987,64 @@ export default class WackLockscreenClockExtension extends Extension {
                     this._liveBackground.destroy();
                     this._liveBackground = null;
                     this._resolvedBackground = { kind: 'desktop', reason: 'player-failed' };
+                    videoFailed = true;
+                } else {
+                    // start() resolved, but the player can still be a black/frozen
+                    // window on a GPU that can't sustain decode. Give it a few seconds
+                    // to actually produce video, then verify.
+                    this._scheduleLiveBackgroundWatchdog(this._liveBackground);
                 }
             } catch (e) {
                 console.error(`PerfectLockScreen: live background failed: ${e}`);
                 this._liveBackground?.destroy();
                 this._liveBackground = null;
                 this._resolvedBackground = { kind: 'desktop', reason: 'player-failed' };
+                videoFailed = true;
             }
+        }
+
+        if (videoFailed) {
+            this._markVideoUnsupported('start-failed');
+            this._repaintNativeBackground();
+        } else if (this._resolvedBackground.kind !== 'video') {
+            // Policy chose desktop (or 'still', handled by the overlay below) -- make
+            // sure the native wallpaper is actually up rather than a stale shield.
+            this._repaintNativeBackground();
         }
 
         this._updateCustomWallpaperOverlay();
         this._updateClockAlphaAndPromptColor();
+    }
+
+    _scheduleLiveBackgroundWatchdog(liveBackground) {
+        if (this._liveBackgroundWatchdogId) {
+            GLib.source_remove(this._liveBackgroundWatchdogId);
+            this._liveBackgroundWatchdogId = 0;
+        }
+        this._liveBackgroundWatchdogId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
+            this._liveBackgroundWatchdogId = 0;
+
+            // Superseded by a newer sync, or unlocked in the meantime.
+            if (!this._isActive || this._liveBackground !== liveBackground)
+                return GLib.SOURCE_REMOVE;
+
+            const player = liveBackground?._player ?? null;
+            const procAlive = !!player?._proc?.get_identifier();
+            const gotVideo = (player?.w ?? 0) > 0;
+
+            if (!procAlive || !gotVideo) {
+                console.error(
+                    `PerfectLockScreen: live background produced no frames ` +
+                    `(procAlive=${procAlive}, gotVideo=${gotVideo}) -- falling back to wallpaper`);
+                this._liveBackground.destroy();
+                this._liveBackground = null;
+                this._resolvedBackground = { kind: 'desktop', reason: 'player-stalled' };
+                this._markVideoUnsupported('no-frames');
+                this._repaintNativeBackground();
+                this._updateClockAlphaAndPromptColor();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _updateCustomWallpaperOverlay() {
@@ -2245,6 +2338,11 @@ export default class WackLockscreenClockExtension extends Extension {
     _teardownUnlockDialog() {
         if (!this._dialog && !this._clockWrapper && !this._liveBackground)
             return;
+
+        if (this._liveBackgroundWatchdogId) {
+            GLib.source_remove(this._liveBackgroundWatchdogId);
+            this._liveBackgroundWatchdogId = 0;
+        }
 
         if (this._liveBackground) {
             this._liveBackground.destroy();
