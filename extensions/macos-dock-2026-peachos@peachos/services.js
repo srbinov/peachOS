@@ -386,77 +386,131 @@ export const Services = class {
 
   checkTrash() {
     if (!this.extension.trash_icon) return;
-
-    let iter = this._trashDir.enumerate_children(
-      'standard::*',
+    // Async: trash:/// goes through the gvfsd-trash backend over D-Bus; a sync
+    // enumerate here blocks the compositor main loop (seconds, if the backend is
+    // still spawning at shell startup). Return value is not used by any caller.
+    if (this._trashCheckInFlight) return;
+    this._trashCheckInFlight = true;
+    this._trashDir.enumerate_children_async(
+      'standard::type',
       Gio.FileQueryInfoFlags.NONE,
-      null
+      GLib.PRIORITY_LOW,
+      null,
+      (dir, res) => {
+        this._trashCheckInFlight = false;
+        let en;
+        try {
+          en = dir.enumerate_children_finish(res);
+        } catch (e) {
+          return;
+        }
+        en.next_files_async(1, GLib.PRIORITY_LOW, null, (e2, r2) => {
+          let infos = [];
+          try {
+            infos = e2.next_files_finish(r2);
+          } catch (err) {
+            /* treat as empty */
+          }
+          e2.close_async(GLib.PRIORITY_LOW, null, null);
+          let prev = this.trashFull;
+          this.trashFull = infos.length > 0;
+          if (prev != this.trashFull) {
+            this.extension.animate({ refresh: true });
+          }
+        });
+      }
     );
-    let prev = this.trashFull;
-    this.trashFull = iter.next_file(null) != null;
-    if (prev != this.trashFull) {
-      this.extension.animate({ refresh: true });
-    }
-    return this.trashFull;
   }
 
-  async checkRecentFilesInFolder(path) {
+  checkRecentFilesInFolder(path) {
     console.log(`checking ${path}`);
     let maxs = [5, 8, 10, 12, 15, 20, 25];
     let max_recent_items = maxs[this.extension.max_recent_items || 0];
-    let downloadFiles = [];
-    let downloadFilesLength = 0;
-
+    const attrs = [
+      Gio.FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+      Gio.FILE_ATTRIBUTE_STANDARD_NAME,
+      Gio.FILE_ATTRIBUTE_STANDARD_ICON,
+      Gio.FILE_ATTRIBUTE_TIME_MODIFIED,
+    ].join(',');
     let directory = Gio.File.new_for_path(path);
-    let enumerator = directory.enumerate_children(
-      [
-        Gio.FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
-        Gio.FILE_ATTRIBUTE_STANDARD_NAME,
-        Gio.FILE_ATTRIBUTE_STANDARD_ICON,
-        Gio.FILE_ATTRIBUTE_TIME_MODIFIED,
-      ].join(','),
-      Gio.FileQueryInfoFlags.NONE,
-      null
-    );
 
-    let fileInfo;
-    while ((fileInfo = enumerator.next_file(null)) !== null) {
-      let fileName = fileInfo.get_name();
-      let fileModified = fileInfo.get_modification_time();
-
-      let icon = 'file';
-      if (fileInfo.get_icon() && fileInfo.get_icon().names) {
-        icon =
-          this.extension.lookup_icon_from_names(fileInfo.get_icon().names) ??
-          icon;
-      }
-
-      downloadFiles.push({
-        index: 0,
-        name: fileName,
-        display: fileName,
-        icon: icon,
-        type: fileInfo.get_content_type(),
-        path: [path, fileName].join('/'),
-        date: fileModified ?? { tv_sec: 0 },
-        fileInfo: fileInfo,
-      });
-    }
-
-    downloadFilesLength = downloadFiles.length;
-    downloadFiles.sort((a, b) => {
-      return a.date.tv_sec > b.date.tv_sec ? -1 : 1;
+    // Fully async: enumerate + next_files in batches off the main loop. A sync
+    // enumerate + per-file next_file() here froze the shell during dock startup
+    // ("checking .../Downloads" was the last log line before a hard lock).
+    return new Promise((resolve) => {
+      const downloadFiles = [];
+      const finish = () => {
+        const total = downloadFiles.length;
+        downloadFiles.sort((a, b) =>
+          a.date.tv_sec > b.date.tv_sec ? -1 : 1
+        );
+        let index = 0;
+        downloadFiles.forEach((f) => {
+          f.index = index++;
+        });
+        downloadFiles.splice(max_recent_items);
+        resolve([downloadFiles, total]);
+      };
+      directory.enumerate_children_async(
+        attrs,
+        Gio.FileQueryInfoFlags.NONE,
+        GLib.PRIORITY_LOW,
+        null,
+        (dir, res) => {
+          let enumerator;
+          try {
+            enumerator = dir.enumerate_children_finish(res);
+          } catch (e) {
+            console.log(e);
+            resolve([[], 0]);
+            return;
+          }
+          const readBatch = () => {
+            enumerator.next_files_async(
+              50,
+              GLib.PRIORITY_LOW,
+              null,
+              (en, r2) => {
+                let infos = [];
+                try {
+                  infos = en.next_files_finish(r2);
+                } catch (e) {
+                  console.log(e);
+                }
+                if (!infos || infos.length === 0) {
+                  en.close_async(GLib.PRIORITY_LOW, null, null);
+                  finish();
+                  return;
+                }
+                for (const fileInfo of infos) {
+                  let fileName = fileInfo.get_name();
+                  let fileModified = fileInfo.get_modification_time();
+                  let icon = 'file';
+                  if (fileInfo.get_icon() && fileInfo.get_icon().names) {
+                    icon =
+                      this.extension.lookup_icon_from_names(
+                        fileInfo.get_icon().names
+                      ) ?? icon;
+                  }
+                  downloadFiles.push({
+                    index: 0,
+                    name: fileName,
+                    display: fileName,
+                    icon: icon,
+                    type: fileInfo.get_content_type(),
+                    path: [path, fileName].join('/'),
+                    date: fileModified ?? { tv_sec: 0 },
+                    fileInfo: fileInfo,
+                  });
+                }
+                readBatch();
+              }
+            );
+          };
+          readBatch();
+        }
+      );
     });
-
-    let index = 0;
-    downloadFiles.forEach((f) => {
-      f.index = index++;
-    });
-
-    downloadFiles.splice(max_recent_items);
-    // console.log(downloadFiles);
-
-    return Promise.resolve([downloadFiles, downloadFilesLength]);
   }
 
   /*
