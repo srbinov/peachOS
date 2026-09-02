@@ -72,6 +72,17 @@ class MenuBarPage(Gtk.Box):
         controls_card.append(self._build_battery_row())
         self.append(controls_card)
 
+        self.append(Gtk.Label(label='Appearance', xalign=0, css_classes=['heading']))
+        appearance_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        appearance_card.append(self._build_checkbox_row(
+            'Background Blur', 'menubar.svg', 'view-reveal-symbolic', 'menu-bar-blur'))
+        self.append(appearance_card)
+        self.append(Gtk.Label(
+            label='Off: the menu bar is fully transparent. On: a soft frosted blur of the '
+                  'wallpaper directly behind it.',
+            xalign=0, wrap=True, margin_start=4, css_classes=['dim-label', 'caption'],
+        ))
+
     def _build_checkbox_row(self, title, icon_filename, icon_name, settings_key):
         checkbox = Gtk.CheckButton(active=self._settings.get_boolean(settings_key), valign=Gtk.Align.CENTER)
         checkbox.connect('toggled', lambda c: self._settings.set_boolean(settings_key, c.get_active()))

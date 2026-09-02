@@ -211,6 +211,12 @@ install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-appearance" /usr/lib/peac
 install -Dm644 "$REPO_DIR/apps/settings/data/schemas/org.peachos.appearance.gschema.xml" /usr/share/glib-2.0/schemas/org.peachos.appearance.gschema.xml
 glib-compile-schemas /usr/share/glib-2.0/schemas/
 
+# Menu-bar "Background Blur" helper: software-blurs the wallpaper slice behind the top
+# panel (macos-top-panel@local.dev's lib/panelBackground.js runs it). Deliberately not a
+# GPU/Shell.BlurEffect blur -- see that file. Uses python3-pil, already provisioned above.
+echo "==> Installing peachOS menu-bar background-blur helper -> /usr/lib/peachos/menubar"
+install -Dm755 "$REPO_DIR/apps/menubar-blur/peachos-menubar-blur" /usr/lib/peachos/menubar/peachos-menubar-blur
+
 # Hand-authored dark variants for the icons peachOS ships hand-picked light versions of --
 # used as-is instead of running them through the majority/minority algorithm above, which is
 # only ever an approximation of what a real designer would do.

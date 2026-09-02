@@ -20,6 +20,7 @@ import {SoundIndicator} from './lib/soundIndicator.js';
 import {MenuManager} from './lib/menuManager.js';
 import {ControlCenterIndicator} from './lib/controlCenterIndicator.js';
 import {WindowColorBlend} from './lib/windowColorBlend.js';
+import {PanelBackground} from './lib/panelBackground.js';
 import {KiwiMenu} from './src/kiwimenu.js';
 import {QuickSettingsActionsController} from './src/hideQSbuttons.js';
 import {UserSwitcherController} from './src/userSwitcher.js';
@@ -109,6 +110,13 @@ export default class MacosTopPanelExtension extends Extension {
 
             this._blendColor = null;
             this._panelForeground = 'white';
+
+            // Owns the menu-bar background (transparent, or a frosted wallpaper-slice
+            // blur when menu-bar-blur is on). Set up before the panel style is first
+            // applied so _applyPanelStyle() can see whether blur is active.
+            this._panelBackground = new PanelBackground(this._panelSettings);
+            this._panelBackground.enable();
+
             this._windowColorBlend = new WindowColorBlend(
                 () => this._panelRect(),
                 ({blendColor, foreground}) => {
@@ -129,7 +137,7 @@ export default class MacosTopPanelExtension extends Extension {
             this._panelSettingsChangedId = this._panelSettings.connect('changed', (_settings, key) => {
                 if (key === 'window-color-blend-enabled')
                     this._syncWindowColorBlend();
-                else if (key === 'panel-height')
+                else if (key === 'panel-height' || key === 'menu-bar-blur')
                     this._applyPanelStyle();
                 else if (key.startsWith('show-') && key.endsWith('-icon'))
                     this._applyIconVisibility();
@@ -212,8 +220,12 @@ export default class MacosTopPanelExtension extends Extension {
         if (height > 0)
             declarations.push(`height: ${height}px`);
 
+        // menu-bar-blur owns the background whenever it's on (the PanelBackground actor
+        // paints the frosted wallpaper slice); the panel itself must stay transparent so
+        // that shows through, and it also beats window-color-blend.
+        const blurOn = this._panelBackground?.isBlurOn?.() ?? false;
         const blendEnabled = this._panelSettings.get_boolean('window-color-blend-enabled');
-        const showBlend = blendEnabled && !!this._blendColor;
+        const showBlend = !blurOn && blendEnabled && !!this._blendColor;
         if (showBlend) {
             // Opaque window-chrome color (see windowTouchFill()) plus an explicit
             // border/box-shadow reset -- no rim/highlight class goes on the panel at all (a
@@ -222,6 +234,14 @@ export default class MacosTopPanelExtension extends Extension {
             // is belt-and-suspenders so the theme's own #panel rule can't leave a seam behind
             // even if it ever sets a border/shadow of its own.
             declarations.push(`background-color: ${this._blendColor}`);
+            declarations.push('border: none');
+            declarations.push('box-shadow: none');
+        } else {
+            // Force the panel transparent regardless of what the shell theme's #panel rule
+            // resolves to -- it has intermittently rendered opaque black (HANDOFF). The
+            // wallpaper (blur off) or the PanelBackground actor (blur on) shows through.
+            declarations.push('background: none');
+            declarations.push('background-color: transparent');
             declarations.push('border: none');
             declarations.push('box-shadow: none');
         }
@@ -353,6 +373,8 @@ export default class MacosTopPanelExtension extends Extension {
 
         this._windowColorBlend?.disable();
         this._windowColorBlend = null;
+        this._panelBackground?.disable();
+        this._panelBackground = null;
         this._blendColor = null;
         this._panelForeground = null;
         Main.panel.remove_style_class_name('macos-panel-fg-black');

@@ -23,6 +23,11 @@
             <summary>Match touching window color</summary>
             <description>When a window's edge touches the top of the screen, the panel background samples and matches its color there instead of using the default background.</description>
         </key>
+        <key type="b" name="menu-bar-blur">
+            <default>false</default>
+            <summary>Menu bar background blur</summary>
+            <description>When off, the menu bar is fully transparent. When on, it shows a soft frosted blur of the slice of the current wallpaper directly behind it (regenerated on wallpaper / light-dark / monitor change; no live GPU blur).</description>
+        </key>
         <key type="i" name="liquid-glass-intensity">
             <default>100</default>
             <range min="0" max="100"/>
