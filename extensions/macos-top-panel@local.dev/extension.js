@@ -263,6 +263,10 @@ export default class MacosTopPanelExtension extends Extension {
         this._searchIndicator?.setForeground?.(foreground);
         this._soundIndicator?.setForeground?.(foreground);
         this._userSwitcherController?.setForeground?.(foreground);
+        // Also drive the flyouts' adaptive-dark glass: a light wallpaper behind the bar
+        // should darken the Control Center / Notification Center the same way a light
+        // window behind them already does.
+        this._notificationCenter?.setPanelForeground?.(foreground);
     }
 
     _applyIconVisibility() {

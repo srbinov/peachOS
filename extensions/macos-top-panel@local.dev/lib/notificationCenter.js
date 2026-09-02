@@ -193,6 +193,12 @@ export class NotificationCenterPanel {
         // doc above), so no extra machinery is needed beyond picking which recipe/isDarkMode
         // _applyGlassIntensity() interpolates from.
         this._forceAdaptiveDark = false;
+        // Same idea as _forceAdaptiveDark, but driven by the top bar's own light/dark
+        // verdict (extension.js's _applyPanelForeground) rather than a pick_color() sample:
+        // when the wallpaper behind the bar is light enough that the bar goes black, this
+        // panel gets the dark glass too -- covers the "light wallpaper, no window" case
+        // that _sampleAdaptive() misses (or can't sample at all on some GPUs).
+        this._panelWantsDark = false;
         this._applyGlassIntensity();
 
         // Covers the whole screen behind the panel; only reactive while open, so any click
@@ -231,6 +237,18 @@ export class NotificationCenterPanel {
 
     get isOpen() {
         return this._open;
+    }
+
+    /**
+     * @param {'black'|'white'} foreground  the top bar's current chrome colour --
+     *   'black' means the wallpaper behind the bar is light.
+     */
+    setPanelForeground(foreground) {
+        const wantsDark = foreground === 'black';
+        if (wantsDark === this._panelWantsDark)
+            return;
+        this._panelWantsDark = wantsDark;
+        this._applyGlassIntensity();
     }
 
     toggle() {
@@ -415,9 +433,10 @@ export class NotificationCenterPanel {
         // content is what's driving "this needs to be dark", not the system light/dark
         // setting, so it always targets the same SOLID_DARK endpoint regardless of the
         // system isDarkMode below.
-        const isDarkMode = this._forceAdaptiveDark ||
+        const adaptiveDark = this._forceAdaptiveDark || this._panelWantsDark;
+        const isDarkMode = adaptiveDark ||
             this._interfaceSettings.get_string('color-scheme') === 'prefer-dark';
-        const recipe = this._forceAdaptiveDark ? ADAPTIVE_RECIPE : SHARED_RECIPE;
+        const recipe = adaptiveDark ? ADAPTIVE_RECIPE : SHARED_RECIPE;
         this._panel.style = glassStyleString(recipe, intensity, isDarkMode);
     }
 

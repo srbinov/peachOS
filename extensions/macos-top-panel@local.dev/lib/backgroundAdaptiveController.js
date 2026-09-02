@@ -29,6 +29,14 @@ export class BackgroundAdaptiveController {
     constructor(getSamplePoint) {
         this._getSamplePoint = getSamplePoint;
         this._actors = new Set();
+        this._sampledLight = false;
+        // Driven by the top bar's own light/dark verdict (extension.js's
+        // _applyPanelForeground -> ControlCenterIndicator.setForeground). When the
+        // wallpaper behind the menu bar is light enough that the bar flips its chrome to
+        // black, this popup needs the same dark glass -- and that verdict is computed from
+        // the wallpaper file itself (peachos-menubar-blur), so it works on the GPUs where
+        // pick_color() below doesn't.
+        this._forceDark = false;
     }
 
     /** Call once per glass tile actor right after creating it. */
@@ -36,26 +44,48 @@ export class BackgroundAdaptiveController {
         this._actors.add(actor);
     }
 
+    /**
+     * Force the dark treatment regardless of what pick_color() finds (or whether it works
+     * at all). Safe to call any time; re-applies immediately if the menu is open.
+     * @param {boolean} forceDark
+     */
+    setForceDark(forceDark) {
+        forceDark = !!forceDark;
+        if (forceDark === this._forceDark)
+            return;
+        this._forceDark = forceDark;
+        this._apply();
+    }
+
     /** Call when the menu opens. */
     async sample() {
+        this._sampledLight = false;
+        // Reflect _forceDark straight away so a light wallpaper doesn't get a
+        // default-glass flash while the async pick_color() below is in flight.
+        this._apply();
+
         const point = this._getSamplePoint();
         if (!point)
             return;
-
-        let color;
         try {
             const screenshot = new Shell.Screenshot();
-            [color] = await screenshot.pick_color(point.x, point.y);
+            const [color] = await screenshot.pick_color(point.x, point.y);
+            if (color) {
+                this._sampledLight = relativeLuminance(
+                    color.red, color.green, color.blue) >= LIGHT_LUMINANCE_THRESHOLD;
+            }
         } catch (e) {
-            logError(e, '[macos-top-panel] control center: background sample failed');
-            return;
+            // pick_color() is unreliable on some GPUs peachOS targets -- fall back to
+            // _forceDark (the wallpaper verdict) alone, nothing worth logging.
         }
-        if (!color)
-            return;
 
-        const isLight = relativeLuminance(color.red, color.green, color.blue) >= LIGHT_LUMINANCE_THRESHOLD;
+        this._apply();
+    }
+
+    _apply() {
+        const dark = this._forceDark || this._sampledLight;
         for (const actor of this._actors) {
-            if (isLight)
+            if (dark)
                 actor.add_style_class_name(TILE_ON_LIGHT_CLASS);
             else
                 actor.remove_style_class_name(TILE_ON_LIGHT_CLASS);
@@ -64,6 +94,7 @@ export class BackgroundAdaptiveController {
 
     /** Call the instant the menu starts closing -- back to the default look for next time. */
     reset() {
+        this._sampledLight = false;
         for (const actor of this._actors)
             actor.remove_style_class_name(TILE_ON_LIGHT_CLASS);
     }
@@ -71,5 +102,6 @@ export class BackgroundAdaptiveController {
     destroy() {
         this.reset();
         this._actors.clear();
+        this._forceDark = false;
     }
 }

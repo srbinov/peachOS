@@ -147,6 +147,9 @@ class ControlCenterIndicator extends PanelMenu.Button {
             return;
         this._foreground = foreground;
         this._icon.gicon = foreground === 'black' ? this._panelIconBlack : this._panelIconWhite;
+        // foreground === 'black' means the wallpaper behind the bar is light -- the popup
+        // needs the same adaptive-dark glass it already uses over a light window.
+        this._backgroundAdaptive.setForceDark(foreground === 'black');
     }
 
     _buildMenu() {
