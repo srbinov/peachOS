@@ -13,12 +13,29 @@ BATTERY_IFACE = 'org.bluez.Battery1'
 OBJMGR_IFACE = 'org.freedesktop.DBus.ObjectManager'
 PROPS_IFACE = 'org.freedesktop.DBus.Properties'
 
+# How long to wait after the last BlueZ signal before rebuilding the list. An active
+# discovery scan fires InterfacesAdded + a stream of PropertiesChanged (RSSI) for every
+# device in range -- dozens per second in a dense RF environment. Coalesce them.
+_REFRESH_DEBOUNCE_MS = 900
+
 
 def _device_icon_name(props: dict) -> str:
     hint = props.get('Icon')
     if hint:
         return f'{hint}-symbolic'
     return 'bluetooth-symbolic'
+
+
+def _has_real_name(props: dict) -> bool:
+    # BlueZ hands back an object for every BLE advertisement it hears -- 150+ in a dense
+    # area -- and synthesizes Name/Alias as the device's own dashed MAC address when it
+    # broadcasts no real name. Only surface devices that actually identified themselves.
+    # (This is the same test gnome-control-center uses.)
+    name = props.get('Alias') or props.get('Name') or ''
+    if not name:
+        return False
+    addr = (props.get('Address') or '').upper()
+    return name.replace('-', ':').upper() != addr
 
 
 class DeviceRow(Gtk.Box):
@@ -57,9 +74,19 @@ class BluetoothPage(Gtk.Box):
         self._bus = None
         self._adapter_path = None
         self._subscriptions = []
+        self._refresh_source_id = 0
+        self._get_objects_pending = False
+        self._discovering = False
+        self._destroyed = False
 
         self._build_ui()
         self._connect_bus()
+
+        # Stop the scan (and the signal firehose) whenever the user leaves this page, and
+        # tear everything down when the page itself goes away.
+        self.connect('map', lambda *_: self._refresh())
+        self.connect('unmap', lambda *_: self._stop_discovery())
+        self.connect('destroy', lambda *_: self._teardown())
 
     # ---- UI ---------------------------------------------------------
 
@@ -144,36 +171,81 @@ class BluetoothPage(Gtk.Box):
             BLUEZ_SERVICE, OBJMGR_IFACE, 'InterfacesRemoved', None, None,
             Gio.DBusSignalFlags.NONE, lambda *_a: self._refresh(),
         ))
-        self._subscriptions.append(self._bus.signal_subscribe(
-            BLUEZ_SERVICE, PROPS_IFACE, 'PropertiesChanged', None, None,
-            Gio.DBusSignalFlags.NONE, lambda *_a: self._refresh(),
-        ))
+        # Only the adapter's own property changes (Powered / Discovering) and device
+        # connect/pair state -- NOT the per-device RSSI stream, which arg0 lets us drop at
+        # the bus. PropertiesChanged's first arg is the interface name.
+        for iface in (ADAPTER_IFACE, DEVICE_IFACE):
+            self._subscriptions.append(self._bus.signal_subscribe(
+                BLUEZ_SERVICE, PROPS_IFACE, 'PropertiesChanged', None, iface,
+                Gio.DBusSignalFlags.NONE, self._on_props_changed,
+            ))
 
         self._refresh()
 
-    def _get_managed_objects(self):
-        result = self._bus.call_sync(
-            BLUEZ_SERVICE, '/', OBJMGR_IFACE, 'GetManagedObjects',
-            None, GLib.VariantType.new('(a{oa{sa{sv}}})'),
-            Gio.DBusCallFlags.NONE, 2000, None,
-        )
-        return result.unpack()[0]
+    def _on_props_changed(self, *args):
+        # args[-1] (or args[5]) = (interface_name, changed_props, invalidated_props). Ignore
+        # bursts that only carry RSSI/TxPower churn from a scan -- they never change what we
+        # display.
+        params = args[5] if len(args) > 5 else None
+        try:
+            _iface_name, changed, _invalidated = params.unpack()
+        except Exception:
+            self._refresh()
+            return
+        if changed and set(changed) <= {'RSSI', 'TxPower', 'ManufacturerData', 'ServiceData', 'AdvertisingFlags'}:
+            return
+        self._refresh()
+
+    # ---- refresh (debounced + async) --------------------------------
 
     def _refresh(self):
-        try:
-            objects = self._get_managed_objects()
-        except GLib.Error as e:
-            self._status_label.set_label('No Bluetooth adapter detected on this computer.')
-            self._status_label.set_visible(True)
-            self._toggle.set_sensitive(False)
-            self._my_list.set_visible(False)
-            self._my_label.set_visible(False)
-            self._nearby_list.set_visible(False)
-            self._nearby_scroller.set_visible(False)
-            self._nearby_header.set_visible(False)
-            self._discoverable_label.set_visible(False)
+        if self._destroyed or self._bus is None:
             return
+        if self._refresh_source_id:
+            return  # a rebuild is already scheduled; this signal folds into it
+        self._refresh_source_id = GLib.timeout_add(
+            _REFRESH_DEBOUNCE_MS, self._on_refresh_timeout,
+        )
 
+    def _on_refresh_timeout(self):
+        self._refresh_source_id = 0
+        self._do_refresh()
+        return GLib.SOURCE_REMOVE
+
+    def _do_refresh(self):
+        if self._destroyed or self._bus is None or self._get_objects_pending:
+            return
+        self._get_objects_pending = True
+        self._bus.call(
+            BLUEZ_SERVICE, '/', OBJMGR_IFACE, 'GetManagedObjects',
+            None, GLib.VariantType.new('(a{oa{sa{sv}}})'),
+            Gio.DBusCallFlags.NONE, 3000, None,
+            self._on_get_objects_done,
+        )
+
+    def _on_get_objects_done(self, _bus, result):
+        self._get_objects_pending = False
+        if self._destroyed:
+            return
+        try:
+            objects = self._bus.call_finish(result).unpack()[0]
+        except GLib.Error:
+            self._show_no_adapter()
+            return
+        self._apply_objects(objects)
+
+    def _show_no_adapter(self):
+        self._status_label.set_label('No Bluetooth adapter detected on this computer.')
+        self._status_label.set_visible(True)
+        self._toggle.set_sensitive(False)
+        self._my_list.set_visible(False)
+        self._my_label.set_visible(False)
+        self._nearby_list.set_visible(False)
+        self._nearby_scroller.set_visible(False)
+        self._nearby_header.set_visible(False)
+        self._discoverable_label.set_visible(False)
+
+    def _apply_objects(self, objects):
         adapter_path = None
         for path, ifaces in objects.items():
             if ADAPTER_IFACE in ifaces:
@@ -181,15 +253,7 @@ class BluetoothPage(Gtk.Box):
                 break
 
         if not adapter_path:
-            self._status_label.set_label('No Bluetooth adapter detected on this computer.')
-            self._status_label.set_visible(True)
-            self._toggle.set_sensitive(False)
-            self._my_list.set_visible(False)
-            self._my_label.set_visible(False)
-            self._nearby_list.set_visible(False)
-            self._nearby_scroller.set_visible(False)
-            self._nearby_header.set_visible(False)
-            self._discoverable_label.set_visible(False)
+            self._show_no_adapter()
             return
 
         self._adapter_path = adapter_path
@@ -209,6 +273,7 @@ class BluetoothPage(Gtk.Box):
             self._nearby_list.remove(child)
 
         my_shown = False
+        nearby = []
         for path, ifaces in objects.items():
             if DEVICE_IFACE not in ifaces or not path.startswith(adapter_path + '/'):
                 continue
@@ -226,38 +291,76 @@ class BluetoothPage(Gtk.Box):
                         subtitle = 'Connected'
                 self._my_list.append(DeviceRow(name, icon_name, subtitle, show_info=True))
                 my_shown = True
-            elif powered:
-                self._nearby_list.append(DeviceRow(name, icon_name))
+            elif powered and _has_real_name(props):
+                nearby.append((name.lower(), name, icon_name))
+
+        # Deduplicate + cap so a crowded room can't produce an unbounded list.
+        seen = set()
+        for _key, name, icon_name in sorted(nearby)[:30]:
+            if _key in seen:
+                continue
+            seen.add(_key)
+            self._nearby_list.append(DeviceRow(name, icon_name))
 
         self._my_label.set_visible(my_shown)
         self._my_list.set_visible(my_shown)
 
-        if powered:
+        if powered and self.get_mapped():
             self._scan_spinner.start()
             self._start_discovery(adapter_path)
         else:
             self._scan_spinner.stop()
+            self._stop_discovery()
+
+    # ---- discovery lifecycle ---------------------------------------
 
     def _start_discovery(self, adapter_path):
-        try:
-            self._bus.call_sync(
-                BLUEZ_SERVICE, adapter_path, ADAPTER_IFACE, 'StartDiscovery',
-                None, None, Gio.DBusCallFlags.NONE, 2000, None,
-            )
-        except GLib.Error:
-            pass  # already discovering, or not supported -- non-fatal
+        if self._discovering or self._bus is None:
+            return
+        self._discovering = True
+        self._bus.call(
+            BLUEZ_SERVICE, adapter_path, ADAPTER_IFACE, 'StartDiscovery',
+            None, None, Gio.DBusCallFlags.NONE, 3000, None, None,
+        )
+
+    def _stop_discovery(self):
+        if not self._discovering or self._bus is None or not self._adapter_path:
+            self._discovering = False
+            return
+        self._discovering = False
+        self._scan_spinner.stop()
+        self._bus.call(
+            BLUEZ_SERVICE, self._adapter_path, ADAPTER_IFACE, 'StopDiscovery',
+            None, None, Gio.DBusCallFlags.NONE, 3000, None, None,
+        )
 
     def _on_toggle_state_set(self, switch, state):
         if not self._bus or not self._adapter_path:
             return True
+        self._bus.call(
+            BLUEZ_SERVICE, self._adapter_path, PROPS_IFACE, 'Set',
+            GLib.Variant('(ssv)', (ADAPTER_IFACE, 'Powered', GLib.Variant('b', state))),
+            None, Gio.DBusCallFlags.NONE, 3000, None,
+            self._on_power_set_done,
+        )
+        return False
+
+    def _on_power_set_done(self, _bus, result):
         try:
-            self._bus.call_sync(
-                BLUEZ_SERVICE, self._adapter_path, PROPS_IFACE, 'Set',
-                GLib.Variant('(ssv)', (ADAPTER_IFACE, 'Powered', GLib.Variant('b', state))),
-                None, Gio.DBusCallFlags.NONE, 2000, None,
-            )
+            self._bus.call_finish(result)
         except GLib.Error as e:
             self._status_label.set_label(f'Could not change Bluetooth power: {e.message}')
             self._status_label.set_visible(True)
-            return True
-        return False
+
+    # ---- teardown -------------------------------------------------
+
+    def _teardown(self):
+        self._destroyed = True
+        if self._refresh_source_id:
+            GLib.source_remove(self._refresh_source_id)
+            self._refresh_source_id = 0
+        self._stop_discovery()
+        if self._bus is not None:
+            for sub in self._subscriptions:
+                self._bus.signal_unsubscribe(sub)
+        self._subscriptions = []
