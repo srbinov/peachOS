@@ -90,6 +90,31 @@ def _rasterize_greenscreen_svg(path: str, width: int, height: int) -> Image.Imag
     return _pixbuf_to_pil(pixbuf)
 
 
+def _pil_to_texture(im: Image.Image) -> Gdk.Texture:
+    im = im.convert('RGB')
+    pixbuf = GdkPixbuf.Pixbuf.new_from_data(
+        im.tobytes(), GdkPixbuf.Colorspace.RGB, False, 8, im.width, im.height, im.width * 3)
+    return Gdk.Texture.new_for_pixbuf(pixbuf)
+
+
+# A wide, short band -- the Liquid Glass preview backdrop is a horizontal sliver of the
+# wallpaper, not the whole thing scaled down.
+LIQUID_GLASS_BACKDROP_SIZE = (1000, 130)
+
+
+def _wallpaper_sliver(path, width: int, height: int):
+    """A horizontal band of the user's currently-equipped wallpaper, cover-cropped to
+    width:height (a centre slice, never stretched) for use behind the Liquid Glass
+    notification preview. Returns None if the wallpaper is missing/unreadable so the
+    caller falls back to a flat tint rather than crashing the page."""
+    if not path:
+        return None
+    try:
+        return _pil_to_texture(_cover_crop_scale(path, width, height))
+    except (GLib.Error, OSError):
+        return None
+
+
 def _cover_crop_scale(path: str, width: int, height: int) -> Image.Image:
     """Crops to the target aspect ratio before downscaling (same approach
     provision/wallpaper-previews/gen_wallpaper_previews.py uses) rather than a plain
@@ -220,19 +245,25 @@ def _glass_rgba(c) -> str:
     return f'rgba({r}, {g}, {b}, {round(a, 3)})'
 
 
-class LiquidGlassPreview(Gtk.Box):
-    """A sample notification card, live-restyled as the slider moves, so the effect is
-    visible immediately without needing a real notification to fire. The backdrop is a
-    plain CSS gradient, not a photo -- an earlier version used one of the demo photos
-    behind a Gtk.Overlay, which rendered visibly broken (stray artifacts bleeding
-    through). A CSS gradient on this same box needs no Overlay/Picture/SVG-rasterizing
-    at all, just something varied enough behind the card to actually show translucency
-    against, which is the only reason a backdrop is here at all."""
+class LiquidGlassPreview(Gtk.Overlay):
+    """A sample notification card sitting on a sliver of the user's currently-equipped
+    wallpaper, live-restyled as the slider moves so the translucency effect is visible
+    immediately without a real notification firing. The backdrop is a Gtk.Picture (a
+    centre-cropped horizontal band of the wallpaper, content-fit COVER) pushed in by
+    AppearancePage -- same "show the real desktop behind the banner" idea as macOS's own
+    Appearance previews and this page's own Light/Dark tiles. A flat CSS tint on the
+    frame shows through only if the wallpaper can't be read."""
 
     def __init__(self):
         super().__init__(css_classes=['liquid-glass-preview'])
-        self.set_size_request(-1, 108)
+        self.set_size_request(-1, 132)
+        self.set_hexpand(True)
         self.set_overflow(Gtk.Overflow.HIDDEN)
+
+        self._backdrop = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        self._backdrop.set_can_target(False)
+        self._backdrop.set_size_request(0, 132)
+        self.set_child(self._backdrop)
 
         self._card = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
@@ -248,9 +279,9 @@ class LiquidGlassPreview(Gtk.Box):
         # 4px). Unlike an earlier version of this preview, which stretched the card to
         # fill whatever width the Settings window happened to have, a real notification
         # banner is a fixed, fairly narrow 28.8em bar (~460px at the toolkit's default
-        # 16px root em) that never stretches regardless of screen width. halign=CENTER +
-        # this width keeps the backdrop box itself full-width (still reads as "desktop
-        # behind the banner"), only the card itself is pinned to realistic proportions.
+        # 16px root em) that never stretches regardless of screen width. halign=CENTER
+        # over a full-width wallpaper backdrop keeps that "desktop behind the banner"
+        # read while pinning the card itself to realistic proportions.
         self._card.set_size_request(460, -1)
         self._card.set_margin_top(14)
         self._card.set_margin_bottom(14)
@@ -272,17 +303,19 @@ class LiquidGlassPreview(Gtk.Box):
         text_col.append(self._body_label)
         self._card.append(text_col)
 
-        self.append(self._card)
+        self.add_overlay(self._card)
 
         self._provider = Gtk.CssProvider()
         for widget in (self, self._card, self._title_label, self._body_label):
             widget.get_style_context().add_provider(self._provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
+    def set_backdrop_texture(self, texture):
+        """A Gdk.Texture holding a wallpaper sliver, or None to fall back to the flat tint."""
+        self._backdrop.set_paintable(texture)
+
     def update(self, intensity: int, is_dark: bool):
-        backdrop = (
-            'linear-gradient(135deg, #2c2450, #6a3a8f, #b3487a)' if is_dark
-            else 'linear-gradient(135deg, #ffd36e, #ff8a5c, #ff5e7a)'
-        )
+        # Flat tint shown only where the wallpaper backdrop can't be read (Picture empty).
+        fallback_tint = '#2a2340' if is_dark else '#efe4d6'
 
         fill = _glass_interpolate(LIQUID_GLASS_RECIPE['fill'], intensity, is_dark)
         gradient_start = _glass_interpolate(LIQUID_GLASS_RECIPE['gradient_start'], intensity, is_dark)
@@ -305,7 +338,7 @@ class LiquidGlassPreview(Gtk.Box):
 
         css = f"""
         .liquid-glass-preview {{
-            background-image: {backdrop};
+            background-color: {fallback_tint};
             border-radius: 12px;
         }}
         .liquid-glass-preview-card {{
@@ -314,6 +347,7 @@ class LiquidGlassPreview(Gtk.Box):
             border: 1px solid {_glass_rgba(border)};
             border-radius: 14px;
             box-shadow: inset 0 1px 0 {_glass_rgba(shadow)};
+            padding: 10px 14px;
         }}
         .liquid-glass-preview-card label:first-child {{
             color: {text_color};
@@ -509,8 +543,8 @@ class AppearancePage(Gtk.Box):
         self._appearance_settings.connect('changed::icon-style', lambda *_: self._refresh_icon_style_selection())
         self._panel_settings.connect(
             'changed::liquid-glass-intensity', lambda *_: self._refresh_liquid_glass_preview())
-        self._bg_settings.connect('changed::picture-uri', lambda *_: self._refresh_scheme_previews())
-        self._bg_settings.connect('changed::picture-uri-dark', lambda *_: self._refresh_scheme_previews())
+        self._bg_settings.connect('changed::picture-uri', lambda *_: self._on_wallpaper_changed())
+        self._bg_settings.connect('changed::picture-uri-dark', lambda *_: self._on_wallpaper_changed())
         self._refresh_all_selection()
         self._refresh_icon_style_selection()
         self._refresh_liquid_glass_preview()
@@ -723,6 +757,12 @@ class AppearancePage(Gtk.Box):
         except GLib.Error:
             return None
 
+    def _on_wallpaper_changed(self):
+        # A wallpaper change moves both the Light/Dark scheme tiles and the Liquid Glass
+        # notification backdrop, since all three are slices of the equipped wallpaper.
+        self._refresh_scheme_previews()
+        self._refresh_liquid_glass_preview()
+
     def _refresh_scheme_previews(self):
         """Re-composites both Light/Dark preview tiles against whatever's actually
         equipped right now. picture-uri/picture-uri-dark already resolve dynamic
@@ -844,3 +884,6 @@ class AppearancePage(Gtk.Box):
             self._liquid_glass_scale.set_value(intensity)
         is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
         self._liquid_glass_preview.update(intensity, is_dark)
+        wallpaper = self._current_wallpaper_path('picture-uri-dark' if is_dark else 'picture-uri')
+        self._liquid_glass_preview.set_backdrop_texture(
+            _wallpaper_sliver(wallpaper, *LIQUID_GLASS_BACKDROP_SIZE))
