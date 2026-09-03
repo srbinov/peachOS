@@ -518,6 +518,8 @@ class AppearancePage(Gtk.Box):
         self.set_margin_top(18)
         self.set_margin_bottom(18)
 
+        self._glass_write_source = 0
+        self._pending_glass_intensity = 0
         self._settings = Gio.Settings.new('org.gnome.desktop.interface')
         self._appearance_settings = Gio.Settings.new('org.peachos.appearance')
         # Same schema id menubar_page.py already uses Gio.Settings.new() against directly
@@ -895,9 +897,23 @@ class AppearancePage(Gtk.Box):
 
     def _on_liquid_glass_scale_changed(self, scale):
         intensity = round(scale.get_value())
+        # Cheap + immediate: just restyle the preview card's CSS.
+        is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
+        self._liquid_glass_preview.update(intensity, is_dark)
+        # Expensive + deferred: writing the gsetting makes the shell rebuild the
+        # Control Center / Notification Center / banner glass stylesheets (4 separate
+        # controllers, each a full theme reload). Doing that per drag tick is what
+        # makes the slider choppy -- coalesce to one write ~160ms after the last move.
+        self._pending_glass_intensity = intensity
+        if self._glass_write_source:
+            GLib.source_remove(self._glass_write_source)
+        self._glass_write_source = GLib.timeout_add(160, self._flush_glass_intensity_write)
+
+    def _flush_glass_intensity_write(self):
+        self._glass_write_source = 0
         if self._panel_settings is not None:
-            self._panel_settings.set_int('liquid-glass-intensity', intensity)
-        self._refresh_liquid_glass_preview()
+            self._panel_settings.set_int('liquid-glass-intensity', self._pending_glass_intensity)
+        return GLib.SOURCE_REMOVE
 
     def _refresh_liquid_glass_preview(self):
         intensity = (
@@ -907,6 +923,12 @@ class AppearancePage(Gtk.Box):
             self._liquid_glass_scale.set_value(intensity)
         is_dark = self._settings.get_string('color-scheme') == 'prefer-dark'
         self._liquid_glass_preview.update(intensity, is_dark)
+        # The wallpaper sliver (~20-200ms PIL crop+resize) only changes when the
+        # wallpaper or light/dark scheme changes -- cache it, keyed on (path, is_dark),
+        # so a slider drag never re-runs it.
         wallpaper = self._current_wallpaper_path('picture-uri-dark' if is_dark else 'picture-uri')
-        self._liquid_glass_preview.set_backdrop_texture(
-            _wallpaper_sliver(wallpaper, *LIQUID_GLASS_BACKDROP_SIZE))
+        key = (wallpaper, is_dark)
+        if getattr(self, '_glass_sliver_key', None) != key:
+            self._glass_sliver_key = key
+            self._glass_sliver_tex = _wallpaper_sliver(wallpaper, *LIQUID_GLASS_BACKDROP_SIZE)
+        self._liquid_glass_preview.set_backdrop_texture(self._glass_sliver_tex)

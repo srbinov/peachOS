@@ -57,6 +57,9 @@ EGGS=$(command -v eggs || command -v coa)
 if grep -qE '^\s*(snap/|var/snap/|var/lib/snapd/)\s*$' /etc/penguins-eggs.d/custom.exclude.list; then
     die "custom.exclude.list still excludes snaps -- the ISO would ship with no Firefox. Reinstall peachOS's copy."
 fi
+if ! grep -q 'peachOS snap skeleton' /etc/penguins-eggs.d/scripts/bootstrap-liveroot.sh 2>/dev/null; then
+    die "bootstrap-liveroot.sh isn't patched for the /snap skeleton -- rerun provision/penguins-eggs/install-eggs.sh (snaps would be unlaunchable in the ISO)"
+fi
 
 # --- 2. optional full re-provision --------------------------------------
 if [[ $DO_PROVISION -eq 1 ]]; then

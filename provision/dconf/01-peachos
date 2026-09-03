@@ -104,7 +104,7 @@ disable-user-extensions=false
 # reconciled here so a fresh account matches: cover-flow Alt-Tab stays off out of the box).
 disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'CoverflowAltTab@palatis.blogspot.com']
 enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'perfect-lockscreen@chris', 'blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'macos-dock-2026-peachos@peachos', 'macos-top-panel@local.dev']
-favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_reminders.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
+favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_reminders.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
 last-selected-power-profile='power-saver'
 welcome-dialog-last-shown-version='50.1'
 
@@ -137,6 +137,11 @@ pipeline='pipeline_default'
 pipeline='pipeline_default'
 
 [org/gnome/shell/extensions/blur-my-shell/panel]
+# OFF: macos-top-panel owns the menu bar look (transparent, or its own
+# wallpaper-slice blur via the Menu Bar tab). blur-my-shell's schema defaults
+# this to enabled=true, which is the mystery blur that survives toggling the
+# peachOS "menu bar blur" switch -- they're two different things.
+enabled=false
 brightness=0.59999999999999998
 corner-radius=0
 pipeline='pipeline_default'

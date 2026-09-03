@@ -558,7 +558,6 @@ update-desktop-database /usr/share/applications
 # content snaps (core22, gnome-42-2204, etc.) automatically, same as this VM's own install did.
 echo "==> Installing snap packages the app rebrands below expect to already exist"
 snap install firefox
-snap install bluebubbles
 snap install snap-store
 snap install desktop-security-center
 snap install firmware-updater
@@ -617,26 +616,10 @@ Exec=/snap/bin/firefox --ProfileManager
 Name=Open Profile Manager
 EOF
 
-# BlueBubbles (snap store, jojejo's official build -- not the peachOS-native BlueBubbles
-# client experiment, which was scrapped): same snap-desktop-override situation as Firefox
-# above, just no rename this time, only the icon. Curated art (assets/app-icons/messages.svg
-# + darkmode/messages.svg, a real macOS Messages-style bubble) replaces the snap's own bare
-# glyph -- see peachos_icon_resolve.py's CURATED_DARK_SLUGS for the light/dark swap.
-install -Dm644 "$REPO_DIR/assets/app-icons/messages.svg" /usr/share/icons/peachos/messages.svg
-cat > /usr/share/applications/bluebubbles_bluebubbles.desktop <<'EOF'
-[Desktop Entry]
-X-SnapInstanceName=bluebubbles
-Version=1.0
-Name=BlueBubbles
-Comment=BlueBubbles client for Linux
-X-SnapAppName=bluebubbles
-Exec=/snap/bin/bluebubbles
-Icon=/usr/share/icons/peachos/messages.svg
-Terminal=false
-Type=Application
-Categories=Network;InstantMessaging;Chat;
-StartupWMClass=Bluebubbles
-EOF
+# NOTE: BlueBubbles (iMessage client) is deliberately NOT shipped -- dropped from
+# the image on request. If it comes back, it's `snap install bluebubbles` here plus
+# a /usr/share/applications/bluebubbles_bluebubbles.desktop override for the curated
+# messages.svg icon, and re-add it to favorite-apps in provision/dconf/01-peachos.
 
 # App Center is also snapd-managed (/var/lib/snapd/desktop/applications), same override
 # reasoning as Firefox above.

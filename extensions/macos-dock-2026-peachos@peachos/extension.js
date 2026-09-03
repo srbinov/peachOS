@@ -651,8 +651,10 @@ export default class Dash2DockLiteExt extends Extension {
           this.animate();
           break;
         case 'liquid-glass-intensity':
-          this._updateStyle();
-          this.animate();
+          // Debounced: the Settings slider can fire this many times a second, and
+          // _updateStyle() writes a temp CSS file + theme.load_stylesheet(). Only a
+          // tint change -- no geometry -- so no animate() either.
+          this._debouncedUpdateStyle();
           break;
         case 'pressure-sense': {
           break;

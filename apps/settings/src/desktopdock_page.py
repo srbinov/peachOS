@@ -189,6 +189,8 @@ class DesktopDockPage(Gtk.Box):
         self._settings = _load_extension_settings(SCHEMA_ID)
         self._shell_settings = Gio.Settings.new('org.gnome.shell')
         self._syncing = False
+        self._dock_glass_write_id = 0
+        self._pending_dock_glass = 0.0
 
         self.append(make_hero_header(
             os.path.join(ICON_DIR, 'desktopdock.svg'), 'view-dual-symbolic',
@@ -363,10 +365,20 @@ class DesktopDockPage(Gtk.Box):
         if self._syncing:
             return
         value = float(round(scale.get_value()))
-        # Live preview immediately; the gsetting write (-> extension repaint) is fine to
-        # do every tick, it's just an int.
+        # Live preview immediately (cheap CSS). Defer the gsetting write: it makes the
+        # dock extension rebuild + reload its whole stylesheet (writes a temp CSS file,
+        # theme.load_stylesheet()), which per drag tick is what makes the slider crawl.
+        # Coalesce to one write ~160ms after the last move.
         self._dock_glass_preview.update(value, self._is_dark())
-        self._settings.set_double('liquid-glass-intensity', value)
+        self._pending_dock_glass = value
+        if self._dock_glass_write_id:
+            GLib.source_remove(self._dock_glass_write_id)
+        self._dock_glass_write_id = GLib.timeout_add(160, self._flush_dock_glass_write)
+
+    def _flush_dock_glass_write(self):
+        self._dock_glass_write_id = 0
+        self._settings.set_double('liquid-glass-intensity', self._pending_dock_glass)
+        return GLib.SOURCE_REMOVE
 
     def _refresh_genie_row(self):
         enabled = GENIE_EXTENSION_UUID in self._shell_settings.get_strv('enabled-extensions')

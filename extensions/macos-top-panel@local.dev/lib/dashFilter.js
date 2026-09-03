@@ -15,10 +15,21 @@ import Shell from 'gi://Shell';
 // than reimplementing its own app enumeration) build their running-apps icon list from.
 
 const PEACHY_SEARCH_TITLE = 'peachySearch';
-const PEACHY_SEARCH_APP_IDS = ['io.ulauncher.Ulauncher.desktop', 'io.ulauncher.Ulauncher'];
 
-function isPeachySearchApp(app) {
-    if (PEACHY_SEARCH_APP_IDS.includes(app.get_id()))
+// App IDs that are peachOS UI surfaces, not real apps, and must never take a dock
+// slot while open (same reasoning as peachySearch: their windows can't reliably
+// announce skip-taskbar over Wayland, so filter Shell.AppSystem's list directly).
+//   - io.ulauncher.Ulauncher : peachySearch (Spotlight)
+//   - com.github.kemma.KiwiMenu.About : the "About This PC" window spawned from the
+//     KiwiMenu (aboutWindow.js) -- a transient info panel, not an application
+const NON_APP_ID_PREFIXES = [
+    'io.ulauncher.Ulauncher',
+    'com.github.kemma.KiwiMenu',
+];
+
+function isNonAppSurface(app) {
+    const id = app.get_id() ?? '';
+    if (NON_APP_ID_PREFIXES.some(p => id === p || id === `${p}.desktop` || id.startsWith(`${p}.`)))
         return true;
     const windows = app.get_windows ? app.get_windows() : [];
     return windows.some(w => w.get_title() === PEACHY_SEARCH_TITLE);
@@ -31,7 +42,7 @@ export function installDashFilter() {
     if (_originalGetRunning)
         return; // already installed
     _originalGetRunning = appSystem.get_running.bind(appSystem);
-    appSystem.get_running = () => _originalGetRunning().filter(app => !isPeachySearchApp(app));
+    appSystem.get_running = () => _originalGetRunning().filter(app => !isNonAppSurface(app));
 }
 
 export function uninstallDashFilter() {

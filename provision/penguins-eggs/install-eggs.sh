@@ -92,7 +92,45 @@ install -Dm755 "$REPO_DIR/provision/penguins-eggs/trust-desktop.sh" \
 install -Dm644 "$REPO_DIR/assets/logos/PeachICON_BLACK.svg" \
     /usr/share/icons/peachos/install-peachos.svg
 
-# --- 5. sanity check -----------------------------------------------------
+# --- 5. patch bootstrap-liveroot.sh to capture the /snap skeleton -------
+# eggs builds the live root from binds + overlays of /etc /boot /usr /var /bin
+# ... and doesn't touch /snap at all. Result: the ISO gets every .snap blob and
+# the snap-*.mount units, but an EMPTY /snap tree -- no <name>/current symlinks,
+# no /snap/bin/* launchers -- so Firefox/Orchard, snap-store and every other
+# seeded snap is unlaunchable (the exact "Orchard didn't come with it" symptom).
+# The mounted snap *content* is recreated at boot by the .mount units; only this
+# skeleton (dirs + symlinks, a few KB) is missing. find -xdev stops at each
+# snap's own mounted squashfs so we copy the structure, not the payload.
+BLR=/etc/penguins-eggs.d/scripts/bootstrap-liveroot.sh
+if [[ -f "$BLR" ]] && ! grep -q 'peachOS snap skeleton' "$BLR"; then
+    echo "==> Patching $BLR to include the /snap skeleton"
+    python3 - "$BLR" <<'PYEOF'
+import sys
+p = sys.argv[1]
+src = open(p).read()
+anchor = 'cp -a /etc /boot "$LIVEROOT/"'
+snippet = r'''
+
+# --- BEGIN peachOS snap skeleton (added by install-eggs.sh) ------------------
+# dirs + symlinks only; find -xdev stays out of each snap's mounted squashfs so
+# this copies the structure (/snap/<name>/current, /snap/bin/*), not the payload.
+if [ -d /snap ]; then
+    ( cd / \
+      && find snap -xdev -type d -exec mkdir -p "$LIVEROOT/{}" \; \
+      && find snap -xdev -type l | while IFS= read -r _l; do
+             mkdir -p "$LIVEROOT/$(dirname "$_l")"
+             cp -P "/$_l" "$LIVEROOT/$_l"
+         done ) || true
+fi
+# --- END peachOS snap skeleton ---------------------------------------------
+'''
+if anchor not in src:
+    sys.exit("anchor not found in bootstrap-liveroot.sh -- eggs layout changed, patch by hand")
+open(p, 'w').write(src.replace(anchor, anchor + snippet, 1))
+PYEOF
+fi
+
+# --- 6. sanity check -----------------------------------------------------
 echo "==> penguins-eggs installed:"
 eggs version || coa version || true
 echo
