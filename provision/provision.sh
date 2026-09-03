@@ -934,6 +934,33 @@ git clone --quiet "$MACTAHOE_ICON_REPO" "$WORK_DIR/icon-theme"
 git -C "$WORK_DIR/icon-theme" checkout --quiet "$MACTAHOE_ICON_COMMIT"
 "$WORK_DIR/icon-theme/install.sh" -d /usr/share/icons
 
+# Bluetooth device-type icons (peachos-bt-*) -- shown next to each device in the
+# top-bar Bluetooth dropdown (macos-top-panel bluetoothIndicator.js) and the
+# Settings app's Bluetooth page. Hand-drawn SF-Symbols-style set from
+# macOS_Tahoe_SYSICONS; the SVGs are recoloured to currentColor at author time
+# so the top bar's dark/light adaptive panel can tint them. They go into
+# MacTahoe's OWN tree (not just hicolor) because MacTahoe's hicolor inheritance
+# doesn't reliably surface a newly-created hicolor/scalable/devices dir --
+# dropping them where MacTahoe already keeps device icons is what actually
+# resolves for both St and GTK. deviceType() in bluetoothData.js picks which one;
+# anything without a custom icon falls back to a themed -symbolic name.
+echo "==> Installing Bluetooth device-type icons -> MacTahoe + hicolor"
+# MacTahoe lays icon dirs out context-first (devices/scalable); hicolor is
+# size-first (scalable/devices). Install into both so a non-MacTahoe theme
+# still gets them via hicolor fallback.
+for f in "$REPO_DIR"/assets/bluetooth-device-icons/*.svg; do
+    [ -e "$f" ] || continue
+    install -Dm644 "$f" "/usr/share/icons/MacTahoe/devices/scalable/$(basename "$f")"
+    install -Dm644 "$f" "/usr/share/icons/hicolor/scalable/devices/$(basename "$f")"
+done
+for f in "$REPO_DIR"/assets/bluetooth-device-icons/*.png; do
+    [ -e "$f" ] || continue
+    install -Dm644 "$f" "/usr/share/icons/MacTahoe/devices/32/$(basename "$f")"
+    install -Dm644 "$f" "/usr/share/icons/hicolor/64x64/devices/$(basename "$f")"
+done
+gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+
 echo "==> Installing GNOME Shell extensions system-wide -> /usr/share/gnome-shell/extensions"
 mkdir -p /usr/share/gnome-shell/extensions
 for ext_dir in "$REPO_DIR"/extensions/*/; do

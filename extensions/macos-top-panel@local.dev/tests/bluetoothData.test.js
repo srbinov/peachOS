@@ -57,38 +57,50 @@ function assertEqual(actual, expected, msg) {
     assertEqual(result.map(d => d.name), ['Keyboard', null], 'unnamed device sorts after named ones');
 }
 
-// deviceIconName: BlueZ's own Icon hint wins, normalised to -symbolic
+// deviceIconName: BlueZ's own Icon hint -> canonical type -> shipped icon
 {
-    assertEqual(deviceIconName({icon: 'audio-headphones'}), 'audio-headphones-symbolic',
-        'iconName: BlueZ hint gets -symbolic suffix');
-    assertEqual(deviceIconName({icon: 'input-keyboard-symbolic'}), 'input-keyboard-symbolic',
-        'iconName: hint already symbolic is left alone');
+    assertEqual(deviceIconName({icon: 'audio-headphones'}), 'peachos-bt-headphones',
+        'iconName: BlueZ headphones hint');
+    assertEqual(deviceIconName({icon: 'audio-card'}), 'peachos-bt-speakers',
+        'iconName: BlueZ generic-audio hint -> speakers');
+    assertEqual(deviceIconName({icon: 'input-mouse'}), 'input-mouse-symbolic',
+        'iconName: BlueZ mouse hint -> themed symbolic (no custom art)');
 }
 
 // deviceIconName: Class-of-Device fallback when BlueZ gave no hint
 {
-    // major 4 (audio/video), minor 6 (headphones): 0x040418 -> (>>8 &0x1f)=4, (>>2 &0x3f)=6
-    assertEqual(deviceIconName({class: 0x040418}), 'audio-headphones-symbolic',
+    // major 4 (audio/video), minor 6 (headphones)
+    assertEqual(deviceIconName({class: 0x040418}), 'peachos-bt-headphones',
         'iconName: CoD audio/headphones');
-    // major 5 (peripheral), minor top-bits 1 (keyboard): 0x000540
-    assertEqual(deviceIconName({class: 0x000540}), 'input-keyboard-symbolic',
+    // major 4, minor 8 (car audio)
+    assertEqual(deviceIconName({class: 0x040420}), 'peachos-bt-carplay',
+        'iconName: CoD car audio -> carplay');
+    // major 5 (peripheral), keyboard
+    assertEqual(deviceIconName({class: 0x000540}), 'peachos-bt-keyboard',
         'iconName: CoD peripheral/keyboard');
-    // major 1 (computer): 0x00010C
-    assertEqual(deviceIconName({class: 0x00010C}), 'computer-symbolic',
-        'iconName: CoD computer');
-    // major 2 (phone): 0x00020C
+    // major 5, mouse (minor top-bits == 2): 0x000580
+    assertEqual(deviceIconName({class: 0x000580}), 'input-mouse-symbolic',
+        'iconName: CoD peripheral/mouse');
+    // major 1 (computer)
+    assertEqual(deviceIconName({class: 0x00010C}), 'peachos-bt-laptop',
+        'iconName: CoD computer -> laptop');
+    // major 2 (phone)
     assertEqual(deviceIconName({class: 0x00020C}), 'phone-symbolic',
-        'iconName: CoD phone');
+        'iconName: CoD phone -> themed symbolic');
 }
 
 // deviceIconName: name guess when neither hint nor class is present
 {
-    assertEqual(deviceIconName({name: "Chris's AirPods Pro"}), 'audio-headphones-symbolic',
-        'iconName: AirPods by name');
-    assertEqual(deviceIconName({name: 'Living Room TV'}), 'video-display-symbolic',
+    assertEqual(deviceIconName({name: "Chris's AirPods Pro"}), 'peachos-bt-airpods',
+        'iconName: AirPods by name -> dedicated AirPods icon');
+    assertEqual(deviceIconName({name: 'Sony WH-1000 Headphones'}), 'peachos-bt-headphones',
+        'iconName: headphones by name');
+    assertEqual(deviceIconName({name: 'Living Room TV'}), 'peachos-bt-tv',
         'iconName: TV by name');
-    assertEqual(deviceIconName({name: 'JBL Speaker'}), 'audio-speakers-symbolic',
+    assertEqual(deviceIconName({name: 'JBL Speaker'}), 'peachos-bt-speakers',
         'iconName: speaker by name');
+    assertEqual(deviceIconName({name: 'Galaxy Watch6'}), 'peachos-bt-watch',
+        'iconName: watch by name');
     assertEqual(deviceIconName({name: 'MX Keys'}), 'bluetooth-symbolic',
         'iconName: unknown name -> generic bluetooth glyph');
     assertEqual(deviceIconName({}), 'bluetooth-symbolic',

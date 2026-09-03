@@ -19,52 +19,86 @@ PROPS_IFACE = 'org.freedesktop.DBus.Properties'
 _REFRESH_DEBOUNCE_MS = 900
 
 
-# audio/video (Class-of-Device major 4), by minor device class
-_COD_AV_MINOR = {
-    1: 'audio-headset-symbolic', 2: 'audio-headset-symbolic',
-    4: 'audio-input-microphone-symbolic', 5: 'audio-speakers-symbolic',
-    6: 'audio-headphones-symbolic', 7: 'multimedia-player-symbolic',
-    8: 'audio-card-symbolic', 10: 'video-display-symbolic',
-    11: 'video-display-symbolic', 12: 'video-display-symbolic',
-    13: 'camera-video-symbolic',
+# Kept in sync with deviceType()/deviceIconName() in the top panel's
+# lib/bluetoothData.js. peachOS ships hand-drawn peachos-bt-* icons for the
+# common types (installed to hicolor by provision.sh); the rest fall back to a
+# themed -symbolic name.
+_TYPE_ICON = {
+    'airpods': 'peachos-bt-airpods', 'headphones': 'peachos-bt-headphones',
+    'headset': 'peachos-bt-headphones', 'speakers': 'peachos-bt-speakers',
+    'carplay': 'peachos-bt-carplay', 'airplay': 'peachos-bt-airplay',
+    'microphone': 'peachos-bt-microphone', 'tv': 'peachos-bt-tv',
+    'computer': 'peachos-bt-laptop', 'keyboard': 'peachos-bt-keyboard',
+    'watch': 'peachos-bt-watch', 'printer': 'peachos-bt-printer',
+    'phone': 'phone-symbolic', 'mouse': 'input-mouse-symbolic',
+    'gamepad': 'input-gaming-symbolic', 'tablet': 'input-tablet-symbolic',
+    'camera': 'camera-photo-symbolic', 'camcorder': 'camera-video-symbolic',
+    'network': 'network-wireless-symbolic', 'player': 'multimedia-player-symbolic',
+    'generic': 'bluetooth-symbolic',
 }
-_COD_MAJOR = {1: 'computer-symbolic', 2: 'phone-symbolic',
-              3: 'network-wireless-symbolic', 6: 'camera-photo-symbolic'}
-_COD_PERIPHERAL = {1: 'input-keyboard-symbolic', 2: 'input-mouse-symbolic',
-                   3: 'input-keyboard-symbolic'}
+_HINT_TYPE = {
+    'audio-headphones': 'headphones', 'audio-headset': 'headset',
+    'audio-speakers': 'speakers', 'audio-card': 'speakers',
+    'audio-input-microphone': 'microphone', 'multimedia-player': 'player',
+    'computer': 'computer', 'phone': 'phone', 'network-wireless': 'network',
+    'input-keyboard': 'keyboard', 'input-mouse': 'mouse',
+    'input-gaming': 'gamepad', 'input-tablet': 'tablet', 'video-display': 'tv',
+    'camera-photo': 'camera', 'camera-video': 'camcorder', 'printer': 'printer',
+}
+_COD_AV_MINOR = {1: 'headset', 2: 'headset', 4: 'microphone', 5: 'speakers',
+                 6: 'headphones', 7: 'player', 8: 'carplay', 10: 'tv', 11: 'tv',
+                 12: 'tv', 13: 'camcorder'}
 
 
-def _device_icon_name(props: dict) -> str:
-    # BlueZ usually classifies the device for us in its own Icon property
-    # (freedesktop name derived from Class-of-Device / LE Appearance). Kept in
-    # sync with deviceIconName() in the top panel's bluetoothData.js.
+def _device_type(props: dict) -> str:
+    name = (props.get('Alias') or props.get('Name') or '').lower()
+    if 'airpod' in name:
+        return 'airpods'
+    if 'airplay' in name:
+        return 'airplay'
+    if 'carplay' in name:
+        return 'carplay'
+
     hint = props.get('Icon')
-    if hint:
-        return hint if hint.endswith('-symbolic') else f'{hint}-symbolic'
+    if hint and hint in _HINT_TYPE:
+        return _HINT_TYPE[hint]
 
     cod = props.get('Class') or 0
     if cod:
         major = (cod >> 8) & 0x1f
         minor = (cod >> 2) & 0x3f
+        if major == 1:
+            return 'computer'
+        if major == 2:
+            return 'phone'
+        if major == 3:
+            return 'network'
         if major == 4:
-            return _COD_AV_MINOR.get(minor, 'audio-card-symbolic')
+            return _COD_AV_MINOR.get(minor, 'speakers')
         if major == 5:
-            return _COD_PERIPHERAL.get((minor >> 4) & 0x3, 'input-mouse-symbolic')
-        if major in _COD_MAJOR:
-            return _COD_MAJOR[major]
+            return 'mouse' if ((minor >> 4) & 0x3) == 2 else 'keyboard'
+        if major == 6:
+            return 'camera'
 
-    name = (props.get('Alias') or props.get('Name') or '').lower()
-    if any(w in name for w in ('airpod', 'headphone', 'earbud', ' buds', 'beats')):
-        return 'audio-headphones-symbolic'
+    if any(w in name for w in ('headphone', 'earbud', ' buds', 'beats')):
+        return 'headphones'
     if any(w in name for w in ('speaker', 'soundbar', 'homepod', 'sonos')):
-        return 'audio-speakers-symbolic'
+        return 'speakers'
     if 'keyboard' in name:
-        return 'input-keyboard-symbolic'
+        return 'keyboard'
     if 'mouse' in name or 'trackpad' in name:
-        return 'input-mouse-symbolic'
+        return 'mouse'
+    if any(w in name for w in (' tv ', 'television', 'bravia')) or name.endswith(' tv'):
+        return 'tv'
     if 'watch' in name:
-        return 'phone-symbolic'
-    return 'bluetooth-symbolic'
+        return 'watch'
+    if 'printer' in name:
+        return 'printer'
+    return 'generic'
+
+
+def _device_icon_name(props: dict) -> str:
+    return _TYPE_ICON.get(_device_type(props), 'bluetooth-symbolic')
 
 
 def _has_real_name(props: dict) -> bool:

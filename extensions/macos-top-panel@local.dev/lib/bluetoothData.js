@@ -16,84 +16,108 @@ export function parseBluetoothState(props) {
 
 // --- device type -> icon ---------------------------------------------------
 //
-// BlueZ already works out what kind of thing each device is: its own `Icon`
-// property is a freedesktop icon name (audio-headphones, input-keyboard,
-// video-display, phone, ...) derived from the classic Class-of-Device or the
-// LE Appearance. We pass that straight through with a `-symbolic` suffix --
-// every value BlueZ emits has a symbolic variant in the shipped MacTahoe
-// theme. For the devices BlueZ leaves unclassified we decode the raw Class
-// bits ourselves, then fall back to a name guess, then a generic BT glyph.
+// Work out a canonical device type (deviceType), then map it to an icon
+// (deviceIconName). BlueZ already classifies most devices for us in its own
+// `Icon` property -- a freedesktop name derived from the classic
+// Class-of-Device or the LE Appearance -- so that's the primary signal, with
+// the raw Class bits and then the friendly name as fallbacks.
+//
+// peachOS ships hand-drawn icons for the common types (peachos-bt-*, from the
+// macOS_Tahoe_SYSICONS set, installed to hicolor by provision.sh); the rest
+// fall back to a themed `-symbolic` name that resolves in MacTahoe.
 
-// classic Class-of-Device major device classes (bits 8-12)
-const COD_MAJOR = {
-    1: 'computer-symbolic',
-    2: 'phone-symbolic',
-    3: 'network-wireless-symbolic', // LAN / network access point
-    6: 'camera-photo-symbolic',     // imaging (refined below)
+const TYPE_ICON = {
+    airpods:    'peachos-bt-airpods',
+    headphones: 'peachos-bt-headphones',
+    headset:    'peachos-bt-headphones',
+    speakers:   'peachos-bt-speakers',
+    carplay:    'peachos-bt-carplay',
+    airplay:    'peachos-bt-airplay',
+    microphone: 'peachos-bt-microphone',
+    tv:         'peachos-bt-tv',
+    computer:   'peachos-bt-laptop',
+    keyboard:   'peachos-bt-keyboard',
+    watch:      'peachos-bt-watch',
+    printer:    'peachos-bt-printer',
+    // no custom art -- themed symbolic fallback
+    phone:      'phone-symbolic',
+    mouse:      'input-mouse-symbolic',
+    gamepad:    'input-gaming-symbolic',
+    tablet:     'input-tablet-symbolic',
+    camera:     'camera-photo-symbolic',
+    camcorder:  'camera-video-symbolic',
+    network:    'network-wireless-symbolic',
+    player:     'multimedia-player-symbolic',
+    generic:    'bluetooth-symbolic',
 };
 
-// audio/video (major 4), by minor device class (bits 2-7)
+// BlueZ `Icon` hint -> our canonical type
+const HINT_TYPE = {
+    'audio-headphones': 'headphones', 'audio-headset': 'headset',
+    'audio-speakers': 'speakers', 'audio-card': 'speakers',
+    'audio-input-microphone': 'microphone', 'multimedia-player': 'player',
+    'computer': 'computer', 'phone': 'phone', 'network-wireless': 'network',
+    'input-keyboard': 'keyboard', 'input-mouse': 'mouse',
+    'input-gaming': 'gamepad', 'input-tablet': 'tablet',
+    'video-display': 'tv', 'camera-photo': 'camera', 'camera-video': 'camcorder',
+    'printer': 'printer',
+};
+
+// classic Class-of-Device audio/video (major 4) minor -> type
 const COD_AV_MINOR = {
-    1: 'audio-headset-symbolic',
-    2: 'audio-headset-symbolic',    // hands-free
-    4: 'audio-input-microphone-symbolic',
-    5: 'audio-speakers-symbolic',   // loudspeaker
-    6: 'audio-headphones-symbolic',
-    7: 'multimedia-player-symbolic', // portable audio
-    8: 'audio-card-symbolic',       // car audio
-    10: 'video-display-symbolic',
-    11: 'video-display-symbolic',
-    12: 'video-display-symbolic',
-    13: 'camera-video-symbolic',    // video conferencing
-};
-
-// peripheral (major 5), by the top two bits of the minor class
-const COD_PERIPHERAL = {
-    1: 'input-keyboard-symbolic',
-    2: 'input-mouse-symbolic',
-    3: 'input-keyboard-symbolic',   // combo keyboard/pointing
+    1: 'headset', 2: 'headset', 4: 'microphone', 5: 'speakers', 6: 'headphones',
+    7: 'player', 8: 'carplay', 10: 'tv', 11: 'tv', 12: 'tv', 13: 'camcorder',
 };
 
 /**
- * A themed symbolic icon name for a device's type.
- *
+ * The canonical device type -- a key of TYPE_ICON.
  * @param {{icon?: string|null, class?: number, name?: string|null}} device
- *   `icon` = BlueZ's own Icon hint, `class` = the raw Class-of-Device uint,
- *   `name` = the friendly name (used only as a last resort).
- * @returns {string}
  */
-export function deviceIconName(device) {
-    const hint = device?.icon;
-    if (hint)
-        return hint.endsWith('-symbolic') ? hint : `${hint}-symbolic`;
+export function deviceType(device) {
+    const name = (device?.name ?? '').toLowerCase();
 
+    // most-specific name overrides first (AirPods vs generic headphones, etc.)
+    if (/airpod/.test(name)) return 'airpods';
+    if (/\bairplay\b/.test(name)) return 'airplay';
+    if (/carplay/.test(name)) return 'carplay';
+
+    // BlueZ's own classification
+    const hint = device?.icon;
+    if (hint && HINT_TYPE[hint]) return HINT_TYPE[hint];
+
+    // raw Class-of-Device
     const cod = device?.class ?? 0;
     if (cod) {
         const major = (cod >> 8) & 0x1f;
         const minor = (cod >> 2) & 0x3f;
-        if (major === 4)
-            return COD_AV_MINOR[minor] ?? 'audio-card-symbolic';
-        if (major === 5)
-            return COD_PERIPHERAL[(minor >> 4) & 0x3] ?? 'input-mouse-symbolic';
-        if (COD_MAJOR[major])
-            return COD_MAJOR[major];
+        if (major === 1) return 'computer';
+        if (major === 2) return 'phone';
+        if (major === 3) return 'network';
+        if (major === 4) return COD_AV_MINOR[minor] ?? 'speakers';
+        if (major === 5) return ((minor >> 4) & 0x3) === 2 ? 'mouse' : 'keyboard';
+        if (major === 6) return 'camera';
     }
 
-    const name = (device?.name ?? '').toLowerCase();
-    if (/airpod|headphone|earbud| buds|beats/.test(name))
-        return 'audio-headphones-symbolic';
-    if (/speaker|soundbar|homepod|sonos/.test(name))
-        return 'audio-speakers-symbolic';
-    if (/keyboard/.test(name))
-        return 'input-keyboard-symbolic';
-    if (/mouse|trackpad/.test(name))
-        return 'input-mouse-symbolic';
-    if (/(^| )tv($| )|television|bravia|\bwebos\b/.test(name))
-        return 'video-display-symbolic';
-    if (/watch/.test(name))
-        return 'phone-symbolic';
+    // looser name guesses
+    if (/headphone|earbud| buds|beats/.test(name)) return 'headphones';
+    if (/speaker|soundbar|homepod|sonos/.test(name)) return 'speakers';
+    if (/keyboard/.test(name)) return 'keyboard';
+    if (/mouse|trackpad/.test(name)) return 'mouse';
+    if (/(^| )tv($| )|television|bravia|\bwebos\b/.test(name)) return 'tv';
+    if (/watch/.test(name)) return 'watch';
+    if (/printer/.test(name)) return 'printer';
 
-    return 'bluetooth-symbolic';
+    return 'generic';
+}
+
+/**
+ * The icon name for a device's type -- a peachos-bt-* custom icon where we
+ * ship one, otherwise a themed `-symbolic` name.
+ * @param {{icon?: string|null, class?: number, name?: string|null}} device
+ * @returns {string}
+ */
+export function deviceIconName(device) {
+    return TYPE_ICON[deviceType(device)] ?? 'bluetooth-symbolic';
 }
 
 /**
