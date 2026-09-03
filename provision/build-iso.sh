@@ -121,20 +121,24 @@ log "Blanking /etc/machine-id (regenerates on next boot, here and on every insta
 # every install off the ISO would be called after this MacBook. Set a generic
 # one for the build, restore the host's own afterwards. Calamares still lets
 # the installing user pick their own.
-ORIG_HOSTNAME="$(cat /etc/hostname 2>/dev/null || true)"
+ORIG_HOSTNAME="$(hostname)"
 restore_hostname() {
-    [[ -n "$ORIG_HOSTNAME" ]] || return 0
+    [[ -n "$ORIG_HOSTNAME" && "$ORIG_HOSTNAME" != "peachos" ]] || return 0
+    hostname "$ORIG_HOSTNAME" 2>/dev/null || true
     echo "$ORIG_HOSTNAME" > /etc/hostname
     sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$ORIG_HOSTNAME/" /etc/hosts 2>/dev/null || true
 }
 trap restore_hostname EXIT
 if [[ "$ORIG_HOSTNAME" != "peachos" ]]; then
     log "Setting hostname 'peachos' for the build (restored to '$ORIG_HOSTNAME' after)"
+    # transient too -- eggs derives the ISO volume id / .disk/info from the
+    # RUNNING kernel hostname, not just the file.
+    hostname peachos 2>/dev/null || true
     echo "peachos" > /etc/hostname
     if grep -qE '^127\.0\.1\.1' /etc/hosts; then
         sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tpeachos/" /etc/hosts
     else
-        echo -e "127.0.1.1\tpeachos" >> /etc/hosts
+        printf '127.0.1.1\tpeachos\n' >> /etc/hosts
     fi
 fi
 
