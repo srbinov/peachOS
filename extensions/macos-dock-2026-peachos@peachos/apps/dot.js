@@ -64,7 +64,9 @@ const DotCanvas = GObject.registerClass(
     }
 
     dot_size(h) {
-      let sz = [0.8, 0.5, 1.0];
+      // peachOS: default (index 0) running indicator is 20% smaller than upstream's 0.8
+      // -- the stock dot read too heavy under the dock's small icons.
+      let sz = [0.64, 0.5, 1.0];
       return h * (sz[this.state.size] || 1);
     }
 
