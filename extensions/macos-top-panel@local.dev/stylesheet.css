@@ -95,15 +95,18 @@
    reliable. */
 .notification-banner {
     width: 24em !important;
-    min-height: 58px !important;
+    min-height: 62px !important;
     border-radius: 16px !important;
+    padding: 6px 4px !important;
 }
 
-/* ---- macOS-ish notification styling -----------------------------------------------------
-   Kept deliberately conservative: only colours / weights / a couple of sizes, no layout
-   surgery (hiding elements or negative margins risked collapsing the banner to a 0-size
-   actor -- and a 0-size actor is exactly what fed Shell.Screenshot a bad rect and SIGSEGV'd
-   the shell). GNOME's structure (icon+name+time header, then title+body) stays intact.
+/* ---- macOS-ish notification styling ---------------------------------------------------
+   macOS banner = one big rounded app icon + bold title + body, timestamp is NOT shown,
+   no app-name line. So collapse GNOME's whole header row (app icon + "notify-send" +
+   "Just now" + close button) and let the .message-box row carry everything.
+   NOTE: no Shell.Screenshot in this codebase any more, so hiding elements / small
+   negative offsets here can't feed a bad sample rect the way they used to. The banner
+   itself keeps a real min-height so it never collapses to a 0-size actor.
    !important where the selector ties stock gnome-shell.css / the MacTahoe theme. */
 
 .message {
@@ -111,28 +114,38 @@
     border: none !important;
 }
 
-/* App name: small + a touch dim, like macOS's grey app label. */
-.message .message-header .message-header-content .message-source-title {
-    font-weight: bold !important;
-    font-size: 0.92em;
+/* Collapse the header row entirely. */
+.message .message-header {
+    height: 0px !important;
+    min-height: 0px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    spacing: 0 !important;
+    opacity: 0;
 }
-/* Timestamp: quiet, top-right. */
+.message .message-header .message-source-icon,
+.message .message-header .message-header-content,
+.message .message-header .message-header-content .message-source-title,
 .message .message-header .message-header-content .event-time {
-    font-size: 0.82em;
-    font-weight: normal;
-    opacity: 0.55;
-}
-/* App icon in the header -- a bit bigger, full colour (not the symbolic desaturate). */
-.message .message-header .message-source-icon {
-    icon-size: 1.4em;
-    -st-icon-style: regular;
+    width: 0; min-width: 0; height: 0; min-height: 0;
+    icon-size: 0;
+    font-size: 0;
+    margin: 0; padding: 0;
 }
 
-/* Summary line: the bold headline. */
+/* The icon + title + body row is now the whole banner. */
+.message .message-box,
+.message .message-box:first-child {
+    margin-top: 0 !important;
+    padding: 2px 4px !important;
+    spacing: 12px !important;
+}
+.message .message-box .message-content {
+    spacing: 2px !important;
+}
 .message .message-box .message-content .message-title {
     font-weight: bold !important;
 }
-/* Body: regular weight, slightly dimmed against the title. */
 .message .message-box .message-content .message-body,
 .message-body {
     opacity: 0.82;
