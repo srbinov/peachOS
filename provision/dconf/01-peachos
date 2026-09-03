@@ -49,8 +49,8 @@ toolkit-accessibility=false
 [org/gnome/desktop/background]
 color-shading-type='solid'
 picture-options='zoom'
-picture-uri='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Light.jpg'
-picture-uri-dark='file:///usr/share/backgrounds/peachos/peachOS_Nectar_Dark.jpg'
+picture-uri='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_day.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/peachos/presets/tahoe_beach_day.jpg'
 primary-color='#000000000000'
 secondary-color='#000000000000'
 
@@ -100,9 +100,11 @@ name='Show peachySearch'
 [org/gnome/shell]
 app-picker-layout=[{'Utilities': <{'position': <0>}>, 'System': <{'position': <1>}>, '73622667-ace0-4bad-b83e-75f75ddf4dc9': <{'position': <2>}>, '67e6e87c-06db-4661-aa71-0db1602c05ed': <{'position': <3>}>, 'org.localsend.localsend_app.desktop': <{'position': <4>}>, 'org.gnome.Weather.desktop': <{'position': <5>}>, 'org.gnome.Ptyxis.desktop': <{'position': <6>}>, 'install-system.desktop': <{'position': <7>}>}]
 disable-user-extensions=false
-disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com']
-enabled-extensions=['blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'CoverflowAltTab@palatis.blogspot.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'perfect-lockscreen@chris', 'macos-dock-2026-peachos@peachos', 'macos-top-panel@local.dev']
-favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_reminders.desktop', 'org.gnome.TextEditor.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
+# CoverflowAltTab is explicitly disabled (john-doe turned it off on the live machine --
+# reconciled here so a fresh account matches: cover-flow Alt-Tab stays off out of the box).
+disabled-extensions=['ding@rastersoft.com', 'snapd-prompting@canonical.com', 'snapd-search-provider@canonical.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@ubuntu.com', 'web-search-provider@ubuntu.com', 'ubuntu-dock@ubuntu.com', 'live-lockscreen@nick-redwill', 'dash2dock-lite@icedman.github.com', 'peachos-lockscreen@local.dev', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'CoverflowAltTab@palatis.blogspot.com']
+enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'perfect-lockscreen@chris', 'blur-my-shell@aunetx', 'rounded-windows@marcosgt.github.io', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'macos-dock-2026-peachos@peachos', 'macos-top-panel@local.dev']
+favorite-apps=['org.gnome.Nautilus.desktop', 'peachos-applauncher.desktop', 'firefox_firefox.desktop', 'bluebubbles_bluebubbles.desktop', 'icloud-for-linux_mail.desktop', 'icloud-for-linux_maps.desktop', 'icloud-for-linux_photos.desktop', 'icloud-for-linux_contacts.desktop', 'org.gnome.Calendar.desktop', 'icloud-for-linux_notes.desktop', 'icloud-for-linux_reminders.desktop', 'icloud-for-linux_tv.desktop', 'sidra.desktop', 'libreoffice-impress.desktop', 'libreoffice-calc.desktop', 'libreoffice-writer.desktop', 'snap-store_snap-store.desktop', 'peachos-settings.desktop', 'app.mirror.Mirror.desktop']
 last-selected-power-profile='power-saver'
 welcome-dialog-last-shown-version='50.1'
 
@@ -172,9 +174,12 @@ icon-spacing=-1.0
 items-pullout-angle=0.5
 label-background-color=(0.0, 0.0, 0.0, 0.0)
 label-border-color=(1.0, 1.0, 1.0, 0.0)
+lamp-app-animation=true
 liquid-glass=true
 liquid-glass-mode=1
+liquid-glass-intensity=85.0
 msg-to-ext=''
+open-app-animation=true
 preferred-monitor=0
 pressure-sense=false
 pressure-sense-sensitivity=0.40000000000000002
@@ -188,16 +193,23 @@ battery-show-percentage=true
 clock-24-hour=false
 clock-show-date=true
 clock-show-seconds=false
-liquid-glass-intensity=74
+liquid-glass-intensity=100
+menu-bar-blur=false
 show-bluetooth-icon=true
 show-spotlight-icon=true
 show-wifi-icon=true
 window-color-blend-enabled=false
 
 [org/gnome/shell/extensions/perfect-lockscreen]
+# Live animated lock screen ON by default. On hardware that can't decode the video
+# smoothly the extension's own watchdog drops to the static desktop wallpaper (see
+# perfect-lockscreen extension.js _scheduleLiveBackgroundWatchdog / video-unsupported
+# marker) -- so this is safe to ship enabled even for weak GPUs.
 background-source='video'
 background-video-path='/usr/share/peachos/lockscreen/rolling-hills.mp4'
 lockscreen-wallpaper-enable=false
+cupertino-always-show-user=true
+prompt-change-blur=false
 # No "Welcome to ..." text on the lock/login screen -- peachOS ships it clean.
 # (Schema default is already off; pinned here so a stray earlier value or an
 # upstream default change can't bring it back.)
