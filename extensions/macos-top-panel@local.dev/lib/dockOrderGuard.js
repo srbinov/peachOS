@@ -6,11 +6,14 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 // algorithm "assumes only one item is moved at a given time" and that touching several
 // items at once can make it "remove all the launchers and add them back in a new order" --
 // exactly what peachos-icon-appearance's bulk icon swap does (many apps' resolved
-// GDesktopAppInfo change within the same second). There's no way to stop Shell's own
-// dash.js from doing this from outside GNOME Shell; the only real fix is to snapshot the
-// dock's actual on-screen app order before the change and force it back after, at the
-// Clutter actor level -- which has to happen here, inside the Shell process, since that's
-// the only place these actors actually live.
+// GDesktopAppInfo change within the same second). macos-dock-2026-peachos wraps that same
+// stock dash.js, so it inherits the bug: switching icon appearance reshuffles every pinned
+// app on the dock.
+//
+// There's no way to stop dash.js from doing this from outside GNOME Shell, so this snapshots
+// the dock's actual on-screen app order before the change and forces it back after, at the
+// Clutter actor level -- which has to happen here, inside the Shell process. Called over
+// D-Bus by the Settings app's Appearance page (see appearance_page.py _run_icon_appearance).
 const BUS_NAME = 'org.peachos.DockOrderGuard';
 const OBJECT_PATH = '/org/peachos/DockOrderGuard';
 const IFACE_XML = `
@@ -21,8 +24,8 @@ const IFACE_XML = `
   </interface>
 </node>`;
 
-const DOCK_ACTOR_NAME = 'dashtodockContainer'; // dash2dock-lite's own name for its dock actor,
-                                                // same constant lib/appLauncher.js uses
+// macos-dock's Dock actor sets this as its own name (dock.js _init: name: 'dashtodockContainer').
+const DOCK_ACTOR_NAME = 'dashtodockContainer';
 
 function _findActorByName(actor, name) {
     if (actor.name === name)
@@ -33,6 +36,13 @@ function _findActorByName(actor, name) {
             return found;
     }
     return null;
+}
+
+function _appOfChild(actor) {
+    // macos-dock wraps stock dash.js: _box children are DashItemContainers whose .child is
+    // the DashIcon/AppIcon. Cover both the direct .app and the ._delegate.app shapes.
+    const inner = actor.child;
+    return inner?.app ?? inner?._delegate?.app ?? actor._delegate?.app ?? null;
 }
 
 export class DockOrderGuard {
@@ -49,57 +59,68 @@ export class DockOrderGuard {
         this._exportedObject.export(connection, OBJECT_PATH);
     }
 
-    _dashBox() {
-        return Main.overview?.dash?._box ?? null;
+    /** macos-dock's own dash box (NOT Main.overview.dash, which is a separate stock dash). */
+    _dock() {
+        return _findActorByName(Main.layoutManager.uiGroup, DOCK_ACTOR_NAME);
     }
 
-    // Same filter dash.js's own _redisplay() uses to isolate real app-icon children from
-    // separators, dash2dock-lite's extra-icons (trash/downloads), and the show-apps icon.
+    _dashBox(dock) {
+        return dock?.dash?._box ?? null;
+    }
+
     _appChildren(box) {
-        return box.get_children().filter(actor => actor.child?._delegate?.app);
+        return box.get_children().filter(actor => _appOfChild(actor) !== null);
     }
 
     Snapshot() {
-        const box = this._dashBox();
-        this._snapshot = box ? this._appChildren(box).map(actor => actor.child._delegate.app.get_id()) : null;
+        const box = this._dashBox(this._dock());
+        this._snapshot = box
+            ? this._appChildren(box).map(actor => _appOfChild(actor).get_id())
+            : null;
     }
 
     Restore() {
-        if (!this._snapshot)
-            return;
-        const box = this._dashBox();
+        const dock = this._dock();
+        const box = this._dashBox(dock);
         if (!box) {
             this._snapshot = null;
             return;
         }
 
+        // Prefer the pre-change on-screen order; fall back to favorite-apps order (which the
+        // Settings app restores byte-identical) if the snapshot was missed for any reason.
+        let order = this._snapshot;
+        if (!order || order.length === 0) {
+            try {
+                order = new Gio.Settings({schema_id: 'org.gnome.shell'})
+                    .get_strv('favorite-apps');
+            } catch (e) {
+                order = [];
+            }
+        }
+        this._snapshot = null;
+        if (order.length === 0)
+            return;
+
         const byId = new Map();
         for (const actor of this._appChildren(box))
-            byId.set(actor.child._delegate.app.get_id(), actor);
+            byId.set(_appOfChild(actor).get_id(), actor);
 
         let index = 0;
-        for (const id of this._snapshot) {
+        for (const id of order) {
             const actor = byId.get(id);
             if (!actor)
-                continue; // no longer in the dash (uninstalled/unpinned in the meantime) -- skip
+                continue; // not in the dash any more (uninstalled/unpinned) -- skip
             box.set_child_at_index(actor, index);
             index++;
         }
-        this._snapshot = null;
 
-        // Reordering _box directly is invisible to dash2dock-lite: it renders from its own
-        // this._icons cache (built by reading _box.get_children() once), only rebuilt on
-        // Shell.AppSystem install/state-change or AppFavorites "changed" signals -- neither of
-        // which set_child_at_index() fires. Its own actor registers itself under this name
-        // (Dock's _init() sets `name: 'dashtodockContainer'` on the widget itself, no separate
-        // delegate), so invalidating its cache and asking it to redraw is a direct, two-line
-        // call once found -- far more surgical than touching gsettings to indirectly trigger
-        // one of its real listened-to signals, which risks kicking off GNOME's own dash.js
-        // _redisplay() and re-scrambling the very order this method just fixed.
-        const dockActor = _findActorByName(Main.layoutManager.uiGroup, DOCK_ACTOR_NAME);
-        if (dockActor && typeof dockActor._beginAnimation === 'function') {
-            dockActor._icons = null;
-            dockActor._beginAnimation();
+        // macos-dock renders from its own this._icons cache, rebuilt only on
+        // Shell.AppSystem/AppFavorites signals -- neither of which set_child_at_index()
+        // fires. Invalidate it and redraw.
+        if (dock && typeof dock._beginAnimation === 'function') {
+            dock._icons = null;
+            dock._beginAnimation();
         }
     }
 

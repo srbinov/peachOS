@@ -868,8 +868,11 @@ class AppearancePage(Gtk.Box):
             shell_settings.set_strv('favorite-apps', favorites_snapshot)
             # Give Shell's own (mis-ordering) redisplay pass time to actually happen before we
             # force the real order back -- restoring too early would just get overwritten by a
-            # redisplay that hadn't run yet.
-            GLib.timeout_add(1200, lambda: _call_dock_order_guard('Restore') or GLib.SOURCE_REMOVE)
+            # redisplay that hadn't run yet. Fire twice: once after the AppSystem
+            # installed-changed debounce (~1s) has almost certainly run, once more well after
+            # in case a trailing redisplay slipped through.
+            for delay in (1200, 2600):
+                GLib.timeout_add(delay, lambda: _call_dock_order_guard('Restore') or GLib.SOURCE_REMOVE)
 
             if success:
                 on_success()
