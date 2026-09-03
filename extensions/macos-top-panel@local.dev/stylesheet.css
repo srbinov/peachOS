@@ -94,15 +94,101 @@
    competing !important left to tie against) is what actually makes the dynamic stylesheet
    reliable. */
 .notification-banner {
-    width: 28.8em !important; /* 20% narrower than this project's own previous 36em */
-    min-height: 42px !important;
+    width: 24em !important;
+    min-height: 0 !important;
+    border-radius: 18px !important;
+    padding: 10px 14px !important;
 }
 
-/* The notification's own app icon (MacTahoe's own gnome-shell.css: icon-size 48px on this
-   exact class) -- 20% bigger, 48px -> 58px (48 * 1.2 = 57.6, rounded). !important for the
-   same load-order reason as .notification-banner above. */
+/* ---- macOS-style layout -------------------------------------------------------------
+   GNOME's banner is [small app icon] [app name] [time]  /  [big icon] [title] [body].
+   macOS is one big rounded app icon on the left, then bold title + regular body to its
+   right with the timestamp top-right -- no separate app-name line. So: hide the header's
+   own icon + the app-name label, keep only the time label up top, and let the big
+   .message-icon + .message-content row (pulled up level with the time) carry everything.
+   All !important -- these compete with stock gnome-shell.css / MacTahoe rules of equal
+   specificity, so without it load order alone decides. */
+
+.message {
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+.message .message-header {
+    padding: 0 !important;
+    spacing: 0 !important;
+}
+.message .message-header .message-source-icon {
+    width: 0; min-width: 0; margin: 0; padding: 0;
+    opacity: 0;
+}
+.message .message-header .message-header-content {
+    min-height: 0 !important;
+    padding-bottom: 0 !important;
+    spacing: 0 !important;
+}
+.message .message-header .message-header-content .message-source-title {
+    /* App name ("notify-send", "Firefox", ...) -- the icon already says which app. */
+    width: 0; min-width: 0; margin: 0; padding: 0;
+    font-size: 1px;
+    color: transparent;
+}
+.message .message-header .message-header-content .event-time {
+    font-size: 0.82em;
+    font-weight: normal;
+    opacity: 0.55;
+    padding: 2px 2px 0 0 !important;
+}
+
+/* Pull the icon+title+body row up so the title sits on the same line as the timestamp. */
+.message .message-box {
+    margin-top: -1.15em !important;
+    padding: 0 !important;
+    spacing: 12px !important;
+}
+.message .message-box:first-child {
+    margin-top: -1.15em !important;
+}
+
+/* The one big app icon. Not desaturated (regular, not symbolic), rounded like a macOS
+   app tile, no grey circle behind it. */
 .message .message-box .message-icon {
-    icon-size: 58px !important;
+    icon-size: 40px !important;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 10px;
+    background-color: transparent !important;
+    -st-icon-style: regular;
+    margin: 0 !important;
+}
+.message .message-box .message-icon.message-themed-icon {
+    icon-size: 22px !important;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 10px;
+    background-color: rgba(127, 127, 127, 0.16) !important;
+}
+
+.message .message-box .message-content {
+    spacing: 2px !important;
+}
+.message .message-box .message-content .message-title {
+    font-weight: bold !important;
+    font-size: 1em !important;
+}
+.message .message-box .message-content .message-body,
+.message-body {
+    font-size: 0.95em;
+    opacity: 0.82;
+}
+
+/* Close/expand affordances: keep them out of the way, they show on hover. */
+.message .message-header .message-close-button,
+.message .message-header .message-expand-button {
+    padding: 3px !important;
+    margin: 0 !important;
+    opacity: 0.45;
 }
 
 /* Notification Center (lib/notificationCenter.js): same liquid glass recipe again, gradient

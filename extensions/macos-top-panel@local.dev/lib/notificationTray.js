@@ -45,6 +45,32 @@ function _computeSamplePoint(tray) {
     }
 }
 
+/**
+ * peachOS's notification CSS (stylesheet.css) styles the banner macOS-style: one big
+ * rounded app icon on the left, bold title + body to its right, timestamp top-right. The
+ * big icon is GNOME's `.message-icon` (Message._icon), which GNOME only makes visible when
+ * the *notification itself* carries a gicon -- lots of apps only set an icon on their
+ * Source (the small `.message-source-icon` in the header, which we hide). So when the big
+ * icon would be empty, fall it back to the source icon here. One-shot on the fresh banner,
+ * no signal wired to the ephemeral actor.
+ *
+ * @param {import('resource:///org/gnome/shell/ui/messageList.js').Message} banner
+ */
+function _ensureBannerIcon(banner) {
+    try {
+        const icon = banner?._icon;
+        if (!icon || icon.visible)
+            return;
+        const sourceIcon = banner.notification?.source?.icon;
+        if (sourceIcon) {
+            icon.gicon = sourceIcon;
+            icon.visible = true;
+        }
+    } catch (e) {
+        // Banner structure changed in a future GNOME -- just leave the icon as GNOME set it.
+    }
+}
+
 function patchedUpdateShowingNotification() {
     this._notification.acknowledged = true;
     this._notification.playSound();
@@ -66,6 +92,7 @@ function patchedUpdateShowingNotification() {
             if (point)
                 _onNewBanner(point);
         }
+        _ensureBannerIcon(this._banner);
         this._bannerBin.y = 0;
         this._bannerBin.translation_x = this._banner.width + SLIDE_MARGIN;
     }
