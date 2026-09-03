@@ -80,34 +80,46 @@ fi
 dconf update
 echo "    /etc/dconf/db/local recompiled ($(date -r /etc/dconf/db/local '+%H:%M:%S'))"
 
-# --- 4. drift checks ---------------------------------------------------
-if [[ $SKIP_CHECKS -eq 0 ]]; then
-    log "Checking installed trees against the repo"
-    drift=0
-    for ext in "$REPO_DIR"/extensions/*/; do
-        name=$(basename "$ext")
-        sys="/usr/share/gnome-shell/extensions/$name"
-        [[ -d "$sys" ]] || { warn "extension not installed: $name"; drift=1; continue; }
-        if ! diff -rq --exclude='gschemas.compiled' --exclude='.git' "$ext" "$sys" >/dev/null 2>&1; then
-            warn "extension differs from repo: $name  (run provision.sh)"
-            drift=1
+# --- 4. sync the fast-moving trees from the repo ----------------------
+# The ISO captures the SYSTEM, not the repo. The heavy, slow parts of
+# provision.sh (Sidra/iCloud builds, theme clones, apt/snap) rarely change and
+# --provision covers them; but the extensions, the Settings app, and their
+# schemas change every session, so replicate provision.sh's install for JUST
+# those here so a plain `build-iso.sh` ships current code. MUST stay in step
+# with provision.sh's "Installing GNOME Shell extensions" loop -- particularly
+# the schema compile: a bare `rsync --delete` would drop gschemas.compiled and
+# every extension that reads its schema would fail to enable (no top bar, no
+# dock). Skipped by --skip-checks (assumes you synced by hand) and redundant
+# after --provision.
+if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
+    log "Syncing extensions + Settings app from the repo (schemas included)"
+    mkdir -p /usr/share/gnome-shell/extensions /usr/share/glib-2.0/schemas
+    for ext_dir in "$REPO_DIR"/extensions/*/; do
+        uuid=$(basename "$ext_dir")
+        dest="/usr/share/gnome-shell/extensions/$uuid"
+        rsync -a --delete --exclude='.git' "$ext_dir" "$dest/"
+        if [[ -d "$dest/schemas" ]]; then
+            glib-compile-schemas "$dest/schemas/" 2>/dev/null || true
+            install -m644 "$dest"/schemas/*.gschema.xml /usr/share/glib-2.0/schemas/ 2>/dev/null || true
         fi
     done
-    for tree in "settings:/usr/lib/peachos/settings/src:apps/settings/src"; do
-        IFS=: read -r label sys repo <<< "$tree"
-        if [[ -d "$sys" ]] && ! diff -rq "$REPO_DIR/$repo" "$sys" >/dev/null 2>&1; then
-            warn "$label app differs from repo (run provision.sh)"
-            drift=1
-        fi
+    glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
+    rsync -a --delete "$REPO_DIR/apps/settings/src/" /usr/lib/peachos/settings/src/
+    rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data/
+    # Bluetooth device-type icons (see provision.sh -- same targets)
+    for f in "$REPO_DIR"/assets/bluetooth-device-icons/*.svg; do
+        [[ -e "$f" ]] || continue
+        install -Dm644 "$f" "/usr/share/icons/MacTahoe/devices/scalable/$(basename "$f")"
+        install -Dm644 "$f" "/usr/share/icons/hicolor/scalable/devices/$(basename "$f")"
     done
-    if [[ $drift -eq 1 ]]; then
-        warn "installed system is behind the repo. The ISO captures the SYSTEM, not the repo."
-        warn "Re-run with --provision, or 'sudo provision/provision.sh', to sync first."
-        read -r -p "Continue building from the current on-disk state anyway? [y/N] " ans
-        [[ "$ans" == [yY] ]] || die "aborted -- sync the system first"
-    else
-        echo "    installed extensions + Settings app match the repo"
-    fi
+    for f in "$REPO_DIR"/assets/bluetooth-device-icons/*.png; do
+        [[ -e "$f" ]] || continue
+        install -Dm644 "$f" "/usr/share/icons/MacTahoe/devices/32/$(basename "$f")"
+        install -Dm644 "$f" "/usr/share/icons/hicolor/64x64/devices/$(basename "$f")"
+    done
+    gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+    echo "    extensions + Settings app now match the repo"
 fi
 
 # --- 5. blank machine-id --------------------------------------------------
