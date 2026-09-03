@@ -1,0 +1,24 @@
+# /etc/penguins-eggs.d/custom.yaml  --  peachOS
+#
+# Overrides on top of penguins-eggs' compiled-in defaults. Installed verbatim
+# by provision/penguins-eggs/install-eggs.sh. Keep this minimal -- every key
+# here is one more thing to keep in sync with upstream.
+#
+# The live-session user stays the eggs default ("live", passwordless via
+# /etc/sudoers.d/00-live); peachOS handles the two things that used to bite:
+#   - idle screen-lock asking for the undocumented live password
+#       -> provision/live-session/disable-lock.sh  (boot=live guard)
+#   - Calamares leaving the live "live" account on the installed system
+#       -> provision/calamares/modules/shellprocess_cleanuplive.conf
+#
+# Calamares is auto-selected as the installer when the `calamares` package is
+# present (base.yaml's {{ if .HasCalamares }}), which provision.sh guarantees,
+# so it is not pinned here.
+
+remaster:
+  compression:
+    # zstd:3 -- fast, so ISO rebuilds during bring-up stay in the minutes.
+    # Bump toward 19 once the pipeline is settled and size matters more than
+    # turnaround (expect the ISO to drop well below the ~8.5 GiB level-3 build).
+    algorithm: "zstd"
+    level: 3

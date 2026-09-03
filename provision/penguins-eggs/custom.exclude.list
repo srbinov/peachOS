@@ -1,0 +1,66 @@
+# /etc/penguins-eggs.d/custom.exclude.list  --  peachOS
+#
+# Extra paths kept OUT of the live squashfs, on top of penguins-eggs' own
+# compiled-in exclusion list. Format: mksquashfs wildcard patterns, one per
+# line, paths relative to / (no leading slash), matching the upstream file's
+# style. Installed verbatim over the stock file by provision/penguins-eggs/
+# install-eggs.sh.
+#
+# ============================================================================
+# WHY THIS FILE IS NOT THE STOCK ONE
+# ============================================================================
+# The version that ships inside the penguins-eggs .deb ALSO lists:
+#     var/lib/snapd/
+#     var/snap/
+#     snap/
+# i.e. it strips every snap out of the ISO. peachOS seeds Firefox (Orchard),
+# snap-store, BlueBubbles, desktop-security-center and firmware-updater AS
+# SNAPS (see provision.sh "Installing snap packages ..."), so those three
+# lines are deliberately absent here -- the snap payload MUST remain in the
+# image or a fresh install boots with no browser.
+#
+# ============================================================================
+# CONTAINER RUNTIMES  (parity with the upstream default; peachOS ships none,
+# so these are no-ops today -- kept so a future docker/podman install on a
+# build host doesn't silently bloat the ISO)
+# ============================================================================
+var/lib/docker/
+var/lib/containerd/
+var/lib/containers/
+var/lib/lxc/
+var/lib/lxd/
+var/lib/machines/
+
+# ============================================================================
+# BUILD-HOST PRIVATE STATE  --  must never travel inside a public ISO
+# ============================================================================
+# NetworkManager keyfile connections. Empty on the netplan-backend Ubuntu
+# build (kept belt-and-braces); penguins-eggs already excludes this one too.
+etc/NetworkManager/system-connections/
+# THE REAL LEAK: on Ubuntu's netplan NM backend the saved Wi-Fi networks live
+# here, one file per connection, with the PSK / EAP password IN CLEARTEXT.
+# penguins-eggs' built-in list does NOT cover these.
+etc/netplan/90-NM-*.yaml
+# NM runtime state: DHCP leases, seen-BSSID history, the secret_key.
+var/lib/NetworkManager/
+var/lib/iwd/
+
+# SSH host keys -- a distributed ISO must not ship a shared host identity;
+# openssh-server regenerates them on first boot of the installed system.
+etc/ssh/ssh_host_*
+
+# Crash dumps. This particular build host is a 2012 MacBookPro on nouveau that
+# segfaults gnome-shell; /var/crash is ~60 MB of its core dumps.
+var/crash/
+var/lib/systemd/coredump/
+
+# Host-tied bits that would otherwise pin the image to this one machine.
+etc/udev/rules.d/70-persistent-net.rules
+var/lib/systemd/random-seed
+var/lib/systemd/timesync/clock
+
+# Root's shell / tool history.
+root/.bash_history
+root/.wget-hsts
+root/.lesshst
+root/.python_history
