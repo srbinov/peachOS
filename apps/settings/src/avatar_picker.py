@@ -18,7 +18,12 @@ gi.require_version('Gdk', '4.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Adw, Gdk, GdkPixbuf, GLib, GObject, Gtk
 
-EMOJI_DIR = '/home/user/macOS_Tahoe_SYSICONS/apple-emoji'
+# provision.sh sparse-checks the apple-emoji set out to this system path; the
+# ~/macOS_Tahoe_SYSICONS checkout is the fallback for running from a dev tree.
+_SYSTEM_EMOJI_DIR = '/usr/share/peachos/emoji'
+_DEV_EMOJI_DIR = os.path.expanduser('~/macOS_Tahoe_SYSICONS/apple-emoji')
+EMOJI_DIR = _SYSTEM_EMOJI_DIR if os.path.isdir(_SYSTEM_EMOJI_DIR) else _DEV_EMOJI_DIR
+
 EMOJI_MANIFEST_PATH = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'emoji_manifest.json'))
 

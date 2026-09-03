@@ -110,6 +110,12 @@ MACTAHOE_GTK_REPO="https://github.com/vinceliuice/MacTahoe-gtk-theme.git"
 MACTAHOE_GTK_COMMIT="5df7f86eb787e1f7054f377e2c318b8af873d705"
 MACTAHOE_ICON_REPO="https://github.com/vinceliuice/MacTahoe-icon-theme.git"
 MACTAHOE_ICON_COMMIT="db9a4f8b236d3c559326f041d75d5173de118c45"
+# Apple-style emoji set (72px PNGs, ~3.8k files / 33MB) -- the Settings app's Edit-Profile
+# emoji avatar picker (apps/settings/src/avatar_picker.py, indexed by
+# apps/settings/data/emoji_manifest.json). Cloned, not vendored -- same call as the MacTahoe
+# themes above, for the same reason (bulk read-only art that would bloat the peachOS repo).
+SYSICONS_REPO="https://github.com/srbinov/macOS_Tahoe_SYSICONS.git"
+SYSICONS_COMMIT="d5fd1cf3f2d46b8949015bee81e99a9ab4d2cbc1"
 
 echo "==> Installing build dependencies"
 apt-get update -qq
@@ -387,6 +393,17 @@ rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data
 install -Dm755 "$REPO_DIR/apps/settings/peachos-settings" /usr/bin/peachos-settings
 install -Dm644 "$REPO_DIR/apps/settings/peachos-settings.desktop" /usr/share/applications/peachos-settings.desktop
 update-desktop-database /usr/share/applications
+
+# Emoji set for the Settings app's Edit-Profile emoji avatar picker. Sparse-checkout just
+# the apple-emoji dir (33MB) from the pinned SYSICONS commit -> /usr/share/peachos/emoji.
+echo "==> Installing emoji set (Settings profile picker) -> /usr/share/peachos/emoji"
+git clone --quiet --no-checkout --depth 1 --filter=blob:none "$SYSICONS_REPO" "$WORK_DIR/sysicons"
+git -C "$WORK_DIR/sysicons" sparse-checkout set --no-cone apple-emoji
+git -C "$WORK_DIR/sysicons" fetch --quiet --depth 1 origin "$SYSICONS_COMMIT"
+git -C "$WORK_DIR/sysicons" checkout --quiet "$SYSICONS_COMMIT"
+install -d /usr/share/peachos/emoji
+rsync -a --delete "$WORK_DIR/sysicons/apple-emoji/" /usr/share/peachos/emoji/
+chmod -R a+rX /usr/share/peachos/emoji
 
 # Sidra: an Apple Music desktop client (Electron, github.com/srbinov/sidra -- our own fork of
 # wimpysworld/sidra, currently one commit ahead with a custom splash/icon). Built from source
