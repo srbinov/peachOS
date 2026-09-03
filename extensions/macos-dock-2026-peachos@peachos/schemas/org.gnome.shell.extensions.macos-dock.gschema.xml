@@ -76,6 +76,12 @@
         <summary>Liquid glass mode</summary>
         <description>0 = Dark glass, 1 = Light glass.</description>
     </key>
+    <key type="d" name="liquid-glass-intensity">
+        <default>100.0</default>
+        <range min="0.0" max="100.0"/>
+        <summary>Liquid glass intensity</summary>
+        <description>How translucent the dock's liquid glass plate is. 100 = full glass (the original translucent look); 0 = fully solid/opaque, interpolated linearly in between.</description>
+    </key>
     <key type="(dddd)" name="background-color">
         <default>(0.,0.,0.,0.25)</default>
         <summary>Background color</summary>

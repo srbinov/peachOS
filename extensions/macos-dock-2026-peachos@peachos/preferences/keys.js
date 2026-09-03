@@ -93,6 +93,12 @@ export const SettingsKeys = () => {
       test: { values: [0, 1] },
       themed: true,
     },
+    'liquid-glass-intensity': {
+      default_value: 100,
+      widget_type: 'scale',
+      test: { values: [0, 50, 100] },
+      themed: true,
+    },
     'background-color': {
       default_value: [0, 0, 0, 0.5],
       widget_type: 'color',

@@ -650,6 +650,10 @@ export default class Dash2DockLiteExt extends Extension {
           this._updateLayout();
           this.animate();
           break;
+        case 'liquid-glass-intensity':
+          this._updateStyle();
+          this.animate();
+          break;
         case 'pressure-sense': {
           break;
         }
@@ -1047,6 +1051,7 @@ export default class Dash2DockLiteExt extends Extension {
       let dashStyle = buildDockBackgroundStyle({
         liquidGlass: this.liquid_glass,
         glassMode: this.liquid_glass_mode,
+        glassIntensity: this.liquid_glass_intensity,
         borderRadius: r,
         panelMode: this.panel_mode,
         backgroundRgba: rgba,

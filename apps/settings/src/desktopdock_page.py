@@ -3,6 +3,7 @@ import os
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from widgets import make_hero_header
+import dock_glass_preview
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -257,6 +258,38 @@ class DesktopDockPage(Gtk.Box):
         appearance_card.append(self._liquid_glass_row)
         self.append(appearance_card)
 
+        # Liquid Glass intensity -- mirrors Settings > Appearance's own slider, but this one
+        # drives the dock's glass plate (org.gnome.shell.extensions.macos-dock
+        # liquid-glass-intensity). 100 = the original translucent look, 0 = fully solid.
+        self._interface_settings = Gio.Settings.new('org.gnome.desktop.interface')
+        glass_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=['wifi-card'])
+
+        preview_wrap = Gtk.Box(margin_start=14, margin_end=14, margin_top=14)
+        self._dock_glass_preview = dock_glass_preview.DockGlassPreview()
+        preview_wrap.append(self._dock_glass_preview)
+        glass_card.append(preview_wrap)
+
+        glass_slider_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+            margin_start=14, margin_end=14, margin_top=12, margin_bottom=14,
+        )
+        glass_slider_row.append(Gtk.Label(label='Solid', css_classes=['dim-label']))
+        self._dock_glass_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self._dock_glass_scale.set_draw_value(False)
+        self._dock_glass_scale.set_hexpand(True)
+        self._dock_glass_scale.set_value(self._settings.get_double('liquid-glass-intensity'))
+        self._dock_glass_scale.connect('value-changed', self._on_dock_glass_scale_changed)
+        glass_slider_row.append(self._dock_glass_scale)
+        glass_slider_row.append(Gtk.Label(label='Liquid Glass', css_classes=['dim-label']))
+        glass_card.append(glass_slider_row)
+        self.append(glass_card)
+        self._glass_card = glass_card
+
+        self._interface_settings.connect(
+            'changed::color-scheme', lambda *_a: self._refresh_dock_glass_preview())
+        Gio.Settings.new('org.gnome.desktop.background').connect(
+            'changed', lambda *_a: self._refresh_dock_glass_preview())
+
         # Liquid Glass renders its own light/dark translucent material (see
         # macOS-Dock-2026-peachOS's liquidGlass.js), auto-matching System
         # Settings > Appearance -- a manually-picked flat color underneath it
@@ -298,8 +331,26 @@ class DesktopDockPage(Gtk.Box):
         liquid_glass = self._settings.get_boolean('liquid-glass')
         self._liquid_glass_row.switch.set_active(liquid_glass)
         self._colors_card.set_sensitive(not liquid_glass)
+        self._dock_glass_scale.set_value(self._settings.get_double('liquid-glass-intensity'))
+        self._glass_card.set_sensitive(liquid_glass)
         self._syncing = False
+        self._refresh_dock_glass_preview()
         self._refresh_genie_row()
+
+    def _refresh_dock_glass_preview(self):
+        is_dark = self._interface_settings.get_string('color-scheme') == 'prefer-dark'
+        intensity = self._settings.get_double('liquid-glass-intensity')
+        self._dock_glass_preview.update(intensity, is_dark)
+        self._dock_glass_preview.set_backdrop_texture(
+            dock_glass_preview.wallpaper_sliver_texture(
+                dock_glass_preview.current_wallpaper_path(is_dark)))
+
+    def _on_dock_glass_scale_changed(self, scale):
+        if self._syncing:
+            return
+        value = round(scale.get_value())
+        self._settings.set_double('liquid-glass-intensity', float(value))
+        self._refresh_dock_glass_preview()
 
     def _refresh_genie_row(self):
         enabled = GENIE_EXTENSION_UUID in self._shell_settings.get_strv('enabled-extensions')
@@ -367,6 +418,7 @@ class DesktopDockPage(Gtk.Box):
             return False
         self._settings.set_boolean('liquid-glass', state)
         self._colors_card.set_sensitive(not state)
+        self._glass_card.set_sensitive(state)
         return False
 
     def _on_bg_color_changed(self, button, _pspec):

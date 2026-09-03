@@ -25,20 +25,20 @@ import {shouldUseDarkContent} from './liquidGlassIntensity.js';
 const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
 
-const CONTROL_CENTER_MENU_WIDTH = 262; // matches .macos-control-center-menu in stylesheet.css
+const CONTROL_CENTER_MENU_WIDTH = 314; // matches .macos-control-center-menu in stylesheet.css
 
 const CLOCKS_STATE_SCHEMA_ID = 'org.gnome.clocks.state.window';
 const TEXT_EDITOR_NEW_WINDOW_CMD =
     ['flatpak', 'run', '--branch=stable', '--arch=x86_64', '--command=gnome-text-editor',
         'org.gnome.TextEditor', '--new-window'];
 
-const MEDIA_ART_SIZE = 48; // matches .macos-control-center-media-art in stylesheet.css
+const MEDIA_ART_SIZE = 58; // matches .macos-control-center-media-art in stylesheet.css
 // This icon_size is set directly on the St.Icon in JS (below), which wins over the CSS
 // icon-size rule for the same class -- editing the CSS alone previously did nothing, the
 // icon stayed 36px while only the outer button shrank, so it filled a *larger* share of a
 // smaller circle (and looked even more so once screenshot.png went from low-contrast blue
 // to solid white) -- this is the actual, only place that controls it.
-const CIRCLE_ICON_SIZE = 20; // 30% smaller than 29 -- circle-button diameter (51px) is unchanged
+const CIRCLE_ICON_SIZE = 24; // 30% smaller than 29 -- circle-button diameter (51px) is unchanged
 
 export const ControlCenterIndicator = GObject.registerClass(
 class ControlCenterIndicator extends PanelMenu.Button {
@@ -461,7 +461,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
         const sliderRow = new St.BoxLayout({style_class: 'macos-control-center-row', x_expand: true});
         actor.add_child(sliderRow);
 
-        const lowIcon = new St.Icon({icon_name: lowIconName, icon_size: 14, y_align: Clutter.ActorAlign.CENTER});
+        const lowIcon = new St.Icon({icon_name: lowIconName, icon_size: 17, y_align: Clutter.ActorAlign.CENTER});
         sliderRow.add_child(lowIcon);
 
         const slider = new Slider(0);
@@ -474,7 +474,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
         });
         sliderRow.add_child(slider);
 
-        const highIcon = new St.Icon({icon_name: highIconName, icon_size: 20, y_align: Clutter.ActorAlign.CENTER});
+        const highIcon = new St.Icon({icon_name: highIconName, icon_size: 24, y_align: Clutter.ActorAlign.CENTER});
         sliderRow.add_child(highIcon);
 
         return {
@@ -537,7 +537,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
     _createTransportButton(iconName, onActivate) {
         const button = new St.Button({style_class: 'macos-control-center-transport-button', reactive: true, can_focus: true});
         button.connect('clicked', onActivate);
-        const icon = new St.Icon({icon_name: iconName, icon_size: 10, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const icon = new St.Icon({icon_name: iconName, icon_size: 12, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         button.set_child(icon);
         return {button, icon};
     }
@@ -670,7 +670,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
             } else {
                 this._mediaCard.artIcon.gicon = null;
                 this._mediaCard.artIcon.icon_name = 'audio-x-generic-symbolic';
-                this._mediaCard.artIcon.icon_size = 18;
+                this._mediaCard.artIcon.icon_size = 22;
             }
         } catch (e) {
             logError(e, '[macos-top-panel] control center: failed to update media card');
