@@ -115,6 +115,29 @@ log "Blanking /etc/machine-id (regenerates on next boot, here and on every insta
 : > /etc/machine-id
 [[ -e /var/lib/dbus/machine-id && ! -L /var/lib/dbus/machine-id ]] && : > /var/lib/dbus/machine-id || true
 
+# --- 5b. neutralise the build host's hostname ---------------------------
+# eggs `cp -a /etc` into the liveroot, and its sanitize step only sets a
+# hostname when the file is ABSENT -- so without this the live session and
+# every install off the ISO would be called after this MacBook. Set a generic
+# one for the build, restore the host's own afterwards. Calamares still lets
+# the installing user pick their own.
+ORIG_HOSTNAME="$(cat /etc/hostname 2>/dev/null || true)"
+restore_hostname() {
+    [[ -n "$ORIG_HOSTNAME" ]] || return 0
+    echo "$ORIG_HOSTNAME" > /etc/hostname
+    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$ORIG_HOSTNAME/" /etc/hosts 2>/dev/null || true
+}
+trap restore_hostname EXIT
+if [[ "$ORIG_HOSTNAME" != "peachos" ]]; then
+    log "Setting hostname 'peachos' for the build (restored to '$ORIG_HOSTNAME' after)"
+    echo "peachos" > /etc/hostname
+    if grep -qE '^127\.0\.1\.1' /etc/hosts; then
+        sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tpeachos/" /etc/hosts
+    else
+        echo -e "127.0.1.1\tpeachos" >> /etc/hosts
+    fi
+fi
+
 # --- 6. space + scratch -------------------------------------------------
 avail_kb=$(df --output=avail /home | tail -1)
 if (( avail_kb < 25 * 1024 * 1024 )); then
@@ -151,6 +174,16 @@ log "Building the ISO ($EGGS remaster) -- this takes a while, no further output 
 # --- 9. report ------------------------------------------------------
 ISO=$(find "$EGGS_WORK" -maxdepth 2 -name '*.iso' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
 [[ -n "$ISO" && -f "$ISO" ]] || die "build finished but no .iso found under $EGGS_WORK"
+
+# eggs names the file egg-of-<id>-<codename>-<host>-<arch>-<date>.iso. Give the
+# distributable a clean name (the volume id inside still reflects eggs' scheme).
+CLEAN="$(dirname "$ISO")/peachos-${VERSION_CODENAME:-nectar}-amd64-$(date +%Y%m%d).iso"
+if [[ "$ISO" != "$CLEAN" ]]; then
+    mv -f "$ISO" "$CLEAN"
+    [[ -f "$ISO.md5" ]] && mv -f "$ISO.md5" "$CLEAN.md5"
+    [[ -f "$ISO.sha256" ]] && mv -f "$ISO.sha256" "$CLEAN.sha256"
+    ISO="$CLEAN"
+fi
 
 log "ISO ready"
 printf '  path   : %s\n' "$ISO"
