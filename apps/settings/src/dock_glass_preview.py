@@ -58,11 +58,18 @@ def _rgba(c):
 
 # --- wallpaper sliver ---------------------------------------------------------------
 
-BACKDROP_SIZE = (1200, 150)  # wide + short band, like the Appearance-tab preview
+BACKDROP_SIZE = (900, 120)  # wide + short band, like the Appearance-tab preview
 
 
 def _cover_crop_scale(path, width, height):
-    im = Image.open(path).convert('RGB')
+    im = Image.open(path)
+    # draft() lets the JPEG decoder skip straight to a near-target resolution instead of
+    # decoding the full (often 4-6K) wallpaper then downscaling -- the slow part.
+    try:
+        im.draft('RGB', (width * 2, height * 2))
+    except (AttributeError, OSError):
+        pass
+    im = im.convert('RGB')
     src_ratio = im.width / im.height
     tile_ratio = width / height
     if src_ratio > tile_ratio:

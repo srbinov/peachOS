@@ -285,10 +285,14 @@ class DesktopDockPage(Gtk.Box):
         self.append(glass_card)
         self._glass_card = glass_card
 
+        self._bg_settings = Gio.Settings.new('org.gnome.desktop.background')
         self._interface_settings.connect(
-            'changed::color-scheme', lambda *_a: self._refresh_dock_glass_preview())
-        Gio.Settings.new('org.gnome.desktop.background').connect(
-            'changed', lambda *_a: self._refresh_dock_glass_preview())
+            'changed::color-scheme', lambda *_a: self._refresh_dock_glass_backdrop())
+        self._bg_settings.connect(
+            'changed::picture-uri', lambda *_a: self._refresh_dock_glass_backdrop())
+        self._bg_settings.connect(
+            'changed::picture-uri-dark', lambda *_a: self._refresh_dock_glass_backdrop())
+        self._refresh_dock_glass_backdrop()
 
         # Liquid Glass renders its own light/dark translucent material (see
         # macOS-Dock-2026-peachOS's liquidGlass.js), auto-matching System
@@ -331,26 +335,38 @@ class DesktopDockPage(Gtk.Box):
         liquid_glass = self._settings.get_boolean('liquid-glass')
         self._liquid_glass_row.switch.set_active(liquid_glass)
         self._colors_card.set_sensitive(not liquid_glass)
-        self._dock_glass_scale.set_value(self._settings.get_double('liquid-glass-intensity'))
+        if round(self._dock_glass_scale.get_value()) != round(
+                self._settings.get_double('liquid-glass-intensity')):
+            self._dock_glass_scale.set_value(self._settings.get_double('liquid-glass-intensity'))
         self._glass_card.set_sensitive(liquid_glass)
         self._syncing = False
-        self._refresh_dock_glass_preview()
+        self._update_dock_glass_css()
         self._refresh_genie_row()
 
-    def _refresh_dock_glass_preview(self):
-        is_dark = self._interface_settings.get_string('color-scheme') == 'prefer-dark'
-        intensity = self._settings.get_double('liquid-glass-intensity')
-        self._dock_glass_preview.update(intensity, is_dark)
+    def _is_dark(self):
+        return self._interface_settings.get_string('color-scheme') == 'prefer-dark'
+
+    def _update_dock_glass_css(self):
+        # Cheap: regenerate the plate CSS only. The wallpaper backdrop is expensive
+        # (PIL crop+resize) and is rebuilt separately, only when the wallpaper/scheme
+        # actually changes -- doing it per slider tick is what made the slider choppy.
+        self._dock_glass_preview.update(
+            self._settings.get_double('liquid-glass-intensity'), self._is_dark())
+
+    def _refresh_dock_glass_backdrop(self):
         self._dock_glass_preview.set_backdrop_texture(
             dock_glass_preview.wallpaper_sliver_texture(
-                dock_glass_preview.current_wallpaper_path(is_dark)))
+                dock_glass_preview.current_wallpaper_path(self._is_dark())))
+        self._update_dock_glass_css()
 
     def _on_dock_glass_scale_changed(self, scale):
         if self._syncing:
             return
-        value = round(scale.get_value())
-        self._settings.set_double('liquid-glass-intensity', float(value))
-        self._refresh_dock_glass_preview()
+        value = float(round(scale.get_value()))
+        # Live preview immediately; the gsetting write (-> extension repaint) is fine to
+        # do every tick, it's just an int.
+        self._dock_glass_preview.update(value, self._is_dark())
+        self._settings.set_double('liquid-glass-intensity', value)
 
     def _refresh_genie_row(self):
         enabled = GENIE_EXTENSION_UUID in self._shell_settings.get_strv('enabled-extensions')

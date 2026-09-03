@@ -5,6 +5,7 @@ import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
@@ -92,9 +93,13 @@ class ControlCenterIndicator extends PanelMenu.Button {
                 this._tileBlur.enable();
                 this._backgroundAdaptive.sample().catch(e =>
                     logError(e, '[macos-top-panel] control center: background sample failed'));
+                this._keepMenuOnScreen();
             } else {
                 this._tileBlur.disable();
                 this._backgroundAdaptive.reset();
+                const bp = this.menu.actor;
+                if (bp)
+                    bp.translation_x = 0;
             }
         });
 
@@ -150,6 +155,30 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // foreground === 'black' means the wallpaper behind the bar is light -- the popup
         // needs the same adaptive-dark glass it already uses over a light window.
         this._backgroundAdaptive.setForceDark(foreground === 'black');
+    }
+
+    // The menu got 20% wider; GNOME's BoxPointer only clamps it flush to the work-area
+    // edge (minus its tiny arrow gap), which reads as "jammed against the screen edge".
+    // After it's positioned, nudge it back in so it keeps a real margin -- macOS's own
+    // Control Center sits ~14px off the edge.
+    _keepMenuOnScreen() {
+        const EDGE_MARGIN = 14;
+        const bp = this.menu.actor;
+        if (!bp)
+            return;
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            if (!bp.mapped)
+                return GLib.SOURCE_REMOVE;
+            const monitor = Main.layoutManager.primaryMonitor;
+            if (!monitor)
+                return GLib.SOURCE_REMOVE;
+            const [x] = bp.get_transformed_position();
+            const width = bp.get_width();
+            const rightEdge = x + width;
+            const limit = monitor.x + monitor.width - EDGE_MARGIN;
+            bp.translation_x = rightEdge > limit ? -(rightEdge - limit) : 0;
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _buildMenu() {
