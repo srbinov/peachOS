@@ -10,7 +10,7 @@ MEDIA_KEYS_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys'
 KEYBINDING_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding'
 KEYBINDING_PATH = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ulauncher/'
 KEYBINDING_NAME = 'Show peachySearch'
-KEYBINDING_COMMAND = '/home/user/peachOS/apps/ulauncher/bin/ulauncher toggle'
+KEYBINDING_COMMAND = '/usr/bin/ulauncher toggle'
 DEFAULT_BINDING = '<Primary>space'
 
 # Every GNOME schema that holds real, live keybindings as a plain array-of-strings key
