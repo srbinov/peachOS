@@ -141,8 +141,16 @@ export class BluetoothController {
             // Everything else BlueZ's ObjectManager hands back is a pure discovery
             // artifact -- a bare-MAC beacon that vanishes again seconds later -- and
             // in a dense area there are ~150 of them, enough to bury the real ones.
-            if (name || paired || connected)
-                devices.push({path, name, connected, paired});
+            if (name || paired || connected) {
+                devices.push({
+                    path, name, connected, paired,
+                    // BlueZ's own type classification (freedesktop icon name);
+                    // Class is the raw Class-of-Device fallback for anything it
+                    // leaves unclassified. See deviceIconName() in bluetoothData.js.
+                    icon: device.Icon?.unpack() || null,
+                    class: device.Class?.unpack() ?? 0,
+                });
+            }
         }
 
         if (adapterPath && adapterPath !== this._adapterPath)

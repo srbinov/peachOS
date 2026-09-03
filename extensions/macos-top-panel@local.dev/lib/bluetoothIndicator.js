@@ -7,6 +7,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {BluetoothController} from './bluetoothController.js';
+import {deviceIconName} from './bluetoothData.js';
 
 // How often the device list re-reads BlueZ's state while the dropdown is open -- catches a
 // device connecting/disconnecting (from either side) without needing a live property-watch
@@ -131,6 +132,14 @@ class BluetoothIndicator extends PanelMenu.Button {
         const item = new PopupMenu.PopupBaseMenuItem();
         if (device.connected)
             item.setOrnament(PopupMenu.Ornament.CHECK);
+
+        const typeIcon = new St.Icon({
+            icon_name: deviceIconName(device),
+            icon_size: 16,
+            style_class: 'popup-menu-icon',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        item.add_child(typeIcon);
 
         const label = new St.Label({
             text: device.name ?? 'Unknown Device',
