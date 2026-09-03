@@ -180,6 +180,13 @@ update-desktop-database /usr/share/applications
 echo "==> Installing Settings app (Internet Accounts) runtime dependencies"
 apt-get install -y --no-install-recommends gir1.2-goa-1.0
 
+# Extension Manager (com.mattjakeman.ExtensionManager) -- browse/install/configure GNOME
+# Shell extensions with a real GUI. peachOS's app-grid folder (provision/dconf/01-peachos)
+# already lists it; the apt build ships the same com.mattjakeman.ExtensionManager.desktop
+# id as the Flathub one, no flatpak runtime needed.
+echo "==> Installing Extension Manager"
+apt-get install -y --no-install-recommends gnome-shell-extension-manager
+
 # Icon masker daemon: watches every place apps drop .desktop launchers (apt, snap, per-user)
 # and squircle-fies any icon that isn't already styled like one -- python3-gi backs the
 # headless Gio.FileMonitor watcher, python3-pil does the actual image compositing/masking,
