@@ -1,13 +1,8 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
-import Shell from 'gi://Shell';
 
 import {glassStyleString, shouldUseDarkContent, SHARED_RECIPE, ADAPTIVE_RECIPE} from './liquidGlassIntensity.js';
-import {relativeLuminance} from './colorUtil.js';
-import {LIGHT_LUMINANCE_THRESHOLD} from './backgroundAdaptiveController.js';
-
-Gio._promisify(Shell.Screenshot.prototype, 'pick_color');
 
 const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
@@ -29,15 +24,12 @@ const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
  * signal-connection-on-an-ephemeral-actor crash class documented in dock.js's own tail-
  * positioning fix (macOS-Dock-2026-peachOS), since nothing here connects to one at all.
  *
- * Also owns the same adaptive-dark-over-bright-content behavior Control Center's tiles get
- * from BackgroundAdaptiveController (backgroundAdaptiveController.js) -- explicitly asked
- * for after that regression got fixed there. Banners don't have a per-tile register()/class
- * list the way Control Center's tiles do (there's normally only ever one banner actually
- * visible at a time, GNOME queues the rest), so this is simpler: one sampled flag, applied
- * to the single shared stylesheet every other banner already goes through. sampleAdaptive()
- * is called from notificationTray.js's own monkey-patched showing-hook (see that file) --
- * NOT a signal connected to the ephemeral banner actor itself, same crash class this file's
- * own comment above already avoids.
+ * Adaptive-dark-over-bright-*wallpaper* is driven by the menu bar's own light/dark verdict
+ * (extension.js `_applyPanelForeground` -> `setPanelForeground`), NOT a screen-pixel sample:
+ * `Shell.Screenshot.pick_color()` SIGSEGVs gnome-shell on the GPUs peachOS targets (nouveau,
+ * "Failed to create 0x0 texture" -> signal 11 -> whole session lost), and it was being
+ * called on every single notification. The "bright window behind the banner" case is no
+ * longer detected -- stability wins.
  */
 export class NotificationBannerGlass {
     constructor() {
@@ -58,23 +50,14 @@ export class NotificationBannerGlass {
     }
 
     /**
-     * @param {{x: number, y: number}} point screen point behind where the banner is about
-     *   to rest -- see notificationTray.js's own sample-point computation for why it has to
-     *   be captured before this is called, not inside it.
+     * @param {'black'|'white'} foreground  the menu bar's chrome colour -- 'black' means the
+     *   wallpaper behind the bar is light, so the banner glass should go dark too.
      */
-    async sampleAdaptive(point) {
-        let color;
-        try {
-            const screenshot = new Shell.Screenshot();
-            [color] = await screenshot.pick_color(point.x, point.y);
-        } catch (e) {
-            logError(e, '[macos-top-panel] notification banner: background sample failed');
+    setPanelForeground(foreground) {
+        const dark = foreground === 'black';
+        if (dark === this._forceAdaptiveDark)
             return;
-        }
-        if (!color || !this._panelSettings)
-            return; // destroy() may have already torn this down while the sample was in flight
-
-        this._forceAdaptiveDark = relativeLuminance(color.red, color.green, color.blue) >= LIGHT_LUMINANCE_THRESHOLD;
+        this._forceAdaptiveDark = dark;
         this._apply();
     }
 
@@ -82,11 +65,6 @@ export class NotificationBannerGlass {
         if (!this._panelSettings)
             return;
         const intensity = this._panelSettings.get_int('liquid-glass-intensity');
-        // Forced true when sampleAdaptive() found something bright behind the banner --
-        // same reasoning as ControlCenterGlass's own ADAPTIVE_RECIPE use: what's driving
-        // "this needs to be dark" is the sampled content, not the system light/dark
-        // setting, so it always targets the same SOLID_DARK endpoint regardless of
-        // isDarkMode below.
         const isDarkMode = this._forceAdaptiveDark ||
             this._interfaceSettings.get_string('color-scheme') === 'prefer-dark';
         const recipe = this._forceAdaptiveDark ? ADAPTIVE_RECIPE : SHARED_RECIPE;

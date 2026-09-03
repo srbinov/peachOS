@@ -1,17 +1,12 @@
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
-import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Calendar from 'resource:///org/gnome/shell/ui/calendar.js';
 import * as MessageList from 'resource:///org/gnome/shell/ui/messageList.js';
 
 import {glassStyleString, SHARED_RECIPE, ADAPTIVE_RECIPE} from './liquidGlassIntensity.js';
-import {relativeLuminance} from './colorUtil.js';
-import {LIGHT_LUMINANCE_THRESHOLD} from './backgroundAdaptiveController.js';
-
-Gio._promisify(Shell.Screenshot.prototype, 'pick_color');
 
 const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
@@ -441,29 +436,13 @@ export class NotificationCenterPanel {
     }
 
     /**
-     * Samples the screen point behind the panel's own (already repositioned, not-yet-
-     * visible) resting rect -- center of the rect is good enough, same "doesn't need to be
-     * exact" tolerance controlCenterIndicator.js's own sample point comment describes.
+     * Previously sampled the pixel behind the panel with Shell.Screenshot.pick_color() to
+     * darken the glass over a light window. That call SIGSEGVs gnome-shell on the GPUs
+     * peachOS targets (nouveau), so it's gone -- the dark-over-light-*wallpaper* case is
+     * covered by _panelWantsDark (the menu-bar verdict, set from extension.js). Kept as a
+     * no-op so open() doesn't need to know it changed.
      */
-    async _sampleAdaptive() {
-        const [x, y] = this._panel.get_position();
-        const [width, height] = this._panel.get_size();
-        const point = {x: Math.round(x + width / 2), y: Math.round(y + height / 2)};
-
-        let color;
-        try {
-            const screenshot = new Shell.Screenshot();
-            [color] = await screenshot.pick_color(point.x, point.y);
-        } catch (e) {
-            logError(e, '[macos-top-panel] notification center: background sample failed');
-            return;
-        }
-        if (!color || !this._panel)
-            return; // destroy() may have already torn this down while the sample was in flight
-
-        this._forceAdaptiveDark = relativeLuminance(color.red, color.green, color.blue) >= LIGHT_LUMINANCE_THRESHOLD;
-        this._applyGlassIntensity();
-    }
+    async _sampleAdaptive() {}
 
     destroy() {
         if (this._capturedEventId) {

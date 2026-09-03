@@ -22,54 +22,6 @@ let _tray = null;
 let _originalUpdateShowingNotification = null;
 let _originalHideNotification = null;
 let _originalBannerAlignment = null;
-let _onNewBanner = null;
-
-/**
- * Rough point behind where a brand-new banner is about to rest, for
- * notificationBannerGlass.js's own BackgroundAdaptiveController-style sample -- same idea as
- * controlCenterIndicator.js's _getBackgroundSamplePoint(), just derived from _bannerBin's
- * own current layout position/size instead of a panel button's, since that's the always-
- * available reference here. Must be read BEFORE this function moves the bin off-screen
- * below, while its transform still reflects the resting position it's about to animate back
- * to -- sampling after would just read the banner's own pixels once it's opaque, or empty
- * space off the right edge of the monitor while it's still hidden.
- */
-function _computeSamplePoint(tray) {
-    try {
-        const [x, y] = tray._bannerBin.get_transformed_position();
-        const [width, height] = tray._bannerBin.get_transformed_size();
-        return {x: Math.round(x + width / 2), y: Math.round(y + height / 2)};
-    } catch (e) {
-        logError(e, '[macos-top-panel] notification tray: failed to compute sample point');
-        return null;
-    }
-}
-
-/**
- * peachOS's notification CSS (stylesheet.css) styles the banner macOS-style: one big
- * rounded app icon on the left, bold title + body to its right, timestamp top-right. The
- * big icon is GNOME's `.message-icon` (Message._icon), which GNOME only makes visible when
- * the *notification itself* carries a gicon -- lots of apps only set an icon on their
- * Source (the small `.message-source-icon` in the header, which we hide). So when the big
- * icon would be empty, fall it back to the source icon here. One-shot on the fresh banner,
- * no signal wired to the ephemeral actor.
- *
- * @param {import('resource:///org/gnome/shell/ui/messageList.js').Message} banner
- */
-function _ensureBannerIcon(banner) {
-    try {
-        const icon = banner?._icon;
-        if (!icon || icon.visible)
-            return;
-        const sourceIcon = banner.notification?.source?.icon;
-        if (sourceIcon) {
-            icon.gicon = sourceIcon;
-            icon.visible = true;
-        }
-    } catch (e) {
-        // Banner structure changed in a future GNOME -- just leave the icon as GNOME set it.
-    }
-}
 
 function patchedUpdateShowingNotification() {
     this._notification.acknowledged = true;
@@ -87,12 +39,6 @@ function patchedUpdateShowingNotification() {
     // whether to animate or not.
     const isNewBanner = this._notificationState !== State.SHOWING && this._notificationState !== State.SHOWN;
     if (isNewBanner) {
-        if (_onNewBanner) {
-            const point = _computeSamplePoint(this);
-            if (point)
-                _onNewBanner(point);
-        }
-        _ensureBannerIcon(this._banner);
         this._bannerBin.y = 0;
         this._bannerBin.translation_x = this._banner.width + SLIDE_MARGIN;
     }
@@ -144,16 +90,12 @@ function patchedHideNotification(animate) {
 
 /**
  * @param {*} messageTray
- * @param {(point: {x: number, y: number}) => void} [onNewBanner] called once per brand-new
- *   banner, right before it's moved off-screen to start its slide-in -- see
- *   notificationBannerGlass.js's sampleAdaptive(), which this project wires it to.
  */
-export function installNotificationSlide(messageTray, onNewBanner) {
+export function installNotificationSlide(messageTray) {
     if (_tray)
         return; // already installed
 
     _tray = messageTray;
-    _onNewBanner = onNewBanner ?? null;
     _originalBannerAlignment = _tray.bannerAlignment;
     _tray.bannerAlignment = Clutter.ActorAlign.END;
 
@@ -174,7 +116,6 @@ export function uninstallNotificationSlide() {
     _tray._bannerBin.translation_x = 0;
 
     _tray = null;
-    _onNewBanner = null;
     _originalUpdateShowingNotification = null;
     _originalHideNotification = null;
     _originalBannerAlignment = null;

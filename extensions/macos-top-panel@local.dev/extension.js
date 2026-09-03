@@ -81,10 +81,7 @@ export default class MacosTopPanelExtension extends Extension {
             Main.panel._rightBox.add_child(this._searchIndicator.container);
             installDashFilter();
 
-            // Lazy lookup (not a direct bound reference) since this._notificationBannerGlass
-            // isn't constructed until further down -- fine, no banner can actually arrive
-            // synchronously during enable() itself, only ever well after this returns.
-            installNotificationSlide(Main.messageTray, point => this._notificationBannerGlass?.sampleAdaptive(point));
+            installNotificationSlide(Main.messageTray);
 
             this._soundIndicator = new SoundIndicator();
             Main.panel.menuManager.addMenu(this._soundIndicator.menu);
@@ -263,10 +260,11 @@ export default class MacosTopPanelExtension extends Extension {
         this._searchIndicator?.setForeground?.(foreground);
         this._soundIndicator?.setForeground?.(foreground);
         this._userSwitcherController?.setForeground?.(foreground);
-        // Also drive the flyouts' adaptive-dark glass: a light wallpaper behind the bar
-        // should darken the Control Center / Notification Center the same way a light
-        // window behind them already does.
+        // Also drive the flyouts' + banners' adaptive-dark glass from the same verdict: a
+        // light wallpaper behind the bar should darken the Control Center / Notification
+        // Center / notification banners too.
         this._notificationCenter?.setPanelForeground?.(foreground);
+        this._notificationBannerGlass?.setPanelForeground?.(foreground);
     }
 
     _applyIconVisibility() {
