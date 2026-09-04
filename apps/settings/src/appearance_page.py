@@ -550,6 +550,7 @@ class AppearancePage(Gtk.Box):
         # Correct any pre-existing desync on open (e.g. dark mode was already on before
         # this sync existed) rather than only fixing it forward from the next toggle.
         self._sync_shell_theme(self._settings.get_string('color-scheme') == 'prefer-dark')
+        self._sync_flatpak_theme(self._settings.get_string('color-scheme') == 'prefer-dark')
 
         self._build_ui()
 
@@ -730,8 +731,26 @@ class AppearancePage(Gtk.Box):
         is_dark = value == 'prefer-dark'
         self._settings.set_string('color-scheme', value)
         self._sync_shell_theme(is_dark)
+        self._sync_flatpak_theme(is_dark)
         self._sync_plymouth_theme(is_dark)
         self._refresh_scheme_selection()
+
+    def _sync_flatpak_theme(self, is_dark):
+        """GTK3 Flatpak apps (GNOME Calendar's own libadwaita/GTK4 case is handled by the
+        ~/.config/gtk-4.0/ override provision.sh already exposes into the sandbox -- that one
+        self-adapts to color-scheme with no sync needed) don't auto-adapt: they need the
+        actual theme NAME swapped between MacTahoe-Light/MacTahoe-Dark, the same way native
+        GTK3 apps would via the (fixed, never-swapped) system gtk-theme key. --user, not
+        --system, so this needs no pkexec -- a per-user override layers on top of the
+        system-wide GTK_THEME default provision.sh sets (see that script for why)."""
+        try:
+            Gio.Subprocess.new(
+                ['flatpak', 'override', '--user',
+                 f'--env=GTK_THEME=MacTahoe-{"Dark" if is_dark else "Light"}'],
+                Gio.SubprocessFlags.NONE,
+            )
+        except GLib.Error:
+            pass  # flatpak not present -- nothing to sync
 
     def _sync_shell_theme(self, is_dark):
         if self._user_theme_settings is None:

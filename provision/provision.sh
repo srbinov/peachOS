@@ -927,6 +927,33 @@ ln -sf gtk-Dark.css /etc/skel/.config/gtk-4.0/gtk.css
 ln -sf gtk-Dark.css /etc/skel/.config/gtk-4.0/gtk-dark.css
 ln -sf gtk-Light.css /etc/skel/.config/gtk-4.0/gtk-light.css
 
+# Flatpak sandboxes every app away from both /usr/share/themes and the real ~/.config by
+# default, which is why GNOME Calendar (and any other Flatpak GTK/libadwaita app, including
+# third-party ones a user installs from Flathub later) shows plain stock min/max/close
+# buttons instead of MacTahoe's traffic lights -- confirmed on this dev VM: no override or
+# theme extension existed at all (checked `flatpak override --show` and `flatpak remote-ls`
+# for a Gtk3theme/Gtk4theme package matching MacTahoe -- Flathub only has one for Yaru).
+#
+# Two separate mechanisms, because GTK4/libadwaita and GTK3 apps pick up a theme differently:
+#   - GTK4/libadwaita (the majority of modern Flathub apps) always loads ~/.config/gtk-4.0/
+#     gtk.css as a personal override on top of whatever theme is named, and separately loads
+#     gtk-dark.css/gtk-light.css depending on the live color-scheme -- see assets/gtk4-
+#     libadwaita/ above, that's the SAME mechanism already giving native apps their traffic
+#     lights, and it self-adapts to Dark Mode with no extra sync needed. `xdg-config/gtk-4.0`
+#     is Flatpak's own documented token for exposing exactly that directory, read-only.
+#   - GTK3 apps have no such auto-adapting override; they need the real theme NAME swapped
+#     between MacTahoe-Light/MacTahoe-Dark, which is why this ALSO grants the theme dirs
+#     themselves + a GTK_THEME env default. _sync_flatpak_theme() in the Settings app's
+#     Appearance page keeps the per-user override's variant in lockstep with Dark Mode from
+#     here on (same pattern as _sync_shell_theme for the Shell's own theme) -- system-wide
+#     here is just the out-of-the-box default before that's ever run once.
+echo "==> Granting Flatpak apps access to the MacTahoe theme (traffic-light window controls)"
+flatpak override --system \
+    --filesystem=xdg-config/gtk-4.0:ro \
+    --filesystem=/usr/share/themes/MacTahoe-Light:ro \
+    --filesystem=/usr/share/themes/MacTahoe-Dark:ro \
+    --env=GTK_THEME=MacTahoe-Light
+
 echo "==> Installing MacTahoe icon theme system-wide -> /usr/share/icons"
 git clone --quiet "$MACTAHOE_ICON_REPO" "$WORK_DIR/icon-theme"
 git -C "$WORK_DIR/icon-theme" checkout --quiet "$MACTAHOE_ICON_COMMIT"
