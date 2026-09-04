@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Peach Intelligence dictation daemon.
+
+Runs as a per-user systemd service (peachos-dictation-daemon.service), owning everything
+that DOESN'T need to live inside gnome-shell's own process: recording, offline speech-to-text
+(whisper.cpp), the optional LLM cleanup pass, and the clipboard. The GNOME Shell side
+(extensions/peachos-dictation@peachos) owns the global hotkey (press to start, hold, release
+to stop -- see that extension's own docstring for why detecting release needs to happen
+in-process) and the final paste keystroke (also has to happen in-process -- confirmed live on
+this machine, a plain Wayland client can't inject synthetic input at all: `wtype` fails with
+"Compositor does not support the virtual keyboard protocol"). The two talk over D-Bus: this
+process exports org.peachos.DictationDaemon (StartRecording/StopRecording, called BY the
+extension), and calls back into the extension's own org.peachos.Dictation (Paste/Failed) once
+a transcript is ready.
+
+Dictation itself never needs an API key -- whisper.cpp runs fully offline. An API key
+(Settings app's Peach Intelligence tab, stored in the login keyring via libsecret, never in
+gsettings/plaintext) only ever does one optional thing: a cleanup pass over the raw
+transcript (punctuation, grammar, filler words) via Anthropic or OpenAI, gated by the
+cleanup-enabled gsetting. No API key configured (or cleanup disabled) means the raw
+whisper.cpp transcript gets pasted exactly as heard.
+"""
+import json
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.request
+
+import gi
+
+gi.require_version('GLib', '2.0')
+gi.require_version('Gio', '2.0')
+gi.require_version('Secret', '1')
+from gi.repository import Gio, GLib, Secret
+from pydbus import SessionBus
+
+WHISPER_BIN = '/usr/lib/peachos/dictation/whisper-cli'
+WHISPER_MODEL = '/usr/share/peachos/whisper/ggml-base.en.bin'
+# whisper-cli links against libwhisper/libggml*, built fresh by provision.sh (no distro
+# package ships them) and installed alongside it here rather than into a system libdir --
+# confirmed live: the binary's own baked-in RUNPATH pointed at the build tree and broke the
+# moment that directory was gone, so this is set explicitly on every invocation instead of
+# relying on any RUNPATH/ldconfig at all.
+WHISPER_LIB_DIR = '/usr/lib/peachos/dictation/lib'
+# Light vocabulary bias, not a hard rule -- whisper.cpp's --prompt just nudges recognition
+# toward these tokens when the audio is ambiguous (this is what fixed "beach OS" -> "PeachOS"
+# during testing). Kept short: whisper.cpp caps the initial prompt at n_text_ctx/2 tokens.
+WHISPER_PROMPT = 'peachOS, Peach Intelligence, Sidra, Orchard'
+WHISPER_TIMEOUT_SECONDS = 120
+
+SETTINGS_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation'
+
+SECRET_SCHEMA = Secret.Schema.new(
+    'org.peachos.dictation.ApiKey', Secret.SchemaFlags.NONE,
+    {'provider': Secret.SchemaAttributeType.STRING},
+)
+
+EXT_BUS_NAME = 'org.peachos.Dictation'
+EXT_OBJECT_PATH = '/org/peachos/Dictation'
+
+CLEANUP_PROMPT = (
+    'You clean up dictated speech-to-text. Fix punctuation, capitalization, and grammar; '
+    'remove filler words (um, uh, like) and false starts; keep the original meaning and '
+    'wording otherwise. Reply with ONLY the cleaned-up text, nothing else -- no preamble, '
+    'no quotes around it.'
+)
+ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'
+OPENAI_MODEL = 'gpt-4o-mini'
+
+
+class DictationDaemon:
+    """
+    <node>
+      <interface name='org.peachos.DictationDaemon'>
+        <method name='StartRecording' />
+        <method name='StopRecording' />
+      </interface>
+    </node>
+    """
+
+    def __init__(self):
+        self._settings = Gio.Settings.new(SETTINGS_SCHEMA_ID)
+        self._proc = None
+        self._wav_path = None
+        self._session_bus = SessionBus()
+
+    # ---- D-Bus methods, called by the extension on hotkey press/release ----
+
+    def StartRecording(self):
+        if self._proc is not None:
+            return  # a stray duplicate press while already recording -- ignore, not an error
+        fd, self._wav_path = tempfile.mkstemp(prefix='peachos-dictation-', suffix='.wav')
+        os.close(fd)
+        try:
+            self._proc = subprocess.Popen(
+                ['pw-record', '--rate', '16000', '--channels', '1', '--format', 's16', self._wav_path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except OSError as e:
+            self._proc = None
+            self._notify_extension('Failed', f'Could not start recording: {e}')
+
+    def StopRecording(self):
+        if self._proc is None:
+            return
+        proc, wav_path = self._proc, self._wav_path
+        self._proc, self._wav_path = None, None
+        # SIGINT (not SIGKILL/terminate) -- pw-record flushes and finalizes the WAV header on
+        # a clean interrupt; killing it outright can leave a truncated/unreadable file.
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        # Returns to the D-Bus caller (the extension) immediately -- the actual transcription
+        # work happens on the next main-loop iteration, so a slow whisper.cpp run never makes
+        # the extension's StopRecording call_sync() hang.
+        GLib.idle_add(self._process, wav_path)
+
+    # ---- The actual work, off the D-Bus call path ---------------------------
+
+    def _process(self, wav_path):
+        try:
+            text = self._run_whisper(wav_path)
+            if not text:
+                self._notify_extension('Failed', 'No speech detected')
+                return GLib.SOURCE_REMOVE
+            text = self._maybe_clean_up(text)
+            self._set_clipboard(text)
+            self._notify_extension('Paste')
+        except subprocess.TimeoutExpired:
+            self._notify_extension('Failed', 'Transcription timed out')
+        except Exception as e:  # noqa: BLE001 -- always report back to the indicator, never
+            self._notify_extension('Failed', str(e))  # crash the daemon over one bad clip
+        finally:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+        return GLib.SOURCE_REMOVE
+
+    def _run_whisper(self, wav_path):
+        env = {**os.environ, 'LD_LIBRARY_PATH': WHISPER_LIB_DIR}
+        result = subprocess.run(
+            [
+                WHISPER_BIN, '-m', WHISPER_MODEL, '-f', wav_path,
+                '-nt', '-np', '-l', 'en', '--prompt', WHISPER_PROMPT,
+            ],
+            capture_output=True, text=True, timeout=WHISPER_TIMEOUT_SECONDS, env=env,
+        )
+        return result.stdout.strip()
+
+    def _maybe_clean_up(self, raw_text):
+        if not self._settings.get_boolean('cleanup-enabled'):
+            return raw_text
+        provider = self._settings.get_string('cleanup-provider')
+        try:
+            api_key = Secret.password_lookup_sync(SECRET_SCHEMA, {'provider': provider}, None)
+        except GLib.Error:
+            api_key = None
+        if not api_key:
+            return raw_text  # cleanup wanted but no key configured -- fall back silently
+        try:
+            if provider == 'anthropic':
+                cleaned = self._cleanup_anthropic(raw_text, api_key)
+            elif provider == 'openai':
+                cleaned = self._cleanup_openai(raw_text, api_key)
+            else:
+                cleaned = None
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
+            cleaned = None  # network hiccup / bad response -- paste the raw transcript instead
+        return cleaned or raw_text
+
+    def _cleanup_anthropic(self, text, api_key):
+        body = json.dumps({
+            'model': ANTHROPIC_MODEL,
+            'max_tokens': 1024,
+            'system': CLEANUP_PROMPT,
+            'messages': [{'role': 'user', 'content': text}],
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            'https://api.anthropic.com/v1/messages', data=body, method='POST',
+            headers={
+                'x-api-key': api_key,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+            },
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.load(resp)
+        parts = data.get('content', [])
+        text = ''.join(p.get('text', '') for p in parts if p.get('type') == 'text').strip()
+        return text or None
+
+    def _cleanup_openai(self, text, api_key):
+        body = json.dumps({
+            'model': OPENAI_MODEL,
+            'messages': [
+                {'role': 'system', 'content': CLEANUP_PROMPT},
+                {'role': 'user', 'content': text},
+            ],
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            'https://api.openai.com/v1/chat/completions', data=body, method='POST',
+            headers={'Authorization': f'Bearer {api_key}', 'content-type': 'application/json'},
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.load(resp)
+        text = data['choices'][0]['message']['content'].strip()
+        return text or None
+
+    def _set_clipboard(self, text):
+        subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=False)
+
+    def _notify_extension(self, method, *args):
+        try:
+            ext = self._session_bus.get(EXT_BUS_NAME, EXT_OBJECT_PATH)
+            getattr(ext, method)(*args)
+        except GLib.Error:
+            pass  # extension not loaded/running -- nothing more this daemon can do
+
+
+def main():
+    bus = SessionBus()
+    bus.publish('org.peachos.DictationDaemon', DictationDaemon())
+    GLib.MainLoop().run()
+
+
+if __name__ == '__main__':
+    main()

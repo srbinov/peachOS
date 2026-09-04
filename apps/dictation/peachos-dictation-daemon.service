@@ -1,0 +1,14 @@
+[Unit]
+Description=Peach Intelligence dictation daemon
+Documentation=https://github.com/srbinov/peachOS
+After=graphical-session.target
+
+[Service]
+BusName=org.peachos.DictationDaemon
+Type=dbus
+Restart=always
+RestartSec=1
+ExecStart=/usr/lib/peachos/dictation/peachos-dictation-daemon
+
+[Install]
+WantedBy=graphical-session.target

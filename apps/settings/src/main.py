@@ -33,6 +33,7 @@ from network_page import NetworkPage
 from battery_page import BatteryPage
 from appearance_page import AppearancePage
 from custom_icons_page import CustomIconsPage
+from dictation_page import DictationPage
 from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
@@ -77,6 +78,7 @@ SIDEBAR_SECTIONS = [
     [
         ('general', 'General', 'applications-system-symbolic', '#8E8E93'),
         ('accessibility', 'Accessibility', 'preferences-desktop-accessibility-symbolic', '#0A84FF'),
+        ('dictation', 'Peach Intelligence', 'audio-input-microphone-symbolic', '#FF3B30'),
         ('appearance', 'Appearance', 'preferences-desktop-theme-symbolic', '#1C1C1E'),
         ('menubar', 'Menu Bar', 'open-menu-symbolic', '#1C1C1E'),
         ('desktopdock', 'Desktop & Dock', 'view-dual-symbolic', '#0A84FF'),
@@ -140,6 +142,8 @@ SEARCH_ALIASES = {
     'general_defaultapps': ['default browser', 'default email', 'browser', 'email client'],
     'appearance': ['dark mode', 'light mode', 'accent color', 'theme'],
     'appearance_custom_icons': ['custom icon', 'app icon', 'icon style', 'upload icon'],
+    'dictation': ['dictation', 'speech to text', 'voice typing', 'microphone', 'push to talk',
+                  'whisper', 'ai', 'claude', 'openai', 'api key'],
     'displays': ['night light', 'resolution', 'brightness', 'color temperature'],
     'wifi': ['wireless'],
     'touchid': ['fingerprint', 'change password'],
@@ -484,6 +488,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                 on_open_custom_icons=lambda: self._go_to('appearance_custom_icons', record_history=True))
         elif row_id == 'appearance_custom_icons':
             page = CustomIconsPage()
+        elif row_id == 'dictation':
+            page = DictationPage()
         elif row_id == 'desktopdock':
             page = DesktopDockPage()
         elif row_id == 'displays':

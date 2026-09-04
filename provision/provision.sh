@@ -117,6 +117,18 @@ MACTAHOE_ICON_COMMIT="db9a4f8b236d3c559326f041d75d5173de118c45"
 SYSICONS_REPO="https://github.com/srbinov/macOS_Tahoe_SYSICONS.git"
 SYSICONS_COMMIT="d5fd1cf3f2d46b8949015bee81e99a9ab4d2cbc1"
 
+# Peach Intelligence (apps/dictation) speech-to-text engine -- no distro package ships
+# whisper.cpp, built from source same as icloud-for-linux below. v1.9.3 tag, pinned by the
+# commit it actually points at (not the tag object itself).
+WHISPER_CPP_REPO="https://github.com/ggml-org/whisper.cpp.git"
+WHISPER_CPP_COMMIT="371b5a7561823ab2bb32142d2751e35e7534727b"
+# ggml-base.en.bin (English-only "base" model, ~141MB): the accuracy/speed/size point that
+# actually transcribes a few-second dictation clip in a few seconds on a CPU this old (see
+# HANDOFF for the MacBook Pro's own graphics/perf ceiling) -- verified directly on this
+# machine before pinning the hash below.
+WHISPER_MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+WHISPER_MODEL_SHA256="a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+
 echo "==> Installing build dependencies"
 apt-get update -qq
 apt-get install -y --no-install-recommends git rsync dconf-cli libglib2.0-bin gettext
@@ -172,6 +184,46 @@ install -Dm644 "$REPO_DIR/apps/ulauncher/ulauncher.service" /usr/lib/systemd/use
 # (Spotlight-style). --global enables it for every user's graphical session.
 systemctl --global enable ulauncher.service
 update-desktop-database /usr/share/applications
+
+# Peach Intelligence (apps/dictation): push-to-talk dictation, not an AI assistant -- hold a
+# key (extensions/peachos-dictation@peachos grabs it, since detecting release and injecting
+# the paste keystroke both have to happen inside gnome-shell's own process -- see that
+# extension's own docstring), speak, let go, this daemon records (pw-record) + transcribes
+# (whisper.cpp, fully offline) + optionally cleans up via Claude/OpenAI (only if the Settings
+# app's Peach Intelligence tab has an API key stored, checked at request time -- never
+# required for dictation itself) + sets the clipboard, then tells the extension to paste.
+#
+# Declares its own build deps (cmake/g++/make) rather than relying on icloud-for-linux's own
+# install of the same further down this script -- keeps this section runnable/movable on its
+# own instead of silently depending on script order.
+echo "==> Installing Peach Intelligence dictation daemon dependencies"
+apt-get install -y --no-install-recommends \
+    cmake g++ make python3-pydbus gir1.2-secret-1 wl-clipboard pipewire-bin
+
+echo "==> Building whisper.cpp (Peach Intelligence's offline speech-to-text engine)"
+git clone --quiet "$WHISPER_CPP_REPO" "$WORK_DIR/whisper-cpp"
+git -C "$WORK_DIR/whisper-cpp" checkout --quiet "$WHISPER_CPP_COMMIT"
+cmake -S "$WORK_DIR/whisper-cpp" -B "$WORK_DIR/whisper-cpp-build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$WORK_DIR/whisper-cpp-build" -j"$(nproc)" --target whisper-cli
+
+# whisper-cli links against libwhisper/libggml* -- no distro package for either, and its own
+# baked-in RUNPATH points at the build tree above (gone once $WORK_DIR is cleaned up), so both
+# the binary and its shared libs are installed together here; the daemon sets
+# LD_LIBRARY_PATH=.../dictation/lib on every invocation rather than touching a system libdir
+# or relying on any RUNPATH at all (confirmed live: the RUNPATH-only copy broke immediately).
+install -Dm755 "$WORK_DIR/whisper-cpp-build/bin/whisper-cli" /usr/lib/peachos/dictation/whisper-cli
+install -d /usr/lib/peachos/dictation/lib
+cp -P "$WORK_DIR"/whisper-cpp-build/bin/*.so* /usr/lib/peachos/dictation/lib/
+chmod 0755 /usr/lib/peachos/dictation/lib/*.so*
+
+echo "==> Downloading whisper.cpp base.en model (~141MB)"
+curl -fL --retry 3 -o "$WORK_DIR/ggml-base.en.bin" "$WHISPER_MODEL_URL"
+echo "$WHISPER_MODEL_SHA256  $WORK_DIR/ggml-base.en.bin" | sha256sum -c -
+install -Dm644 "$WORK_DIR/ggml-base.en.bin" /usr/share/peachos/whisper/ggml-base.en.bin
+
+install -Dm755 "$REPO_DIR/apps/dictation/peachos-dictation-daemon" /usr/lib/peachos/dictation/peachos-dictation-daemon
+install -Dm644 "$REPO_DIR/apps/dictation/peachos-dictation-daemon.service" /usr/lib/systemd/user/peachos-dictation-daemon.service
+systemctl --global enable peachos-dictation-daemon.service
 
 # Settings app (apps/settings) runtime dep: gir1.2-goa-1.0 gives the Internet Accounts tab
 # real GNOME Online Accounts bindings -- gnome-online-accounts itself (the goa-daemon and

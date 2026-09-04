@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.peachos-dictation" path="/org/gnome/shell/extensions/peachos-dictation/">
+    <key name="dictation-enabled" type="b">
+      <default>false</default>
+      <summary>Peach Intelligence dictation enabled</summary>
+      <description>Master switch -- when false, the hotkey is never grabbed at all.</description>
+    </key>
+
+    <key name="hotkey" type="as">
+      <default>['Alt_R']</default>
+      <summary>Push-to-talk key</summary>
+      <description>
+        A single bare key (no companion key needed) held to record and released to
+        transcribe+paste -- Main.wm.addKeybinding's expected array-of-accelerators type, but
+        the Settings app's picker only ever writes exactly one bare keysym here (Alt_R,
+        Control_R, Super_R, Caps_Lock, ...). A held modifier-plus-letter chord doesn't make
+        sense for a hold gesture the way it does for a normal single-shot shortcut.
+      </description>
+    </key>
+
+    <key name="cleanup-enabled" type="b">
+      <default>false</default>
+      <summary>Clean up transcriptions with an AI provider</summary>
+      <description>
+        When true, the raw transcript is sent to cleanup-provider (via the API key stored in
+        the login keyring, never here) for punctuation/grammar/filler-word cleanup before
+        pasting. When false (or no key is stored), the raw whisper.cpp transcript is pasted
+        as-is -- dictation itself never requires an API key, only this optional cleanup pass.
+      </description>
+    </key>
+
+    <key name="cleanup-provider" type="s">
+      <default>'anthropic'</default>
+      <summary>Which provider's API key to use for cleanup</summary>
+      <description>'anthropic' or 'openai'.</description>
+    </key>
+  </schema>
+</schemalist>

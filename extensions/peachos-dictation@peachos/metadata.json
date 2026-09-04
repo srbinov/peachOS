@@ -1,0 +1,8 @@
+{
+    "uuid": "peachos-dictation@peachos",
+    "name": "Peach Intelligence",
+    "description": "Hold a key, speak, let go -- your words get transcribed and pasted wherever your cursor is. The GNOME Shell side of peachOS's Peach Intelligence dictation: grabs the configured push-to-talk key (press to start, release to stop), shows a small recording indicator, and injects the final paste once peachos-dictation-daemon has the text ready. Settings live in the peachOS Settings app's Peach Intelligence tab.",
+    "shell-version": ["50"],
+    "settings-schema": "org.gnome.shell.extensions.peachos-dictation",
+    "version-name": "1.0.0"
+}
