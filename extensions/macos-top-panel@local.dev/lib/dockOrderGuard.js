@@ -146,8 +146,20 @@ export class DockOrderGuard {
         // Belt-and-suspenders: _box should still be in order (redisplay was frozen), but if
         // anything slipped a reorder through, put it back. Prefer the pre-swap order, fall
         // back to favorite-apps (which the Settings app restores byte-identical).
+        //
+        // Deliberately NOT clearing this._snapshot here: the Settings app calls Restore()
+        // twice per swap (see appearance_page.py, ~1800ms/~3500ms after the render finishes)
+        // as a timing safety net, on the assumption Restore() is idempotent. It wasn't -- the
+        // first call used to null this._snapshot out, so the second call fell through to the
+        // favorite-apps fallback below, which lists ONLY pinned apps. Any running-but-not-
+        // favorited app in the dock has no entry in that list, so applyOrder() silently
+        // dropped it from the reapplied order and it landed wherever _appChildren() happened
+        // to enumerate it -- a real shuffle, on every single switch, of exactly the apps most
+        // likely to be sitting in the dock (open, unpinned apps). this._snapshot now lives
+        // until the NEXT real Snapshot() overwrites it, so every Restore() call in the same
+        // swap reapplies the identical real pre-swap order instead of degrading to the
+        // lossy fallback.
         let order = this._snapshot;
-        this._snapshot = null;
         if (!order || order.length === 0) {
             try {
                 order = new Gio.Settings({schema_id: 'org.gnome.shell'})
