@@ -226,6 +226,14 @@ install -Dm755 "$REPO_DIR/apps/iconmasker/peachos-icon-appearance" /usr/lib/peac
 install -Dm644 "$REPO_DIR/apps/settings/data/schemas/org.peachos.appearance.gschema.xml" /usr/share/glib-2.0/schemas/org.peachos.appearance.gschema.xml
 glib-compile-schemas /usr/share/glib-2.0/schemas/
 
+# Content-addressed render cache for the tool above -- rendering a curated dark/clear SVG
+# (rsvg-convert, most of these run 2000x1500 with an embedded raster mask + filters) is what
+# actually made switching styles feel heavy; caching by the source file's own sha1 means only
+# the FIRST switch to a style ever pays for it. 1777 (sticky, world-writable) since the tool
+# itself runs unprivileged, per-user, with no pkexec -- any account must be able to populate
+# and read it.
+install -d -m 1777 /var/cache/peachos-icon-appearance
+
 # Menu-bar "Background Blur" helper: software-blurs the wallpaper slice behind the top
 # panel (macos-top-panel@local.dev's lib/panelBackground.js runs it). Deliberately not a
 # GPU/Shell.BlurEffect blur -- see that file. Uses python3-pil, already provisioned above.

@@ -38,7 +38,9 @@ subdirectory.
 import concurrent.futures
 import glob
 import hashlib
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +49,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from peachos_icon_mask import load_pixbuf_as_pil
 from peachos_icon_resolve import resolve_curated_clear, resolve_curated_dark, resolve_icon
+
+# Rendering a curated source (rsvg-convert -> a 1024x1024 PIL canvas, most of these SVGs are
+# 2000x1500 with an embedded base64-raster mask + feColorMatrix filters -- the real reason a
+# style switch used to be visibly heavy) is pure content -> content: the same curated_source
+# bytes always produce the exact same PNG. Content-addressed so the FIRST switch to a style
+# after a repo update (new/changed curated art) still re-renders exactly what changed, and
+# switching back to a style already seen this boot -- the common case -- is a plain file copy.
+# Shared across every user account (single-user machine in practice, but content-addressing
+# makes that safe regardless) and across repeated switches by the same user; 1777 so any
+# unprivileged user can populate/read it, sticky so one user can't unlink another's entry.
+CACHE_ROOT = Path('/var/cache/peachos-icon-appearance')
+
+
+def _cached_render(curated_source, out_path):
+    """Copies a cached render of curated_source to out_path if one exists; otherwise renders
+    it (the expensive path) and populates the cache for next time. Returns True on success."""
+    try:
+        digest = hashlib.sha1(curated_source.read_bytes()).hexdigest()
+    except OSError:
+        digest = None
+
+    cache_path = CACHE_ROOT / f'{digest}.png' if digest else None
+    if cache_path is not None and cache_path.exists():
+        try:
+            shutil.copyfile(cache_path, out_path)
+            return True
+        except OSError:
+            pass  # fall through and render fresh
+
+    img = load_pixbuf_as_pil(str(curated_source))
+    img.save(out_path, 'PNG')
+
+    if cache_path is not None:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache_path.with_suffix(f'.tmp-{os.getpid()}')
+            img.save(tmp, 'PNG')
+            tmp.rename(cache_path)  # atomic -- never leaves a torn file another switch reads
+            cache_path.chmod(0o644)
+        except OSError:
+            pass  # cache is a pure optimization -- a write failure just means no speedup next time
+    return True
 
 # Flatpak's own export dir added here (it wasn't originally): Calendar/Text Editor/Weather
 # etc. only ever exist as Flatpaks, with their REAL desktop file living only here or under a
@@ -124,7 +168,7 @@ def _make_icon(style, icon_dir, desktop_path, icon):
 
     out_path = icon_dir / f'{slug_for(desktop_path)}.png'
     try:
-        load_pixbuf_as_pil(str(curated_source)).save(out_path, 'PNG')
+        _cached_render(curated_source, out_path)
     except Exception as e:
         return None, str(e)
     return out_path, 'curated'

@@ -4,7 +4,24 @@ import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // If Restore() never arrives (Settings app died mid-swap), un-freeze anyway after this.
-const SAFETY_UNFREEZE_MS = 15000;
+// Generous on purpose: Snapshot() starts this counting before peachos-icon-appearance's
+// subprocess even launches, so it has to outlast the whole render run, not just the swap
+// UI. A rendering-heavy run (many curated icons, cold cache) that outlived a shorter timer
+// used to let this fire mid-run -- un-freezing while .desktop writes were still trickling
+// in, i.e. exactly the unguarded window this class exists to prevent.
+const SAFETY_UNFREEZE_MS = 45000;
+
+// Restoring _box's order and re-arming dash.js's real _queueRedisplay isn't the end of the
+// story: that re-armed call schedules dash.js's actual _redisplay() (via Meta.later_add, not
+// synchronously), and _redisplay() doesn't just leave _box alone -- it recomputes its own
+// target order from AppFavorites + running-app enumeration and diffs the box against THAT,
+// which can still reorder non-favorite running apps even though nothing scrambled during the
+// freeze itself. Re-applying the same fixup once more, shortly after, is the "fix it after"
+// half of the old two-part approach (see git history: ac0344b) -- it was dropped when the
+// freeze (286901c) was added on the assumption prevention alone was enough. It wasn't: the
+// freeze stops mid-swap scrambling, but the one real redisplay it re-arms on the way out can
+// still land apps somewhere dash.js prefers over where they actually were.
+const POST_REDISPLAY_REAPPLY_MS = 200;
 
 // GNOME's own dash.js _redisplay() acknowledges in its own comment that its diffing
 // algorithm "assumes only one item is moved at a given time" and that touching several
@@ -139,7 +156,10 @@ export class DockOrderGuard {
                 order = [];
             }
         }
-        if (order.length) {
+
+        const applyOrder = () => {
+            if (!order.length)
+                return;
             const byId = new Map();
             for (const actor of this._appChildren(box))
                 byId.set(_appOfChild(actor).get_id(), actor);
@@ -151,16 +171,34 @@ export class DockOrderGuard {
                 box.set_child_at_index(actor, index);
                 index++;
             }
-        }
+        };
 
-        // Re-sync dash.js now that redisplay is live again (no scramble: _box already
-        // matches the favorites order), then make macos-dock re-read icons + order.
+        const resync = () => {
+            if (dock && typeof dock._beginAnimation === 'function') {
+                dock._icons = null;
+                dock._beginAnimation();
+            }
+        };
+
+        applyOrder();
+
+        // Re-sync dash.js now that redisplay is live again (_box already matches the
+        // favorites order going in), then make macos-dock re-read icons + order.
         if (dock?.dash && typeof dock.dash._queueRedisplay === 'function')
             dock.dash._queueRedisplay();
-        if (dock && typeof dock._beginAnimation === 'function') {
-            dock._icons = null;
-            dock._beginAnimation();
-        }
+        resync();
+
+        // That real _queueRedisplay() call just re-armed dash.js's actual _redisplay(),
+        // scheduled asynchronously (Meta.later_add), not run synchronously above -- and
+        // _redisplay() computes its OWN target order from AppFavorites + running-app
+        // enumeration rather than simply preserving _box, so it can still reorder
+        // non-favorite running apps once it actually runs. Give it a moment, then force
+        // our order back one more time -- see POST_REDISPLAY_REAPPLY_MS's own docstring.
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, POST_REDISPLAY_REAPPLY_MS, () => {
+            applyOrder();
+            resync();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     destroy() {
