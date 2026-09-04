@@ -23,6 +23,10 @@ FIXED_KEYBINDING_SCHEMAS = [
     'org.gnome.mutter.keybindings',
     'org.gnome.mutter.wayland.keybindings',
     'org.gnome.settings-daemon.plugins.media-keys',
+    # Peach Intelligence's own push-to-talk hotkey (dictation_page.py) -- included here too so
+    # find_conflict() is bidirectional: recording a shortcut on EITHER this page or that one
+    # catches a collision with the other, not just with GNOME's own built-in bindings.
+    'org.gnome.shell.extensions.peachos-dictation',
 ]
 
 # Modifier bits that make it into the saved accelerator -- NumLock/CapsLock etc. also

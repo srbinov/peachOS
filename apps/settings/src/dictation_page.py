@@ -16,25 +16,17 @@ import os
 import gi
 
 gi.require_version('Secret', '1')
-from gi.repository import Gio, GLib, Gtk, Secret
+from gi.repository import Adw, Gio, GLib, Gtk, Secret
 
 from widgets import DropdownRow, ToggleRow, make_hero_header
+# Same recorder widget (and conflict scanner) peachySearch's own shortcut picker uses --
+# reused directly rather than reimplemented, so "choose any shortcut you want" means the
+# exact same capture UX/behavior in both places, not a lookalike with its own quirks.
+from spotlight_page import ShortcutRow, find_conflict
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 SETTINGS_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation'
-
-# (accelerator string written to the 'hotkey' gsetting, label shown in the dropdown). Kept to
-# single bare keys with no companion key -- see that schema key's own description for why a
-# held modifier-plus-letter chord doesn't make sense for a push-to-talk gesture the way it
-# does for a normal single-shot shortcut. Right-side variants preferred as defaults/first
-# options since they're the ones least likely to collide with an existing left-side shortcut.
-HOTKEY_OPTIONS = [
-    ('Right Option (⌥)', 'Alt_R'),
-    ('Right Control (⌃)', 'Control_R'),
-    ('Right Command (⌘)', 'Super_R'),
-    ('Caps Lock', 'Caps_Lock'),
-]
 
 CLEANUP_PROVIDERS = [('Claude (Anthropic)', 'anthropic'), ('OpenAI', 'openai')]
 
@@ -99,19 +91,70 @@ class DictationPage(Gtk.Box):
         self._settings.bind('dictation-enabled', enable_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
         card.append(enable_row)
 
-        hotkey_row = DropdownRow('Push-to-Talk Key', HOTKEY_OPTIONS)
-        current = self._settings.get_strv('hotkey')
-        hotkey_row.set_selected_value(current[0] if current else 'Alt_R')
-        hotkey_row.dropdown.connect('notify::selected', lambda dd, _p: self._settings.set_strv(
-            'hotkey', [hotkey_row.get_selected_value()]))
-        card.append(hotkey_row)
+        self._hotkey_row = ShortcutRow('Push-to-Talk Key')
+        self._hotkey_row.set_accelerator(self._current_hotkey())
+        self._hotkey_row.connect_recorded(self._on_hotkey_recorded)
+        card.append(self._hotkey_row)
 
         self.append(card)
         self.append(Gtk.Label(
-            label='Hold the key anywhere -- even outside this app -- speak, then let go. The '
-                  'transcript is pasted into whatever has focus.',
+            label='Hold the key (or key combo) anywhere -- even outside this app -- speak, '
+                  'then let go. The transcript is pasted into whatever has focus.',
             xalign=0, wrap=True, css_classes=['caption', 'dim-label'],
         ))
+
+    def _current_hotkey(self) -> str:
+        values = self._settings.get_strv('hotkey')
+        return values[0] if values else ''
+
+    def _on_hotkey_recorded(self, accel_str):
+        if accel_str is None:
+            self._hotkey_row.set_accelerator(self._current_hotkey())  # cancelled -- redisplay the real value
+            return
+        if accel_str == self._current_hotkey():
+            return  # re-recorded the exact same combo -- nothing to check or change
+
+        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
+        label, clear_fn = find_conflict(keyval, mods) if ok else (None, None)
+        if label:
+            self._show_conflict_dialog(label, clear_fn, accel_str)
+        else:
+            self._commit_hotkey(accel_str, keyval, mods)
+
+    def _show_conflict_dialog(self, label, clear_fn, accel_str):
+        self._hotkey_row.set_accelerator(self._current_hotkey())  # put the row back while the dialog is up
+        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
+        display = Gtk.accelerator_get_label(keyval, mods) if ok else accel_str
+
+        dialog = Adw.AlertDialog(
+            heading='Shortcut Already in Use',
+            body=f'“{display}” is already used by “{label}”. Replace it with Peach '
+                 'Intelligence, or choose a different shortcut?',
+        )
+        dialog.add_response('cancel', 'Choose a Different Shortcut')
+        dialog.add_response('replace', 'Replace')
+        dialog.set_response_appearance('replace', Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response('cancel')
+
+        def on_response(_dialog, response):
+            if response == 'replace':
+                clear_fn()
+                self._commit_hotkey(accel_str, keyval, mods)
+            else:
+                self._hotkey_row.start_recording()
+
+        dialog.connect('response', on_response)
+        dialog.present(self.get_root())
+
+    def _commit_hotkey(self, accel_str, keyval, mods):
+        # hotkey-trigger-keyval/hotkey-modifier-mask are the pre-parsed form the extension
+        # actually reads (it can't parse an arbitrary accelerator string itself -- see that
+        # schema key's own description) -- always written together with 'hotkey', never left
+        # to drift out of sync with it.
+        self._settings.set_strv('hotkey', [accel_str])
+        self._settings.set_int('hotkey-trigger-keyval', keyval)
+        self._settings.set_int('hotkey-modifier-mask', int(mods))
+        self._hotkey_row.set_accelerator(accel_str)
 
     # ---- Optional AI cleanup --------------------------------------------------
 

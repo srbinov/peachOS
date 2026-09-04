@@ -8,14 +8,41 @@
     </key>
 
     <key name="hotkey" type="as">
-      <default>['Alt_R']</default>
+      <default>['&lt;Control&gt;&lt;Alt&gt;d']</default>
       <summary>Push-to-talk key</summary>
       <description>
-        A single bare key (no companion key needed) held to record and released to
-        transcribe+paste -- Main.wm.addKeybinding's expected array-of-accelerators type, but
-        the Settings app's picker only ever writes exactly one bare keysym here (Alt_R,
-        Control_R, Super_R, Caps_Lock, ...). A held modifier-plus-letter chord doesn't make
-        sense for a hold gesture the way it does for a normal single-shot shortcut.
+        Held to record, released to transcribe+paste -- recorded with the Settings app's
+        Peach Intelligence tab using the exact same ShortcutRow widget/UX as peachySearch's
+        own shortcut picker, so any real accelerator (a bare modifier, or a full Ctrl/Alt/
+        Super chord) is fair game, not a fixed list. Main.wm.addKeybinding's expected
+        array-of-accelerators type. hotkey-trigger-keyval/hotkey-modifier-mask below are the
+        pre-parsed form the extension actually uses to detect release -- kept in sync
+        whenever this changes; never edit this key directly without also updating those.
+      </description>
+    </key>
+
+    <key name="hotkey-trigger-keyval" type="i">
+      <default>100</default>
+      <summary>Parsed base keyval of 'hotkey' (Gtk.accelerator_parse's own output)</summary>
+      <description>
+        The extension can't safely parse an arbitrary accelerator string itself -- Gdk/Gtk
+        aren't available inside gnome-shell's own process, only in a prefs.js (a separate,
+        ordinary GTK process; confirmed no other extension in this repo imports Gdk from its
+        own extension.js) -- so the Settings app pre-parses 'hotkey' with Gtk.accelerator_parse
+        and writes the result here + hotkey-modifier-mask. Default 100 = 'd', matching the
+        default hotkey above.
+      </description>
+    </key>
+
+    <key name="hotkey-modifier-mask" type="i">
+      <default>12</default>
+      <summary>Parsed Gdk.ModifierType bitmask of 'hotkey'</summary>
+      <description>
+        Companion to hotkey-trigger-keyval. Numerically identical to Clutter's own
+        ModifierType bits -- both wrap the same X11/xkbcommon modifier layout (confirmed:
+        SHIFT=1, LOCK=2, CONTROL=4, ALT=8, SUPER=67108864 in both) -- so the extension compares
+        it directly against live Clutter modifier state (global.get_pointer()'s own mods) with
+        no translation needed. Default 12 = Control(4)|Alt(8), matching the default hotkey.
       </description>
     </key>
 

@@ -20,21 +20,6 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// Keysym name -> Clutter.KEY_* value, for the fixed set of bare push-to-talk keys the
-// Settings app's hotkey picker ever writes to the 'hotkey' gsetting (see that schema key's
-// own description for why only a single bare key makes sense here). A real accelerator
-// parser (Gtk.accelerator_parse / Gdk.keyval_from_name) would work too, but Gdk is never
-// imported by any OTHER extension's actual extension.js in this repo -- only their prefs.js
-// (a separate, ordinary GTK process) -- gnome-shell's own process isn't a GTK application
-// context, so pulling Gdk in here risks it simply not being available. A tiny fixed lookup
-// table needs neither.
-const KEYSYM_TABLE = {
-    Alt_L: 65513, Alt_R: 65514,
-    Control_L: 65507, Control_R: 65508,
-    Super_L: 65515, Super_R: 65516,
-    Caps_Lock: 65509,
-};
-
 const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
 const DAEMON_OBJECT_PATH = '/org/peachos/DictationDaemon';
 
@@ -123,11 +108,6 @@ export default class PeachIntelligenceExtension extends Extension {
         }
     }
 
-    _triggerKeyval() {
-        const [accel] = this._settings.get_strv('hotkey');
-        return KEYSYM_TABLE[accel] ?? 0;
-    }
-
     // Main.wm.addKeybinding only ever fires on PRESS (like any GNOME accelerator/media key --
     // Mutter doesn't deliver a matching release through that API at all). Getting the RELEASE
     // needs the same technique CoverflowAltTab's own switcher.js uses for Alt-Tab's "hold Alt,
@@ -153,11 +133,33 @@ export default class PeachIntelligenceExtension extends Extension {
         this._callDaemon('StartRecording');
     }
 
+    // The hotkey can be any real accelerator now (Peach Intelligence's own Settings tab uses
+    // the exact same ShortcutRow widget peachySearch's shortcut picker does -- a bare
+    // modifier, or a full Ctrl/Alt/Super chord), not a fixed list of bare keys, so "released"
+    // has two ways to fire: the combo's own base/trigger key comes back up (release D from
+    // Ctrl+Alt+D), or -- for a chord -- one of its held modifiers does (release Alt from
+    // Ctrl+Alt+D, without D itself ever having been pressed again). The second check reads
+    // LIVE modifier state (global.get_pointer(), same call switcher.js uses for Alt-Tab's own
+    // release detection) rather than trying to match the released key's own symbol against a
+    // specific modifier keyval, since a chord's modifiers were never individually recorded --
+    // only their combined Gdk.ModifierType bitmask (hotkey-modifier-mask) was.
     _onKeyReleaseEvent(_actor, event) {
-        if (event.get_key_symbol() !== this._triggerKeyval())
-            return Clutter.EVENT_PROPAGATE;
-        this._endRecording(true);
-        return Clutter.EVENT_STOP;
+        const triggerKeyval = this._settings.get_int('hotkey-trigger-keyval');
+        if (event.get_key_symbol() === triggerKeyval) {
+            this._endRecording(true);
+            return Clutter.EVENT_STOP;
+        }
+
+        const modMask = this._settings.get_int('hotkey-modifier-mask');
+        if (modMask !== 0) {
+            const [, , mods] = global.get_pointer();
+            if ((mods & modMask) !== modMask) {
+                this._endRecording(true);
+                return Clutter.EVENT_STOP;
+            }
+        }
+
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _endRecording(tellDaemon) {
