@@ -5,8 +5,10 @@
       <default>'default'</default>
       <summary>App icon appearance style</summary>
       <description>
-        Which macOS-Tahoe-style icon treatment to apply system-wide: default,
-        dark, or clear.
+        Which icon treatment to apply: 'default' (untouched), 'dark' (blanket
+        curated dark art where it exists), or 'custom' (per-app choice from
+        the Manage Custom Icons page -- see CUSTOM_MANIFEST_PATH in
+        peachos-icon-appearance).
       </description>
     </key>
   </schema>

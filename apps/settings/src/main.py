@@ -32,6 +32,7 @@ from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
 from battery_page import BatteryPage
 from appearance_page import AppearancePage
+from custom_icons_page import CustomIconsPage
 from desktopdock_page import DesktopDockPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
@@ -110,6 +111,7 @@ EXTRA_PAGE_TITLES = {
     'accessibility_zoom': 'Zoom',
     'accessibility_display': 'Display',
     'accessibility_audio': 'Audio',
+    'appearance_custom_icons': 'Custom Icons',
     'edit_profile': 'Edit Profile',
 }
 
@@ -127,6 +129,7 @@ EXTRA_PAGE_PARENTS = {
     'accessibility_zoom': 'accessibility',
     'accessibility_display': 'accessibility',
     'accessibility_audio': 'accessibility',
+    'appearance_custom_icons': 'appearance',
 }
 
 # Extra search terms for pages whose real name doesn't obviously contain the
@@ -136,6 +139,7 @@ EXTRA_PAGE_PARENTS = {
 SEARCH_ALIASES = {
     'general_defaultapps': ['default browser', 'default email', 'browser', 'email client'],
     'appearance': ['dark mode', 'light mode', 'accent color', 'theme'],
+    'appearance_custom_icons': ['custom icon', 'app icon', 'icon style', 'upload icon'],
     'displays': ['night light', 'resolution', 'brightness', 'color temperature'],
     'wifi': ['wireless'],
     'touchid': ['fingerprint', 'change password'],
@@ -476,7 +480,10 @@ class SettingsWindow(Adw.ApplicationWindow):
         elif row_id == 'energy':
             page = BatteryPage()
         elif row_id == 'appearance':
-            page = AppearancePage()
+            page = AppearancePage(
+                on_open_custom_icons=lambda: self._go_to('appearance_custom_icons', record_history=True))
+        elif row_id == 'appearance_custom_icons':
+            page = CustomIconsPage()
         elif row_id == 'desktopdock':
             page = DesktopDockPage()
         elif row_id == 'displays':

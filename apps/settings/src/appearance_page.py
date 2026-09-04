@@ -7,7 +7,7 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 from PIL import Image
 
-from widgets import DropdownRow, make_hero_header
+from widgets import DropdownRow, IconPlaceholderRow, make_hero_header
 
 # GNOME Tweaks' Fonts section, ported over -- same org.gnome.desktop.interface
 # keys Tweaks itself reads/writes, just presented in peachOS's own Appearance
@@ -464,13 +464,13 @@ ICON_STYLE_TILE_SIZE = (45, 45)  # 20% down from the original 56x56, per explici
 ICON_STYLES = [
     ('default', 'Default', 'appearance_default.svg', True),
     ('dark', 'Dark', 'appearance_dark.svg', True),
-    ('clear', 'Clear', 'appearance_clear.svg', True),
+    ('custom', 'Custom', 'appearance_custom.svg', True),
 ]
 
 
 class IconStyleOption(Gtk.Box):
     """Same tile+label+selection-ring shape as SchemeOption, but square.
-    Still supports a disabled state (unused now that all four styles are
+    Still supports a disabled state (unused now that all three styles are
     implemented) so a future not-yet-ready style can be shown inert rather
     than hidden."""
 
@@ -511,13 +511,14 @@ class IconStyleOption(Gtk.Box):
 
 
 class AppearancePage(Gtk.Box):
-    def __init__(self):
+    def __init__(self, on_open_custom_icons=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
         self.set_margin_top(18)
         self.set_margin_bottom(18)
 
+        self._on_open_custom_icons = on_open_custom_icons
         self._glass_write_source = 0
         self._pending_glass_intensity = 0
         self._settings = Gio.Settings.new('org.gnome.desktop.interface')
@@ -635,6 +636,17 @@ class AppearancePage(Gtk.Box):
             icon_style_row.append(option)
         icon_style_card.append(icon_style_row)
         self.append(icon_style_card)
+
+        # Configuring per-app choices lives on its own page regardless of which style is
+        # currently active -- a user should be able to set up Custom before ever switching to
+        # it. A change made there only takes visible effect once Custom is the active style
+        # (custom_icons_page.py re-runs the apply script live if it already is).
+        manage_icons_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
+        manage_icons_card.append(IconPlaceholderRow(
+            'Manage Custom Icons', 'applications-graphics-symbolic', 'accent-black',
+            on_click=lambda: self._on_open_custom_icons and self._on_open_custom_icons(),
+        ))
+        self.append(manage_icons_card)
 
         self.append(Gtk.Label(label='Liquid Glass', xalign=0, css_classes=['heading'], margin_start=4))
 
