@@ -100,22 +100,27 @@
     padding: 6px 4px !important;
 }
 
-/* ---- macOS-ish notification styling ---------------------------------------------------
+/* ---- macOS-ish notification BANNER styling -------------------------------------------
    macOS banner = one big rounded app icon + bold title + body, timestamp is NOT shown,
    no app-name line. So collapse GNOME's whole header row (app icon + "notify-send" +
    "Just now" + close button) and let the .message-box row carry everything.
-   NOTE: no Shell.Screenshot in this codebase any more, so hiding elements / small
-   negative offsets here can't feed a bad sample rect the way they used to. The banner
-   itself keeps a real min-height so it never collapses to a 0-size actor.
+
+   SCOPED TO .notification-banner ONLY. The same .message widget is reused verbatim by
+   the Notification Center's list (lib/notificationCenter.js -> Calendar.CalendarMessageList),
+   and there the header row is NOT junk: it carries the per-notification close (X) button,
+   the timestamp and the app name -- all of which the Notification Center needs. An earlier
+   unscoped `.message { background: transparent !important }` here also beat the theme's
+   `.popup-menu .message { background-color: #4a4a4a }`, which is why NC notifications had
+   rendered as bare floating text. Leave the list fully theme-styled.
+
+   The banner keeps a real min-height so it never collapses to a 0-size actor.
+   The banner's own background + border come from lib/notificationBannerGlass.js's
+   dynamically loaded sheet (the only .notification-banner background rule there is, so
+   no !important tie), not from here.
    !important where the selector ties stock gnome-shell.css / the MacTahoe theme. */
 
-.message {
-    background-color: transparent !important;
-    border: none !important;
-}
-
-/* Collapse the header row entirely. */
-.message .message-header {
+/* Collapse the header row entirely -- banner only. */
+.notification-banner .message-header {
     height: 0px !important;
     min-height: 0px !important;
     padding: 0 !important;
@@ -123,10 +128,10 @@
     spacing: 0 !important;
     opacity: 0;
 }
-.message .message-header .message-source-icon,
-.message .message-header .message-header-content,
-.message .message-header .message-header-content .message-source-title,
-.message .message-header .message-header-content .event-time {
+.notification-banner .message-header .message-source-icon,
+.notification-banner .message-header .message-header-content,
+.notification-banner .message-header .message-header-content .message-source-title,
+.notification-banner .message-header .message-header-content .event-time {
     width: 0; min-width: 0; height: 0; min-height: 0;
     icon-size: 0;
     font-size: 0;
@@ -134,26 +139,26 @@
 }
 
 /* The icon + title + body row is now the whole banner. */
-.message .message-box,
-.message .message-box:first-child {
+.notification-banner .message-box,
+.notification-banner .message-box:first-child {
     margin-top: 0 !important;
     padding: 2px 4px !important;
     spacing: 12px !important;
 }
-.message .message-box .message-content {
+.notification-banner .message-box .message-content {
     spacing: 2px !important;
 }
-.message .message-box .message-content .message-title {
+.notification-banner .message-box .message-content .message-title {
     font-weight: bold !important;
 }
-.message .message-box .message-content .message-body,
-.message-body {
+.notification-banner .message-box .message-content .message-body {
     opacity: 0.82;
 }
 
 /* The large notification image (only shown when the notification carries its own gicon) --
-   rounded like a macOS app tile, no grey circle behind a full-colour one. */
-.message .message-box .message-icon {
+   rounded like a macOS app tile, no grey circle behind a full-colour one. Banner only;
+   the NC list keeps the theme's own icon treatment. */
+.notification-banner .message-box .message-icon {
     border-radius: 12px;
     -st-icon-style: regular;
 }
