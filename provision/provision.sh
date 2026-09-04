@@ -739,16 +739,23 @@ update-desktop-database /usr/share/applications
 # leftover per-user copy in ~/.local/share/applications that only exists on this one account).
 # Same reasoning as Weather below applies: needs an explicit copy in /usr/share/applications
 # since peachos-icon-appearance/-icon-watcherd never scan Flatpak's own export dir.
+# Curated icon (assets/app-icons/calendar_icon.svg), same treatment as Image Viewer above --
+# Icon= points straight at the absolute path so resolve_icon() sees CATEGORY_OWN and never
+# runs it through the generic masking pipeline. Dark variant (assets/app-icons/darkmode/
+# calendar_icon.svg) is picked up by the generic darkmode/ glob loop near the top of this
+# script + its own CURATED_DARK_SLUGS entry -- nothing else to do here for it.
 echo "==> Installing GNOME Calendar (Flathub)"
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install -y --system --noninteractive flathub org.gnome.Calendar
+
+install -Dm644 "$REPO_DIR/assets/app-icons/calendar_icon.svg" /usr/share/icons/peachos/calendar_icon.svg
 
 cat > /usr/share/applications/org.gnome.Calendar.desktop <<'EOF'
 [Desktop Entry]
 Name=Calendar
 Comment=Access and manage your calendars
 Exec=/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=gnome-calendar --file-forwarding org.gnome.Calendar @@u %U @@
-Icon=org.gnome.Calendar
+Icon=/usr/share/icons/peachos/calendar_icon.svg
 Terminal=false
 Type=Application
 StartupNotify=true

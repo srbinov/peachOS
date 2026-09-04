@@ -67,6 +67,8 @@ CURATED_DARK_SLUGS = {
     ICONS_ROOT / 'icloud-for-linux' / 'pages.svg': 'pages',
     ICONS_ROOT / 'icloud-for-linux' / 'maps.svg': 'maps',
     ICONS_ROOT / 'icloud-for-linux' / 'find.svg': 'find',
+    ICONS_ROOT / 'icloud-for-linux' / 'notes.svg': 'notes',
+    ICONS_ROOT / 'peachos' / 'calendar_icon.svg': 'calendar_icon',
     ICONS_ROOT / 'peachos' / 'app_center_icon.svg': 'app_center_icon',
     ICONS_ROOT / 'peachos' / 'apps.svg': 'apps',
     ICONS_ROOT / 'peachos' / 'sidra.svg': 'sidra',
