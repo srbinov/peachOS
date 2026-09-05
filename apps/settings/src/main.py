@@ -30,6 +30,7 @@ import users_page
 from wifi_page import WifiPage
 from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
+from sharing_page import SharingPage
 from battery_page import BatteryPage
 from appearance_page import AppearancePage
 from custom_icons_page import CustomIconsPage
@@ -75,6 +76,7 @@ SIDEBAR_SECTIONS = [
         ('wifi', 'Wi-Fi', 'network-wireless-symbolic', '#0A84FF'),
         ('bluetooth', 'Bluetooth', 'bluetooth-symbolic', '#0A84FF'),
         ('network', 'Network', 'network-workgroup-symbolic', '#5AC8FA'),
+        ('sharing', 'Sharing', 'network-transmit-receive-symbolic', '#34C759'),
         ('energy', 'Battery', 'battery-full-symbolic', '#34C759'),
     ],
     [
@@ -157,6 +159,8 @@ SEARCH_ALIASES = {
     'keyboard_shortcuts': ['keyboard shortcuts', 'rebind', 'custom shortcut', 'hotkey',
                            'screenshot shortcut', 'lock screen shortcut'],
     'wifi': ['wireless'],
+    'sharing': ['remote desktop', 'rdp', 'screen sharing', 'ssh', 'remote login',
+                'media sharing', 'dlna', 'file sharing'],
     'touchid': ['fingerprint', 'change password'],
     'users': ['add user', 'accounts', 'user account'],
     'lockscreen': ['screen lock', 'auto lock'],
@@ -494,6 +498,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                 on_open_wifi=lambda: self._go_to('wifi', record_history=True))
         elif row_id == 'energy':
             page = BatteryPage()
+        elif row_id == 'sharing':
+            page = SharingPage()
         elif row_id == 'appearance':
             page = AppearancePage(
                 on_open_custom_icons=lambda: self._go_to('appearance_custom_icons', record_history=True))
