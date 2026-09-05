@@ -73,6 +73,8 @@ fi
 # 01-peachos, not a stale compile.
 log "Baking dconf system defaults from the repo"
 install -Dm644 "$REPO_DIR/provision/dconf/01-peachos" /etc/dconf/db/local.d/01-peachos
+mkdir -p /etc/dconf/db/local.d/locks
+rsync -a --delete "$REPO_DIR/provision/dconf/locks/" /etc/dconf/db/local.d/locks/
 if [[ -f "$REPO_DIR/provision/dconf/01-peachos-gdm" ]]; then
     install -Dm644 "$REPO_DIR/provision/dconf/01-peachos-gdm" /usr/share/gdm/dconf/01-peachos-gdm
     [[ -x /usr/share/gdm/generate-config ]] && /usr/share/gdm/generate-config || true

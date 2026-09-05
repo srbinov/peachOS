@@ -1,0 +1,9 @@
+# dconf key locks -- values set in ../01-peachos that a user (or an extension's
+# own prefs UI, or a schema-version migration) must not be able to override.
+#
+# blur-my-shell panel blur: macos-top-panel owns the menu bar look. Without
+# these locks, blur-my-shell kept repainting a blurred/!opaque top bar on
+# fresh installs regardless of the peachOS Menu Bar switch (that switch drives
+# macos-top-panel's own menu-bar-blur key, a different mechanism entirely).
+/org/gnome/shell/extensions/blur-my-shell/panel/blur
+/org/gnome/shell/extensions/blur-my-shell/panel/override-background

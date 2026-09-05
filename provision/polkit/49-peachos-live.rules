@@ -1,0 +1,19 @@
+// peachOS -- live/demo session only.
+//
+// The live session autologins as "live", an account whose password is a
+// penguins-eggs default that is never shown to whoever is trying peachOS
+// ("evolution", buried in an upstream commented-out config example). Without
+// this rule, launching "Install peachOS" (pkexec eggs sysinstall) pops a
+// polkit prompt for a password nobody has -- eggs ships its own passwordless
+// action for /usr/bin/eggs, but /usr/bin/eggs is a symlink to /usr/bin/coa
+// here (the .deb has no "eggs" entry point) and the action's exec.path no
+// longer matches, so polkit falls through to auth_admin.
+//
+// Scope: the "live" user only, on a local active session. Calamares deletes
+// the "live" account on install (shellprocess_cleanuplive.conf), so on an
+// installed system there is no subject this can ever match.
+polkit.addRule(function(action, subject) {
+    if (subject.user === "live" && subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

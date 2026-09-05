@@ -8,6 +8,7 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk
 
 import avatar_picker
+from accounts_util import crypt_password
 from appearance_page import ACCENT_COLORS, ColorSwatch
 from widgets import make_hero_header
 
@@ -191,6 +192,14 @@ class _AddUserDialog(Gtk.Window):
         account_type = ACCOUNT_TYPE_ADMIN if self._admin_btn.get_active() else ACCOUNT_TYPE_STANDARD
         self._add_btn.set_sensitive(False)
 
+        try:
+            crypted = crypt_password(password)
+        except (RuntimeError, OSError) as e:
+            self._add_btn.set_sensitive(True)
+            self._error_label.set_label(f'Could not hash the password: {e}')
+            self._error_label.set_visible(True)
+            return
+
         bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
         try:
             reply = bus.call_sync(
@@ -201,7 +210,7 @@ class _AddUserDialog(Gtk.Window):
             (user_path,) = reply.unpack()
             bus.call_sync(
                 ACCOUNTS_BUS_NAME, user_path, USER_IFACE, 'SetPassword',
-                GLib.Variant('(ss)', (password, '')),
+                GLib.Variant('(ss)', (crypted, '')),
                 None, Gio.DBusCallFlags.NONE, -1, None,
             )
         except GLib.Error as e:

@@ -138,10 +138,16 @@ pipeline='pipeline_default'
 
 [org/gnome/shell/extensions/blur-my-shell/panel]
 # OFF: macos-top-panel owns the menu bar look (transparent, or its own
-# wallpaper-slice blur via the Menu Bar tab). blur-my-shell's schema defaults
-# this to enabled=true, which is the mystery blur that survives toggling the
-# peachOS "menu bar blur" switch -- they're two different things.
-enabled=false
+# wallpaper-slice blur via the Menu Bar tab). This blur-my-shell (v72) has NO
+# "enabled" key -- the "enabled=false" that lived here was a silent no-op, and
+# a blurred top bar shipped on every ISO because of it (the "unremovable blur"
+# that survived toggling the peachOS Menu Bar switch -- different mechanism).
+# The real switches: "blur" does the gaussian pass, "override-background"
+# restyles the panel background even with blur off. Both must be false, and
+# both are locked (see locks/01-peachos) so a settings-version migration or
+# the blur-my-shell prefs UI can't turn them back on.
+blur=false
+override-background=false
 brightness=0.59999999999999998
 corner-radius=0
 pipeline='pipeline_default'

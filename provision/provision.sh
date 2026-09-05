@@ -388,6 +388,15 @@ echo "==> Installing live-session lock guard (boot=live only, see disable-lock.s
 install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
 install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
 
+# Live-session installer polkit rule: "Install peachOS" runs `pkexec eggs
+# sysinstall`, and eggs' own passwordless action doesn't match here because
+# /usr/bin/eggs is a symlink to coa -- so without this the launcher prompts
+# for the "live" account's undocumented password. Scoped to user "live", which
+# Calamares deletes on install, so it's inert on a real system. See the rule's
+# own header for the full reasoning.
+echo "==> Installing live-session installer polkit rule (user 'live' only)"
+install -Dm644 "$REPO_DIR/provision/polkit/49-peachos-live.rules" /etc/polkit-1/rules.d/49-peachos-live.rules
+
 # Firefox's MacTahoe theme (userChrome.css/userContent.css) only ever lived inside this dev
 # VM's own snap Firefox profile -- no install step anywhere seeded it for a new account,
 # meaning a fresh install or live boot would show completely stock Firefox. The theme assets
@@ -1119,6 +1128,12 @@ cp "$REPO_DIR"/assets/lockscreen/*.mp4 /usr/share/peachos/lockscreen/
 echo "==> Installing peachOS dconf system defaults"
 mkdir -p /etc/dconf/db/local.d
 cp "$REPO_DIR/provision/dconf/01-peachos" /etc/dconf/db/local.d/01-peachos
+
+# Key locks (values a user / an extension prefs UI / a schema migration must
+# not be able to override -- e.g. blur-my-shell's panel blur, which macos-top-
+# panel owns). rsync --delete so a lock removed from the repo also goes away.
+mkdir -p /etc/dconf/db/local.d/locks
+rsync -a --delete "$REPO_DIR/provision/dconf/locks/" /etc/dconf/db/local.d/locks/
 
 mkdir -p /etc/dconf/profile
 if [[ ! -f /etc/dconf/profile/user ]]; then
