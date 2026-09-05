@@ -28,6 +28,7 @@ import St from 'gi://St';
 import {MediaPlayerController} from './mediaPlayerController.js';
 import {PowerStatusWatcher, formatTimeToFull} from './powerStatus.js';
 import {LocalSendWatcher} from './localSendWatcher.js';
+import {DndController} from './dndController.js';
 
 const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
 const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
@@ -115,6 +116,7 @@ export class DynamicIsland {
         this._transientActive = false;
         this._transientTimerId = 0;
         this._transientStyleClass = null;
+        this._dndInitialized = false;
 
         this._buildActor();
         this._subscribeToDaemon();
@@ -155,6 +157,21 @@ export class DynamicIsland {
 
         this._localSendWatcher = new LocalSendWatcher(filename => {
             this._showTransient('folder-download-symbolic', `Received "${filename}"`, 'dynamic-island--localsend');
+        });
+
+        // Do Not Disturb toggled -> a brief toast, on and off. DndController fires its
+        // callback once synchronously from its own constructor to report the current state;
+        // that first call is the startup value, not a toggle, so it must not toast (the
+        // _dndInitialized latch below -- undefined/false on that first synchronous call).
+        this._dndController = new DndController(({dnd}) => {
+            if (!this._dndInitialized) {
+                this._dndInitialized = true;
+                return;
+            }
+            this._showTransient(
+                'weather-clear-night-symbolic',
+                dnd ? 'Do Not Disturb On' : 'Do Not Disturb Off',
+                'dynamic-island--dnd');
         });
 
         this._sync();
@@ -496,6 +513,8 @@ export class DynamicIsland {
         this._powerWatcher = null;
         this._localSendWatcher?.destroy();
         this._localSendWatcher = null;
+        this._dndController?.destroy();
+        this._dndController = null;
         if (this._mediaEqTimerId) {
             GLib.source_remove(this._mediaEqTimerId);
             this._mediaEqTimerId = 0;

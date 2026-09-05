@@ -773,6 +773,10 @@
   border: 1px solid rgba(10, 132, 255, 0.6);
 }
 
+.dynamic-island--dnd {
+  border: 1px solid rgba(191, 90, 242, 0.6);
+}
+
 .dynamic-island-transient {
   spacing: 7px;
 }
@@ -785,6 +789,11 @@
 .dynamic-island--localsend .dynamic-island-transient-icon,
 .dynamic-island--localsend .dynamic-island-transient-label {
   color: #0A84FF;
+}
+
+.dynamic-island--dnd .dynamic-island-transient-icon,
+.dynamic-island--dnd .dynamic-island-transient-label {
+  color: #BF5AF2;
 }
 
 .dynamic-island-transient-label {
