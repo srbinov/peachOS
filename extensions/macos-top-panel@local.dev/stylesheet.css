@@ -450,6 +450,30 @@
   spacing: 12px;
 }
 
+/* "Manage Widgets" pill at the very bottom of the Control Center -- flips the
+ * peachos-widgets extension into desktop edit mode. */
+.macos-control-center-manage-widgets {
+  border-radius: 14px;
+  padding: 9px 14px;
+  color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+}
+
+.macos-control-center-manage-widgets .macos-control-center-row {
+  spacing: 8px;
+}
+
+.macos-control-center-manage-widgets-icon {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.macos-control-center-manage-widgets:hover,
+.macos-control-center-manage-widgets:focus {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
 /*
  * Liquid-glass recipe (CSS approximation of the macOS Control Center look):
  * translucent fill + vertical highlight gradient + brighter rim + soft

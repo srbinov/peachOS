@@ -25,6 +25,7 @@ import {shouldUseDarkContent} from './liquidGlassIntensity.js';
 
 const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
+const WIDGETS_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-widgets';
 
 const CONTROL_CENTER_MENU_WIDTH = 314; // matches .macos-control-center-menu in stylesheet.css
 
@@ -76,6 +77,18 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // through both.
         this._panelSettings = new Gio.Settings({schema_id: PANEL_SCHEMA_ID});
         this._interfaceSettings = new Gio.Settings({schema_id: INTERFACE_SCHEMA_ID});
+
+        // peachos-widgets ships its own schema; look it up rather than assume
+        // it's installed, so the Control Center still builds if that extension
+        // isn't deployed.
+        this._widgetsSettings = null;
+        try {
+            const wschema = Gio.SettingsSchemaSource.get_default()?.lookup(WIDGETS_SCHEMA_ID, true);
+            if (wschema)
+                this._widgetsSettings = new Gio.Settings({settings_schema: wschema});
+        } catch (e) {
+            logError(e, '[macos-top-panel] peachos-widgets schema lookup failed');
+        }
         this._iconTintSettingsChangedId = this._panelSettings.connect(
             'changed::liquid-glass-intensity', () => this._applyIconTint());
         this._iconTintColorSchemeChangedId = this._interfaceSettings.connect(
@@ -331,6 +344,35 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._tileBlur.register(this._dndCircle.button);
         this._backgroundAdaptive.register(this._dndCircle.button);
         this._utilityRow.add_child(this._dndCircle.button);
+
+        // "Manage Widgets" pill -- flips the peachos-widgets extension's
+        // `edit-mode` gsetting (cross-extension, by schema, no import). Only
+        // shown when that extension's schema is actually installed.
+        if (this._widgetsSettings) {
+            this._manageWidgetsButton = new St.Button({
+                style_class: 'macos-control-center-manage-widgets',
+                can_focus: true,
+                x_expand: true,
+            });
+            const mwContent = new St.BoxLayout({style_class: 'macos-control-center-row'});
+            mwContent.add_child(new St.Icon({
+                icon_name: 'view-grid-symbolic',
+                icon_size: 16,
+                style_class: 'macos-control-center-manage-widgets-icon',
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            mwContent.add_child(new St.Label({
+                text: 'Manage Widgets',
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            this._manageWidgetsButton.set_child(mwContent);
+            this._manageWidgetsButton.connect('clicked', () => {
+                this._widgetsSettings.set_boolean(
+                    'edit-mode', !this._widgetsSettings.get_boolean('edit-mode'));
+                this.menu.close();
+            });
+            this._container.add_child(this._manageWidgetsButton);
+        }
 
         this.menu.addMenuItem(root);
     }

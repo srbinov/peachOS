@@ -1,23 +1,31 @@
-// peachOS Desktop Widgets -- Phase 0 shader spike.
+// peachOS Desktop Widgets.
 //
-// Places one glass squircle (and one solid squircle) on the desktop, above
-// the wallpaper and below all windows, to prove the ported liquid-glass
-// shader (shaders/liquidglass.glsl via lib/liquidGlass.js) renders on GNOME
-// and refracts the real wallpaper. No settings, no picker, no persistence yet
-// -- see .claude/plans/fluffy-dreaming-canyon.md.
+// A widget layer above the wallpaper / below windows (lib/widgetLayer.js),
+// placed widgets persisted as JSON in the `widgets` gsetting, an edit mode
+// (lib/editMode.js) toggled by the `edit-mode` gsetting that the Control
+// Center's "Manage Widgets" pill flips, and a bottom-left liquid-glass picker
+// (lib/widgetPicker.js). Widget content lives in widgets/, shared data
+// providers in lib/providers/. See .claude/plans/fluffy-dreaming-canyon.md.
 
-import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {makeLiquidGlass} from './lib/liquidGlass.js';
+import {WidgetLayer} from './lib/widgetLayer.js';
+import {EditMode} from './lib/editMode.js';
+import {WeatherProvider} from './lib/providers/weather.js';
+import {CalendarSource} from './lib/providers/calendar.js';
 
 export default class PeachosWidgetsExtension extends Extension {
     enable() {
+        this._settings = this.getSettings();
+        // Never boot straight into edit mode (e.g. after a crash mid-edit).
+        this._settings.set_boolean('edit-mode', false);
+
         this._bgSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
+        this._ifaceSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
 
         if (Main.layoutManager._startingUp) {
             Main.layoutManager.connectObject('startup-complete',
@@ -29,88 +37,66 @@ export default class PeachosWidgetsExtension extends Extension {
 
     _build() {
         try {
-            // The widget layer lives *inside* Main.layoutManager._backgroundGroup
-            // -- the same parent azclock ("Desktop Widgets") uses. That group is
-            // pinned to the bottom of global.window_group, so everything in it
-            // renders below every window; adding our layer as its top child puts
-            // it just above the wallpaper actors. (Parenting straight into
-            // global.window_group does NOT work: Mutter's stacking sync forces
-            // unknown non-window actors above the windows.)
-            this._layer = new Clutter.Actor({name: 'peachos-widget-layer'});
-            Main.layoutManager._backgroundGroup.add_child(this._layer);
-            this._raise();
+            this._weather = new WeatherProvider(this._settings);
+            this._calendar = new CalendarSource();
 
-            const mon = Main.layoutManager.primaryMonitor;
+            const ctx = {
+                settings: this._settings,
+                weather: this._weather,
+                calendar: this._calendar,
+            };
 
-            // Glass squircle straddling the mountains/waterline so the
-            // refraction is actually visible (over flat sky you can't tell).
-            this._glass = makeLiquidGlass({
-                innerW: 280, innerH: 170,
-                x: mon.x + 160, y: mon.y + Math.round(mon.height * 0.42),
-                radius: 34, roundness: 7.0,
-            });
-            this._layer.add_child(this._glass.widget);
+            this._layer = new WidgetLayer(this._settings, ctx);
+            this._editMode = new EditMode(this._layer, this._settings);
 
-            // Solid squircle up in the sky -- just checks opacity + silhouette.
-            this._solid = makeLiquidGlass({
-                innerW: 280, innerH: 170,
-                x: mon.x + 160, y: mon.y + 70,
-                radius: 34, roundness: 7.0, solid: true,
-            });
-            this._layer.add_child(this._solid.widget);
+            this._settings.connectObject('changed::edit-mode',
+                () => this._editMode.sync(), this);
 
-            // Seed a pointer position so the corner specular shows up in a
-            // screenshot even without a live cursor over the glass.
-            this._glass.effect.setPointer(0.15, 0.15, 1.0);
+            // A wallpaper / theme change rebuilds the background actors above the
+            // widget layer -- re-raise it and refresh every widget's backdrop
+            // crop (deferred, so it runs after the shell's own restack).
+            const onBgChange = () => {
+                if (this._bgRaiseId)
+                    return;
+                this._bgRaiseId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                    this._bgRaiseId = 0;
+                    this._layer?.raise();
+                    this._layer?.refreshBackdrops();
+                    return GLib.SOURCE_REMOVE;
+                });
+            };
+            this._bgSettings.connectObject('changed', onBgChange, this);
+            this._ifaceSettings.connectObject('changed::color-scheme', onBgChange, this);
 
-            // A wallpaper or monitor change rebuilds the background actors on
-            // top of us -- bump the layer back above them (deferred so it runs
-            // after the shell has finished its own restack).
-            Main.layoutManager.connectObject('monitors-changed',
-                () => this._raiseLater(), this);
-            this._bgSettings.connectObject('changed',
-                () => this._raiseLater(), this);
-
-            console.log('[peachos-widgets] Phase 0 spike: 2 squircles placed on the desktop');
+            console.log(`[peachos-widgets] enabled (${this._layer.count} widget(s) placed)`);
         } catch (e) {
             logError(e, '[peachos-widgets] _build() failed');
             this.disable();
         }
     }
 
-    _raise() {
-        if (this._layer && this._layer.get_parent())
-            this._layer.get_parent().set_child_above_sibling(this._layer, null);
-    }
-
-    _raiseLater() {
-        if (this._raiseId)
-            return;
-        this._raiseId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._raiseId = 0;
-            this._raise();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
     disable() {
         Main.layoutManager.disconnectObject(this);
+        this._settings?.disconnectObject(this);
         this._bgSettings?.disconnectObject(this);
+        this._ifaceSettings?.disconnectObject(this);
+
+        if (this._bgRaiseId) {
+            GLib.source_remove(this._bgRaiseId);
+            this._bgRaiseId = 0;
+        }
+
+        this._editMode?.destroy();
+        this._layer?.destroy();
+        this._weather?.destroy();
+        this._calendar?.destroy();
+
+        this._editMode = null;
+        this._layer = null;
+        this._weather = null;
+        this._calendar = null;
+        this._settings = null;
         this._bgSettings = null;
-
-        if (this._raiseId) {
-            GLib.source_remove(this._raiseId);
-            this._raiseId = 0;
-        }
-
-        this._glass?.widget?.destroy();
-        this._solid?.widget?.destroy();
-        this._glass = null;
-        this._solid = null;
-
-        if (this._layer) {
-            this._layer.destroy();
-            this._layer = null;
-        }
+        this._ifaceSettings = null;
     }
 }

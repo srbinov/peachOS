@@ -1,0 +1,287 @@
+/* peachOS Desktop Widgets.
+ *
+ * Everything sits on a liquid-glass squircle over the wallpaper, so text is
+ * light with a soft shadow for legibility and chrome is kept minimal. The
+ * squircle silhouette + refraction come from the shader (lib/liquidGlass.js);
+ * CSS here only styles the content laid over it. */
+
+/* ---- shared widget content ------------------------------------------- */
+
+.peachos-widget-clock,
+.peachos-widget-weather,
+.peachos-widget-calendar {
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    padding: 10px 14px;
+}
+
+.peachos-widget-clock-time {
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.peachos-widget-clock-date {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.85;
+    padding-top: 2px;
+}
+
+/* ---- weather --------------------------------------------------------- */
+
+.peachos-widget-weather-top {
+    spacing: 10px;
+}
+
+.peachos-widget-weather-icon {
+    icon-size: 40px;
+    color: #ffffff;
+}
+
+.peachos-widget-weather-temp {
+    font-size: 30px;
+    font-weight: 600;
+}
+
+.peachos-widget-weather-place {
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.peachos-widget-weather-cond {
+    font-size: 12px;
+    opacity: 0.82;
+    padding-top: 4px;
+}
+
+.peachos-widget-weather-status {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.peachos-widget-weather-strip {
+    spacing: 6px;
+    padding-top: 10px;
+}
+
+.peachos-widget-weather-day {
+    spacing: 3px;
+}
+
+.peachos-widget-weather-day-label {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.peachos-widget-weather-day-icon {
+    icon-size: 18px;
+    color: #ffffff;
+}
+
+.peachos-widget-weather-day-temp {
+    font-size: 10px;
+    opacity: 0.9;
+}
+
+/* ---- calendar ------------------------------------------------------- */
+
+.peachos-widget-calendar-header {
+    font-size: 14px;
+    font-weight: 600;
+    padding-bottom: 6px;
+}
+
+.peachos-widget-calendar-grid {
+    spacing: 2px;
+}
+
+.peachos-widget-calendar-weekday {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.6;
+    min-width: 26px;
+}
+
+.peachos-widget-calendar-cell {
+    min-width: 26px;
+    min-height: 24px;
+}
+
+.peachos-widget-calendar-day {
+    font-size: 12px;
+    opacity: 0.92;
+}
+
+.peachos-widget-calendar-day--today {
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #1a1a1a;
+    font-weight: 700;
+    border-radius: 11px;
+    padding: 1px 5px;
+    text-shadow: none;
+}
+
+.peachos-widget-calendar-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 2px;
+    background-color: rgba(255, 255, 255, 0.9);
+    margin-top: 2px;
+}
+
+.peachos-widget-calendar-agenda {
+    spacing: 4px;
+    padding-top: 8px;
+}
+
+.peachos-widget-calendar-agenda-row {
+    spacing: 8px;
+}
+
+.peachos-widget-calendar-agenda-title {
+    font-size: 11px;
+}
+
+.peachos-widget-calendar-agenda-time {
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.peachos-widget-calendar-agenda-empty {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* ---- edit-mode chrome on a placed widget --------------------------- */
+
+.peachos-widget--editing {
+    /* faint grab affordance -- the shader draws no border of its own */
+}
+
+.peachos-widget--dragging {
+    /* handled by the shader specular; nothing to do here */
+}
+
+.peachos-widget-remove {
+    background-color: rgba(20, 20, 22, 0.82);
+    color: #ffffff;
+    border-radius: 12px;
+    width: 22px;
+    height: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.peachos-widget-remove:hover {
+    background-color: rgba(220, 60, 55, 0.95);
+}
+
+/* ---- picker -------------------------------------------------------- */
+
+.peachos-picker-body {
+    spacing: 0;
+}
+
+.peachos-picker-rail {
+    spacing: 8px;
+    padding: 14px 10px;
+    background-color: rgba(0, 0, 0, 0.18);
+}
+
+.peachos-picker-rail-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.peachos-picker-rail-btn:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.peachos-picker-rail-btn.selected {
+    background-color: rgba(255, 255, 255, 0.28);
+}
+
+.peachos-picker-done {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    color: #ffffff;
+    background-color: rgba(60, 170, 90, 0.45);
+}
+
+.peachos-picker-done:hover {
+    background-color: rgba(60, 190, 100, 0.7);
+}
+
+.peachos-picker-main {
+    padding: 16px 18px;
+    spacing: 2px;
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.peachos-picker-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.peachos-picker-hint {
+    font-size: 11px;
+    opacity: 0.7;
+    padding-bottom: 10px;
+}
+
+.peachos-picker-scroll {
+    padding-right: 4px;
+}
+
+.peachos-picker-grid {
+    spacing: 12px;
+    padding: 4px 0;
+}
+
+.peachos-picker-card {
+    width: 116px;
+    height: 108px;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+}
+
+.peachos-picker-card:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.peachos-picker-card-icon {
+    color: #ffffff;
+    padding-bottom: 6px;
+}
+
+.peachos-picker-card-label {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.peachos-picker-card-dim {
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.peachos-picker-ghost {
+    background-color: rgba(20, 20, 22, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 10px 12px;
+    spacing: 4px;
+    color: #ffffff;
+}
+
+.peachos-picker-ghost-label {
+    font-size: 11px;
+    font-weight: 600;
+}

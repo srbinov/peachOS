@@ -1,8 +1,9 @@
 {
     "uuid": "peachos-widgets@peachos",
     "name": "peachOS Desktop Widgets",
-    "description": "macOS-style liquid-glass desktop widgets. Phase 0: shader spike (one glass squircle on the desktop).",
+    "description": "macOS-style liquid-glass desktop widgets: clock, weather and calendar, placed from a Control Center picker.",
     "shell-version": ["50"],
-    "version-name": "0.1.0",
+    "version-name": "0.2.0",
+    "settings-schema": "org.gnome.shell.extensions.peachos-widgets",
     "url": "https://github.com/srbinov/peachOS"
 }

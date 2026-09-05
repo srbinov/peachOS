@@ -1,5 +1,6 @@
-// LiquidGlass: a St.Widget that paints the wallpaper crop behind it and runs
-// the ported refraction shader (shaders/liquidglass.glsl) over it.
+// LiquidGlass: a St.Widget that paints the wallpaper crop behind it, runs the
+// ported refraction shader (shaders/liquidglass.glsl) over it, and exposes a
+// `content` child positioned over the visible glass for the widget to fill.
 //
 // The actor is (innerW + 2*MARGIN) x (innerH + 2*MARGIN). The visible glass
 // squircle is the centred innerW x innerH region; the MARGIN border is extra
@@ -16,14 +17,20 @@ import {buildWallpaperTexture} from './wallpaperTexture.js';
 export const MARGIN = 40;
 
 // KDE LiquidGlass.qml defaults, tuned for widget-pixel coordinates.
+//
+// The KDE numbers make a strong lens: a fat edge band, big displacement and a
+// visible rainbow fringe. peachOS wants the calmer "frosted pane with a bright
+// rim" look, so the refraction is dialled right down (a gentle bend in a thin
+// edge band) and the chromatic dispersion is off. The squircle silhouette and
+// the edge/corner specular -- the parts that read as "glass" -- are unchanged.
 const DEFAULTS = {
     radius: 28,
     roundness: 7.0,
-    refractThickness: 35,
+    refractThickness: 16,
     refractIOR: 1.7,
-    refractScale: 65,
-    chromaStrength: 0.30,
-    tint: [1.0, 1.0, 1.0, 0.10],       // r,g,b,a
+    refractScale: 14,
+    chromaStrength: 0.0,
+    tint: [1.0, 1.0, 1.0, 0.12],       // r,g,b,a
     tintBottom: [0.0, 0.0, 0.0, 0.0],
     specStrength: 0.70,
     overlay: [0.0, 0.0, 0.0, 0.0],
@@ -98,35 +105,68 @@ class LiquidGlassEffect extends Clutter.ShaderEffect {
 /**
  * @param {object} opts  { innerW, innerH, x, y, radius?, roundness?, solid? }
  *   x/y are the top-left of the *visible glass* in stage coords.
- * @returns {{ widget: St.Widget, effect: LiquidGlassEffect }}
+ * @returns {{
+ *   widget: St.Widget, effect: LiquidGlassEffect, content: St.Widget,
+ *   setInnerPos: (x:number, y:number) => void, refresh: () => void,
+ * }}
  */
 export function makeLiquidGlass(opts) {
-    const {innerW, innerH, x, y} = opts;
+    const {innerW, innerH} = opts;
     const actorW = innerW + 2 * MARGIN;
     const actorH = innerH + 2 * MARGIN;
+    const solid = !!opts.solid;
 
     const widget = new St.Widget({
         width: actorW, height: actorH,
-        x: x - MARGIN, y: y - MARGIN,
+        x: opts.x - MARGIN, y: opts.y - MARGIN,
         reactive: false,
     });
 
     const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-    if (opts.solid) {
-        widget.style = 'background-color: rgb(26,27,30);';
-    } else {
+
+    const applyBackdrop = () => {
+        if (solid) {
+            widget.style = 'background-color: rgb(26,27,30);';
+            return;
+        }
         const tex = buildWallpaperTexture(
             {x: widget.x, y: widget.y, width: actorW, height: actorH},
             actorW * scale, actorH * scale);
-        if (tex)
+        if (tex) {
             widget.set_content(tex);
-        else
+            widget.style = null;
+        } else {
             widget.style = 'background-color: rgba(20,20,20,0.5);';
-    }
+        }
+    };
+    applyBackdrop();
 
     const effect = new LiquidGlassEffect();
     widget.add_effect(effect);
-    effect.configure({innerW, innerH, radius: opts.radius, roundness: opts.roundness, solid: opts.solid});
+    effect.configure({
+        innerW, innerH,
+        radius: opts.radius, roundness: opts.roundness, solid,
+    });
 
-    return {widget, effect};
+    // The content overlay is a SIBLING of `widget`, not a child: the shader
+    // effect processes its actor's whole painted subtree as one texture, so a
+    // child would get refracted/tinted along with the wallpaper. Callers parent
+    // both into the same container and keep them aligned via setInnerPos().
+    const content = new St.Widget({
+        x: opts.x, y: opts.y, width: innerW, height: innerH,
+        layout_manager: new Clutter.BinLayout(),
+    });
+
+    return {
+        widget,
+        effect,
+        content,
+        setInnerPos(x, y) {
+            widget.set_position(x - MARGIN, y - MARGIN);
+            content.set_position(x, y);
+        },
+        refresh() {
+            applyBackdrop();
+        },
+    };
 }
