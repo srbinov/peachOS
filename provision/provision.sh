@@ -1076,8 +1076,20 @@ for ext_dir in "$REPO_DIR"/extensions/*/; do
         # in /usr/share/glib-2.0/schemas the extension throws "schema not found" on enable and
         # never loads -- no top bar. The Settings app's Menu Bar page reads the same schema
         # and crashes for the same reason. Install every extension schema globally too.
+        #
+        # rm -f each destination first: perfect-lockscreen's GDM wiring (install-gdm-dlc.sh,
+        # below) turns its own global-schema copy into a symlink back at this same extension's
+        # schemas/ file, and on a re-provision that symlink now resolves to the exact path
+        # rsync just recreated above -- plain `install` refuses to copy a file onto itself
+        # ("are the same file"), aborting the whole script. Deleting whatever's there first
+        # (symlink or not) makes this loop idempotent regardless of what a later step in a
+        # previous run left behind; install-gdm-dlc.sh's own `ln -sf` re-establishes the
+        # symlink again afterward either way.
         install -d /usr/share/glib-2.0/schemas
-        install -m644 "$dest"/schemas/*.gschema.xml /usr/share/glib-2.0/schemas/
+        for schema_file in "$dest"/schemas/*.gschema.xml; do
+            rm -f "/usr/share/glib-2.0/schemas/$(basename "$schema_file")"
+            install -m644 "$schema_file" /usr/share/glib-2.0/schemas/
+        done
     fi
 done
 glib-compile-schemas /usr/share/glib-2.0/schemas/
