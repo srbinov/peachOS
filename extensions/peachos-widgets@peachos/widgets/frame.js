@@ -100,7 +100,9 @@ export class WidgetFrame {
         this._syncChrome();
     }
 
-    refreshBackdrop() {}
+    refreshBackdrop() {
+        this._glass?.refresh();
+    }
 
     setEditing(editing) {
         this._editing = editing;
@@ -150,6 +152,7 @@ export class WidgetFrame {
             this._endDrag();
             const r = this.innerRect();
             this.setInnerPos(Math.round(r.x / GRID) * GRID, Math.round(r.y / GRID) * GRID);
+            this.refreshBackdrop();
             this._callbacks.onMoved(this);
             return Clutter.EVENT_STOP;
         }

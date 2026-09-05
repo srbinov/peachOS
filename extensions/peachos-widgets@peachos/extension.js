@@ -15,6 +15,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {WidgetLayer} from './lib/widgetLayer.js';
 import {EditMode} from './lib/editMode.js';
+import {invalidateWallpaper} from './lib/wallpaperCrop.js';
 import {WeatherProvider} from './lib/providers/weather.js';
 import {CalendarSource} from './lib/providers/calendar.js';
 
@@ -61,6 +62,7 @@ export default class PeachosWidgetsExtension extends Extension {
                     return;
                 this._bgRaiseId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                     this._bgRaiseId = 0;
+                    invalidateWallpaper();
                     this._layer?.raise();
                     this._layer?.refreshBackdrops();
                     return GLib.SOURCE_REMOVE;

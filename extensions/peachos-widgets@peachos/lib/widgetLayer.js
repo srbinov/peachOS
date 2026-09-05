@@ -151,6 +151,7 @@ export class WidgetLayer {
         x = Math.max(m.x + 8, Math.min(m.x + m.width - size.w - 8, x));
         y = Math.max(m.y + 8, Math.min(m.y + m.height - size.h - 8, y));
         frame.setInnerPos(Math.round(x), Math.round(y));
+        frame.refreshBackdrop();
     }
 
     _onFrameResized(frame) {

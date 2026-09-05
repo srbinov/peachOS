@@ -1,50 +1,35 @@
 // The widget card. Three modes, matching the KDE liquidglass widgets:
 //
-//   glass -- translucent white fill + highlight gradient + bright rim +
-//            a real backdrop blur (Shell.BlurEffect, BACKGROUND mode -- the
-//            same frosted-glass technique the Control Center tiles use).
-//   dark  -- opaque #1c1c1e card, white content.
-//   light -- opaque #ffffff card, dark content.
+//   glass -- a blurred wallpaper crop (lib/wallpaperCrop.js) + a translucent
+//            white tint/gradient on top + a hairline rim.
+//   dark  -- opaque #1c1c1e, white content.
+//   light -- opaque #ffffff, dark content.
 //
-// Always full strength; not tied to the Settings "Liquid Glass" slider.
+// The squircle silhouette + rim come from a Shell.GLSLEffect
+// (lib/squircleMask.js). Always full strength; not tied to the Settings
+// "Liquid Glass" slider.
 
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
-import Shell from 'gi://Shell';
+
+import {SquircleMaskEffect} from './squircleMask.js';
+import {buildBlurredCrop} from './wallpaperCrop.js';
 
 export const MARGIN = 0;
-
-const GLASS = `
-    background-color: rgba(255, 255, 255, 0.15);
-    background-gradient-direction: vertical;
-    background-gradient-start: rgba(255, 255, 255, 0.30);
-    background-gradient-end: rgba(255, 255, 255, 0.09);
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-`;
-const DARK = `
-    background-color: #1c1c1e;
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-`;
-const LIGHT = `
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-`;
-
-// Content foreground "r,g,b" per mode (glass is always white, iOS-style).
 export const MODE_FG = {glass: '255,255,255', dark: '255,255,255', light: '26,27,30'};
 
-const BLUR_NAME = 'peachos-widget-blur';
+const TINT_STYLE = `
+    background-color: rgba(255, 255, 255, 0.13);
+    background-gradient-direction: vertical;
+    background-gradient-start: rgba(255, 255, 255, 0.26);
+    background-gradient-end: rgba(255, 255, 255, 0.05);
+`;
+const RIM = {
+    glass: [1, 1, 1, 0.5],
+    dark: [1, 1, 1, 0.12],
+    light: [0, 0, 0, 0.1],
+};
 
-function baseStyle(mode) {
-    return mode === 'dark' ? DARK : mode === 'light' ? LIGHT : GLASS;
-}
-
-/**
- * @param {object} opts { innerW, innerH, x, y, radius, mode }
- */
 export function makeLiquidGlass(opts) {
     const {innerW, innerH, x, y} = opts;
     const radius = opts.radius ?? 32;
@@ -52,24 +37,33 @@ export function makeLiquidGlass(opts) {
 
     const widget = new St.Widget({
         width: innerW, height: innerH, x, y,
-        style: `${baseStyle(mode)} border-radius: ${radius}px;`,
         reactive: false,
         layout_manager: new Clutter.BinLayout(),
     });
 
+    let applyCrop = () => {};
     if (mode === 'glass') {
-        try {
-            const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-            widget.add_effect_with_name(BLUR_NAME, new Shell.BlurEffect({
-                name: BLUR_NAME,
-                mode: Shell.BlurMode.BACKGROUND,
-                radius: 18 * scale,
-                brightness: 1.0,
-            }));
-        } catch (e) {
-            logError(e, '[peachos-widgets] backdrop blur unavailable');
-        }
+        const tint = new St.Widget({style: TINT_STYLE, x_expand: true, y_expand: true});
+        widget.add_child(tint);
+        applyCrop = () => {
+            const c = buildBlurredCrop({x: widget.x, y: widget.y, w: innerW, h: innerH});
+            if (c)
+                widget.set_content(c);
+        };
+        applyCrop();
+    } else {
+        widget.style = mode === 'dark'
+            ? 'background-color: #1c1c1e;'
+            : 'background-color: #ffffff;';
     }
+
+    const mask = new SquircleMaskEffect();
+    widget.add_effect(mask);
+    mask.configure({
+        w: innerW, h: innerH, radius, exponent: 8,
+        borderWidth: 1,
+        borderColor: RIM[mode],
+    });
 
     const content = new St.Widget({
         layout_manager: new Clutter.BinLayout(),
@@ -85,9 +79,8 @@ export function makeLiquidGlass(opts) {
         setInnerPos(nx, ny) {
             widget.set_position(Math.round(nx), Math.round(ny));
         },
-        setRadius(r) {
-            widget.style = `${baseStyle(mode)} border-radius: ${r}px;`;
+        refresh() {
+            applyCrop();
         },
-        refresh() {},
     };
 }
