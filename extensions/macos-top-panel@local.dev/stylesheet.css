@@ -763,41 +763,39 @@
   border: 1px solid rgba(255, 59, 48, 0.6);
 }
 
-/* One-off toasts (charging started, LocalSend receipt) -- green/blue accents so they read as
-   distinct events, not the mic's own red "recording" signal. */
-.dynamic-island--charging {
-  border: 1px solid rgba(52, 199, 89, 0.6);
-}
-
-.dynamic-island--localsend {
-  border: 1px solid rgba(10, 132, 255, 0.6);
-}
-
-.dynamic-island--dnd {
-  border: 1px solid rgba(191, 90, 242, 0.6);
-}
-
+/* One-off toasts (charging, battery, DND, power profile, USB, Bluetooth, screenshot, Night
+   Light, VPN, LocalSend). The per-toast accent color -- icon + label tint and the pill's
+   border -- is set inline from ACCENT in dynamicIsland.js's _showTransient(), not here, so a
+   new toast type doesn't need a CSS rule. */
 .dynamic-island-transient {
   spacing: 7px;
 }
 
-.dynamic-island--charging .dynamic-island-transient-icon,
-.dynamic-island--charging .dynamic-island-transient-label {
-  color: #34C759;
-}
-
-.dynamic-island--localsend .dynamic-island-transient-icon,
-.dynamic-island--localsend .dynamic-island-transient-label {
-  color: #0A84FF;
-}
-
-.dynamic-island--dnd .dynamic-island-transient-icon,
-.dynamic-island--dnd .dynamic-island-transient-label {
-  color: #BF5AF2;
-}
-
 .dynamic-island-transient-label {
   font-size: 0.78em;
+}
+
+/* Persistent "screen recording" pill -- red dot + label + running clock. */
+.dynamic-island-recording {
+  spacing: 7px;
+}
+
+.dynamic-island-recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background-color: #FF453A;
+}
+
+.dynamic-island-recording-label {
+  font-size: 0.78em;
+  color: white;
+}
+
+.dynamic-island-recording-elapsed {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #FF453A;
 }
 
 .dynamic-island-dictation,

@@ -1,21 +1,34 @@
 // lib/dynamicIsland.js
 //
 // A center-of-the-top-bar pill, mirroring iOS's Dynamic Island in spirit but scoped to what
-// actually has a real, live data source on this desktop: Peach Intelligence's own recording
-// state (a waveform driven by the daemon's real, live microphone level -- see _onAudioLevel(),
-// not a canned animation -- plus a real elapsed-time counter) and media playback (MPRIS, via
-// the exact same MediaPlayerController controlCenterIndicator.js's own media card already
-// uses -- a second, independent instance here). Deliberately NOT attempted: calls, turn-by-
-// turn navigation, ride-share/delivery tracking, Face ID -- none of those have a real backing
-// service on a Linux desktop the way MPRIS/this extension's own gsettings do, and a fake stub
-// would just be decoration with no data behind it.
+// actually has a real, live data source on this desktop. Every state below is driven by a
+// genuine signal -- no stubs, no canned decoration standing in for data that doesn't exist:
 //
-// Styled directly off real Dynamic Island reference screenshots (voice memo, phone call,
-// Focus): always a fixed near-black pill, never adapting to the bar's own light/dark
-// foreground the way every other indicator in this stylesheet does -- the real thing doesn't
-// either, it's tied to the physical camera cutout, always black -- with a bright per-context
-// accent color for whatever's actually active (red for recording, matching both the voice-
-// memo and phone-call references) rather than a single foreground/background swap.
+//   Persistent (the pill stays up for the whole activity):
+//     - Peach Intelligence dictation -- waveform driven by the daemon's real microphone level
+//       (_onAudioLevel), plus a live elapsed counter
+//     - media playback -- MPRIS, via the same MediaPlayerController the Control Center uses
+//     - screen recording -- Main.screenshotUI.screencast-in-progress (the shell's own flag)
+//
+//   One-off toasts (take the pill over for ~3s, then hand it back -- see _showTransient):
+//     - charger plugged in / battery low / battery fully charged  (UPower)
+//     - Do Not Disturb toggled                                    (org.gnome.desktop.notifications)
+//     - power profile changed                                     (power-profiles-daemon)
+//     - USB / external drive mounted or ejected                   (Gio.VolumeMonitor)
+//     - a Bluetooth device connected or disconnected              (BlueZ)
+//     - a screenshot / recording was saved                        (Screenshots folder monitor)
+//     - Night Light turned on or off                              (gnome-settings-daemon Color)
+//     - a VPN connected or disconnected                           (NetworkManager)
+//     - a file arrived over LocalSend                             (Downloads folder monitor)
+//
+// Deliberately NOT attempted: phone-style calls, turn-by-turn navigation, ride-share/delivery
+// tracking, Face ID, a mirror of GNOME Clocks' timer/stopwatch (Clocks persists only the
+// preset duration, never live countdown state) -- none have a real backing signal here.
+//
+// Styled off real Dynamic Island reference screenshots (voice memo, phone call, Focus):
+// always a fixed near-black pill, never adapting to the bar's own light/dark foreground --
+// the real thing doesn't either, it's tied to the physical camera cutout -- with a bright
+// per-context accent color for whatever's active.
 //
 // Hidden (faded out) whenever nothing is active; Main.panel._centerBox already center-aligns
 // its children in the panel, so no manual positioning math is needed the way the old floating
@@ -29,6 +42,13 @@ import {MediaPlayerController} from './mediaPlayerController.js';
 import {PowerStatusWatcher, formatTimeToFull} from './powerStatus.js';
 import {LocalSendWatcher} from './localSendWatcher.js';
 import {DndController} from './dndController.js';
+import {PowerProfileWatcher, powerProfileLabel, powerProfileIcon} from './powerProfileWatcher.js';
+import {VolumeMountWatcher} from './volumeMountWatcher.js';
+import {BluetoothWatcher} from './bluetoothWatcher.js';
+import {ScreenshotWatcher} from './screenshotWatcher.js';
+import {NightLightWatcher} from './nightLightWatcher.js';
+import {VpnWatcher} from './vpnWatcher.js';
+import {ScreenRecordingWatcher} from './screenRecordingWatcher.js';
 
 const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
 const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
@@ -60,10 +80,24 @@ const MEDIA_EQ_MIN_HEIGHT = 2;
 const MEDIA_EQ_MAX_HEIGHT = 8;
 const MEDIA_EQ_TICK_MS = 220;
 
-// One-off toasts (charging started, a file landed via LocalSend) briefly take over the pill
-// and then hand it back -- explicitly requested to be brief, not a persistent HUD: "I would
-// only want the pill to show up for like a second... then disappearing".
+// One-off toasts (charging started, a file landed via LocalSend, ...) briefly take over the
+// pill and then hand it back -- explicitly requested to be brief, not a persistent HUD: "I
+// would only want the pill to show up for like a second... then disappearing".
 const TRANSIENT_TOAST_MS = 3000;
+
+// Per-context accent colors (iOS system palette). Toasts pass one of these; it tints the
+// toast's icon + label and the pill's border for the ~3s it's up, then _clearTransient wipes
+// it. Kept as inline style rather than a CSS class per toast type -- one place, easy to add.
+const ACCENT = {
+    green: '#30D158',
+    blue: '#0A84FF',
+    purple: '#BF5AF2',
+    orange: '#FF9F0A',
+    indigo: '#5E5CE6',
+    red: '#FF453A',
+};
+
+const RECORDING_ELAPSED_TICK_MS = 500;
 
 // 'listening' shows a real elapsed-time counter instead of text (see the voice-memo
 // reference: no "Listening…" label at all, just the waveform and a running clock).
@@ -115,8 +149,10 @@ export class DynamicIsland {
         this._listenStartUs = 0;
         this._transientActive = false;
         this._transientTimerId = 0;
-        this._transientStyleClass = null;
         this._dndInitialized = false;
+        this._screenRecording = false;
+        this._recElapsedTimerId = 0;
+        this._recStartUs = 0;
 
         this._buildActor();
         this._subscribeToDaemon();
@@ -147,22 +183,27 @@ export class DynamicIsland {
         // whether the playing app's window currently has focus (see _isMediaWindowFocused()).
         this._focusChangedId = global.display.connect('notify::focus-window', () => this._sync());
 
-        this._powerWatcher = new PowerStatusWatcher(timeToFullSeconds => {
-            const suffix = formatTimeToFull(timeToFullSeconds);
-            this._showTransient(
-                'battery-good-charging-symbolic',
-                suffix ? `Charging — ${suffix}` : 'Charging',
-                'dynamic-island--charging');
+        this._powerWatcher = new PowerStatusWatcher({
+            onChargingStarted: timeToFullSeconds => {
+                const suffix = formatTimeToFull(timeToFullSeconds);
+                this._showTransient(
+                    'battery-good-charging-symbolic',
+                    suffix ? `Charging — ${suffix}` : 'Charging', ACCENT.green);
+            },
+            onLowBattery: percent =>
+                this._showTransient('battery-low-symbolic', `Low Battery — ${percent}%`, ACCENT.orange),
+            onFullyCharged: () =>
+                this._showTransient('battery-full-charged-symbolic', 'Fully Charged', ACCENT.green),
         });
 
         this._localSendWatcher = new LocalSendWatcher(filename => {
-            this._showTransient('folder-download-symbolic', `Received "${filename}"`, 'dynamic-island--localsend');
+            this._showTransient('folder-download-symbolic', `Received "${filename}"`, ACCENT.blue);
         });
 
         // Do Not Disturb toggled -> a brief toast, on and off. DndController fires its
         // callback once synchronously from its own constructor to report the current state;
         // that first call is the startup value, not a toggle, so it must not toast (the
-        // _dndInitialized latch below -- undefined/false on that first synchronous call).
+        // _dndInitialized latch -- undefined/false on that first synchronous call).
         this._dndController = new DndController(({dnd}) => {
             if (!this._dndInitialized) {
                 this._dndInitialized = true;
@@ -170,9 +211,58 @@ export class DynamicIsland {
             }
             this._showTransient(
                 'weather-clear-night-symbolic',
-                dnd ? 'Do Not Disturb On' : 'Do Not Disturb Off',
-                'dynamic-island--dnd');
+                dnd ? 'Do Not Disturb On' : 'Do Not Disturb Off', ACCENT.purple);
         });
+
+        this._powerProfileWatcher = new PowerProfileWatcher(profileId => {
+            this._showTransient(powerProfileIcon(profileId), powerProfileLabel(profileId),
+                profileId === 'performance' ? ACCENT.orange
+                    : profileId === 'power-saver' ? ACCENT.green : ACCENT.indigo);
+        });
+
+        this._volumeMountWatcher = new VolumeMountWatcher({
+            onMounted: name => this._showTransient('drive-removable-media-symbolic', `${name} connected`, ACCENT.indigo),
+            onUnmounted: name => this._showTransient('drive-removable-media-symbolic', `${name} ejected`, ACCENT.indigo),
+        });
+
+        this._bluetoothWatcher = new BluetoothWatcher({
+            onConnected: name => this._showTransient('bluetooth-active-symbolic', `${name} connected`, ACCENT.blue),
+            onDisconnected: name => this._showTransient('bluetooth-symbolic', `${name} disconnected`, ACCENT.blue),
+        });
+
+        this._screenshotWatcher = new ScreenshotWatcher({
+            onCaptured: kind => this._showTransient(
+                'camera-photo-symbolic',
+                kind === 'recording' ? 'Recording saved' : 'Screenshot saved', ACCENT.indigo),
+        });
+
+        this._nightLightWatcher = new NightLightWatcher(active => {
+            this._showTransient('night-light-symbolic',
+                active ? 'Night Light On' : 'Night Light Off', ACCENT.orange);
+        });
+
+        this._vpnWatcher = new VpnWatcher({
+            onConnected: name => this._showTransient('network-vpn-symbolic', `${name} connected`, ACCENT.green),
+            onDisconnected: name => this._showTransient('network-vpn-symbolic', `${name} disconnected`, ACCENT.green),
+        });
+
+        this._recordingWatcher = new ScreenRecordingWatcher(recording => {
+            if (recording === this._screenRecording)
+                return;
+            this._screenRecording = recording;
+            if (recording) {
+                this._startRecElapsed();
+                this._pulseRecordingDot();
+            } else {
+                this._stopRecElapsed();
+            }
+            this._sync();
+        });
+        this._screenRecording = this._recordingWatcher.isRecording;
+        if (this._screenRecording) {
+            this._startRecElapsed();
+            this._pulseRecordingDot();
+        }
 
         this._sync();
     }
@@ -266,6 +356,27 @@ export class DynamicIsland {
         this._transientBox.add_child(this._transientIcon);
         this._transientBox.add_child(this._transientLabel);
         this._container.add_child(this._transientBox);
+
+        // Persistent "screen recording" pill: a pulsing red dot + a running clock, the same
+        // read as iOS's recording indicator. Driven by ScreenRecordingWatcher.
+        this._recordingBox = new St.BoxLayout({
+            style_class: 'dynamic-island-recording', vertical: false, visible: false,
+        });
+        this._recordingDot = new St.Widget({
+            style_class: 'dynamic-island-recording-dot',
+            y_align: Clutter.ActorAlign.CENTER, y_expand: false,
+        });
+        this._recordingLabel = new St.Label({
+            style_class: 'dynamic-island-recording-label', text: 'Screen Recording',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._recordingElapsed = new St.Label({
+            style_class: 'dynamic-island-recording-elapsed', y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._recordingBox.add_child(this._recordingDot);
+        this._recordingBox.add_child(this._recordingLabel);
+        this._recordingBox.add_child(this._recordingElapsed);
+        this._container.add_child(this._recordingBox);
     }
 
     // ---- Real microphone level, from peachos-dictation-daemon's own D-Bus signal ------------
@@ -378,34 +489,78 @@ export class DynamicIsland {
         this._elapsedLabel.set_text(formatElapsed(elapsedSeconds));
     }
 
+    // ---- Screen-recording elapsed clock (its own timer -- the dictation one above is tied to
+    // the 'listening' gsetting state; these two can't run at once anyway, dictation wins) -----
+
+    _startRecElapsed() {
+        this._recStartUs = GLib.get_monotonic_time();
+        this._updateRecElapsed();
+        if (this._recElapsedTimerId)
+            GLib.source_remove(this._recElapsedTimerId);
+        this._recElapsedTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, RECORDING_ELAPSED_TICK_MS, () => {
+            this._updateRecElapsed();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _stopRecElapsed() {
+        if (this._recElapsedTimerId) {
+            GLib.source_remove(this._recElapsedTimerId);
+            this._recElapsedTimerId = 0;
+        }
+        // Settle the dot back to full opacity so it's clean if the pill shows again later.
+        this._recordingDot?.remove_all_transitions();
+        if (this._recordingDot)
+            this._recordingDot.opacity = 255;
+    }
+
+    _updateRecElapsed() {
+        this._recordingElapsed.set_text(formatElapsed((GLib.get_monotonic_time() - this._recStartUs) / 1000000));
+    }
+
+    // Slow, soft breathing on the red dot for the life of the recording -- a self-rescheduling
+    // ease rather than CSS (St has no @keyframes). The _screenRecording / _recordingDot guards
+    // stop it when recording ends or the pill is torn down.
+    _pulseRecordingDot() {
+        if (!this._screenRecording || !this._recordingDot)
+            return;
+        const next = this._recordingDot.opacity > 150 ? 80 : 255;
+        this._recordingDot.ease({
+            opacity: next,
+            duration: 750,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+            onComplete: () => this._pulseRecordingDot(),
+        });
+    }
+
     // ---- One-off toasts (charging started, LocalSend receipt) -- briefly take over the pill,
     // then hand it back to whatever _sync() would otherwise be showing. Explicitly requested
     // to be a toast, not a persistent status: "I would only want the pill to show up for like
     // a second... then disappearing" -- unlike dictation/media there's no ongoing state here,
     // just a moment-in-time event, so a fixed-duration timer (not a state machine) is honest.
 
-    _showTransient(iconName, text, styleClass) {
-        // Never interrupt an active recording with a toast -- dictation is something the user
-        // deliberately started and is mid-way through; a charger toast stealing the pill out
-        // from under them would be worse than just skipping it this once.
-        if (this._recordingState !== 'idle')
+    _showTransient(iconName, text, accentColor) {
+        // Don't let a toast stomp on something the user is actively doing in the pill:
+        // dictation (mid-utterance, has a modal grab) or a screen recording (would land in
+        // the recorded video). The event is edge-triggered, so it's just dropped, not queued.
+        if (this._recordingState !== 'idle' || this._screenRecording)
             return;
 
         if (this._transientTimerId) {
             GLib.source_remove(this._transientTimerId);
             this._transientTimerId = 0;
         }
-        if (this._transientStyleClass)
-            this._container.remove_style_class_name(this._transientStyleClass);
 
         this._transientIcon.icon_name = iconName;
+        this._transientIcon.set_style(`color: ${accentColor};`);
         this._transientLabel.set_text(text);
-        this._transientStyleClass = styleClass;
-        this._container.add_style_class_name(styleClass);
+        this._transientLabel.set_style(`color: ${accentColor};`);
+        this._container.set_style(`border: 1px solid ${accentColor}99;`);
 
         this._transientActive = true;
         this._dictationBox.visible = false;
         this._mediaBox.visible = false;
+        this._recordingBox.visible = false;
         this._transientBox.visible = true;
         this._setVisible(true);
 
@@ -422,10 +577,10 @@ export class DynamicIsland {
             GLib.source_remove(this._transientTimerId);
             this._transientTimerId = 0;
         }
-        if (this._transientStyleClass) {
-            this._container.remove_style_class_name(this._transientStyleClass);
-            this._transientStyleClass = null;
-        }
+        // set_style(null) drops the inline border added above; the pill's base look comes
+        // from the .dynamic-island class, and the dictation --error border is a style class,
+        // so neither is touched by this.
+        this._container.set_style(null);
         this._transientActive = false;
         this._transientBox.visible = false;
     }
@@ -434,26 +589,34 @@ export class DynamicIsland {
 
     _sync() {
         const dictationActive = this._recordingState !== 'idle';
+        const screenRec = this._screenRecording;
         // Explicit request: don't show the media pill while the user is already looking at
         // whatever's playing (its own window has focus) -- only once they've switched to
         // something else is it worth a glanceable reminder.
         const mediaActive = Boolean(this._mediaState?.isActive) && !this._isMediaWindowFocused();
 
-        // Dictation always wins immediately, even mid-toast (see _showTransient's own guard
-        // for the other direction: a toast never starts while already dictating).
-        if (dictationActive && this._transientActive)
+        // Dictation or a recording starting always wins immediately, even mid-toast (see
+        // _showTransient's guard for the other direction: a toast never starts during either).
+        if ((dictationActive || screenRec) && this._transientActive)
             this._clearTransient();
 
-        // A toast owns the pill until its own timer fires -- leave media/dictation visibility
+        // A toast owns the pill until its own timer fires -- leave the other boxes' visibility
         // alone in the meantime so it doesn't get clobbered by e.g. a media-focus change.
         if (this._transientActive)
             return;
 
-        this._dictationBox.visible = dictationActive;
-        this._mediaBox.visible = !dictationActive && mediaActive;
-        this._setVisible(dictationActive || mediaActive);
+        // Priority: dictation (actively speaking into it) > screen recording (important,
+        // must stay visible the whole time) > media (ambient reminder).
+        const showDictation = dictationActive;
+        const showRecording = !dictationActive && screenRec;
+        const showMedia = !dictationActive && !screenRec && mediaActive;
 
-        if (dictationActive) {
+        this._dictationBox.visible = showDictation;
+        this._recordingBox.visible = showRecording;
+        this._mediaBox.visible = showMedia;
+        this._setVisible(showDictation || showRecording || showMedia);
+
+        if (showDictation) {
             const listening = this._recordingState === 'listening';
             this._dictationLabel.set_text(TRANSIENT_LABELS[this._recordingState] ?? '');
             this._dictationLabel.visible = !listening;
@@ -465,7 +628,7 @@ export class DynamicIsland {
                 this._container.add_style_class_name('dynamic-island--error');
         }
 
-        if (!dictationActive && mediaActive) {
+        if (showMedia) {
             this._mediaTitle.set_text(this._mediaState.title || 'Now Playing');
             this._mediaArtist.set_text(this._mediaState.artist || '');
             this._mediaArtist.visible = Boolean(this._mediaState.artist);
@@ -505,6 +668,7 @@ export class DynamicIsland {
 
     destroy() {
         this._stopElapsedTimer();
+        this._stopRecElapsed();
         if (this._transientTimerId) {
             GLib.source_remove(this._transientTimerId);
             this._transientTimerId = 0;
@@ -515,6 +679,20 @@ export class DynamicIsland {
         this._localSendWatcher = null;
         this._dndController?.destroy();
         this._dndController = null;
+        this._powerProfileWatcher?.destroy();
+        this._powerProfileWatcher = null;
+        this._volumeMountWatcher?.destroy();
+        this._volumeMountWatcher = null;
+        this._bluetoothWatcher?.destroy();
+        this._bluetoothWatcher = null;
+        this._screenshotWatcher?.destroy();
+        this._screenshotWatcher = null;
+        this._nightLightWatcher?.destroy();
+        this._nightLightWatcher = null;
+        this._vpnWatcher?.destroy();
+        this._vpnWatcher = null;
+        this._recordingWatcher?.destroy();
+        this._recordingWatcher = null;
         if (this._mediaEqTimerId) {
             GLib.source_remove(this._mediaEqTimerId);
             this._mediaEqTimerId = 0;
