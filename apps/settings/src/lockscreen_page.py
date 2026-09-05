@@ -6,18 +6,18 @@ from widgets import make_hero_header, DropdownRow, ToggleRow
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
-POWER_SCHEMA = 'org.gnome.settings-daemon.plugins.power'
 SCREENSAVER_SCHEMA = 'org.gnome.desktop.screensaver'
 LOGIN_SCREEN_SCHEMA = 'org.gnome.login-screen'
 
-TIMEOUT_OPTIONS = [
+BLANK_SCREEN_OPTIONS = [
     ('Never', 0),
-    ('For 1 minute', 60),
-    ('For 2 minutes', 120),
-    ('For 5 minutes', 300),
-    ('For 10 minutes', 600),
-    ('For 15 minutes', 900),
-    ('For 30 minutes', 1800),
+    ('After 1 minute', 60),
+    ('After 2 minutes', 120),
+    ('After 3 minutes', 180),
+    ('After 5 minutes', 300),
+    ('After 10 minutes', 600),
+    ('After 15 minutes', 900),
+    ('After 30 minutes', 1800),
 ]
 
 LOCK_DELAY_OPTIONS = [
@@ -37,8 +37,8 @@ class LockScreenPage(Gtk.Box):
         self.set_margin_top(18)
         self.set_margin_bottom(18)
 
-        self._power = Gio.Settings.new(POWER_SCHEMA)
         self._screensaver = Gio.Settings.new(SCREENSAVER_SCHEMA)
+        self._session = Gio.Settings.new('org.gnome.desktop.session')
         self._login_screen = Gio.Settings.new(LOGIN_SCREEN_SCHEMA)
 
         self.append(make_hero_header(
@@ -48,17 +48,17 @@ class LockScreenPage(Gtk.Box):
 
         timing_card = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'], selection_mode=Gtk.SelectionMode.NONE)
 
-        battery_row = DropdownRow('Turn display off on battery when inactive', TIMEOUT_OPTIONS)
-        battery_row.set_selected_value(self._power.get_int('sleep-inactive-battery-timeout'))
-        battery_row.dropdown.connect('notify::selected', lambda dd, _p: self._power.set_int(
-            'sleep-inactive-battery-timeout', battery_row.get_selected_value()))
-        timing_card.append(battery_row)
+        blank_row = DropdownRow('Blank Screen When Inactive', BLANK_SCREEN_OPTIONS)
+        blank_row.set_selected_value(
+            min(BLANK_SCREEN_OPTIONS, key=lambda o: abs(o[1] - self._session.get_uint('idle-delay')))[1])
+        blank_row.dropdown.connect('notify::selected', lambda dd, _p: self._session.set_uint(
+            'idle-delay', blank_row.get_selected_value()))
+        timing_card.append(blank_row)
 
-        ac_row = DropdownRow('Turn display off on power adapter when inactive', TIMEOUT_OPTIONS)
-        ac_row.set_selected_value(self._power.get_int('sleep-inactive-ac-timeout'))
-        ac_row.dropdown.connect('notify::selected', lambda dd, _p: self._power.set_int(
-            'sleep-inactive-ac-timeout', ac_row.get_selected_value()))
-        timing_card.append(ac_row)
+        auto_lock_row = ToggleRow('Automatically Lock Screen',
+                                  'Lock the screen once it has blanked or the screen saver has started.')
+        self._screensaver.bind('lock-enabled', auto_lock_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
+        timing_card.append(auto_lock_row)
 
         lock_row = DropdownRow('Require password after screen saver begins', LOCK_DELAY_OPTIONS)
         lock_row.set_selected_value(self._screensaver.get_uint('lock-delay'))
