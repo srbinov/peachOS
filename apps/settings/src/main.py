@@ -35,6 +35,7 @@ from appearance_page import AppearancePage
 from custom_icons_page import CustomIconsPage
 from dictation_page import DictationPage
 from desktopdock_page import DesktopDockPage
+from multitasking_page import MultitaskingPage
 from displays_page import DisplaysPage
 from general_page import GeneralPage
 from general_defaultapps_page import GeneralDefaultAppsPage
@@ -82,6 +83,7 @@ SIDEBAR_SECTIONS = [
         ('appearance', 'Appearance', 'preferences-desktop-theme-symbolic', '#1C1C1E'),
         ('menubar', 'Menu Bar', 'open-menu-symbolic', '#1C1C1E'),
         ('desktopdock', 'Desktop & Dock', 'view-dual-symbolic', '#0A84FF'),
+        ('multitasking', 'Multitasking', 'view-app-grid-symbolic', '#0A84FF'),
         ('displays', 'Displays', 'video-display-symbolic', '#0A84FF'),
         ('spotlight', 'peachySearch', 'system-search-symbolic', '#48484A'),
         ('wallpaper', 'Wallpaper', 'image-x-generic-symbolic', '#32ADE6'),
@@ -144,7 +146,10 @@ SEARCH_ALIASES = {
     'appearance_custom_icons': ['custom icon', 'app icon', 'icon style', 'upload icon'],
     'dictation': ['dictation', 'speech to text', 'voice typing', 'microphone', 'push to talk',
                   'whisper', 'ai', 'claude', 'openai', 'api key'],
-    'displays': ['night light', 'resolution', 'brightness', 'color temperature'],
+    'displays': ['night light', 'resolution', 'brightness', 'color temperature',
+                 'monitor', 'arrangement', 'scale', 'mirror', 'rotate'],
+    'multitasking': ['workspaces', 'hot corner', 'edge tiling', 'window tiling',
+                     'alt tab', 'app switcher', 'active screen edges'],
     'wifi': ['wireless'],
     'touchid': ['fingerprint', 'change password'],
     'users': ['add user', 'accounts', 'user account'],
@@ -492,6 +497,8 @@ class SettingsWindow(Adw.ApplicationWindow):
             page = DictationPage()
         elif row_id == 'desktopdock':
             page = DesktopDockPage()
+        elif row_id == 'multitasking':
+            page = MultitaskingPage()
         elif row_id == 'displays':
             page = DisplaysPage()
         elif row_id == 'general':
