@@ -62,5 +62,19 @@
       <summary>Which provider's API key to use for cleanup</summary>
       <description>'anthropic' or 'openai'.</description>
     </key>
+
+    <key name="recording-state" type="s">
+      <default>'idle'</default>
+      <summary>Live push-to-talk state, for the Dynamic Island to display</summary>
+      <description>
+        'idle', 'listening', 'transcribing', or 'error' -- written by this extension on every
+        state change (hotkey press/release, and Paste()/Failed() called back by the daemon).
+        macos-top-panel@local.dev's Dynamic Island (lib/dynamicIsland.js) watches this key
+        instead of the two extensions sharing an actor directly, so either can be
+        enabled/disabled/reloaded independently. This extension no longer draws its own
+        recording indicator -- see extension.js's own comment on _grabAnchor for why a
+        (now invisible) actor is still needed regardless.
+      </description>
+    </key>
   </schema>
 </schemalist>

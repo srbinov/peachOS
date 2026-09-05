@@ -744,3 +744,75 @@
 .macos-panel-slider-item .slider {
   height: 16px;
 }
+
+/* Dynamic Island (lib/dynamicIsland.js) -- centered pill in Main.panel._centerBox, hidden
+   (faded + collapsed) whenever nothing is active. Dark, rounded, similar language to the
+   Control Center / Notification Center glass surfaces elsewhere in this stylesheet, but a
+   flat color rather than the real liquid-glass blur -- this sits directly in the bar itself,
+   not a popup, and at this size a blur backdrop would cost more than it'd add. */
+.dynamic-island {
+  spacing: 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background-color: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dynamic-island--error {
+  border-color: rgba(255, 59, 48, 0.55);
+}
+
+.dynamic-island-dictation,
+.dynamic-island-media {
+  spacing: 8px;
+}
+
+.dynamic-island-icon {
+  color: white;
+}
+
+.dynamic-island-label {
+  color: white;
+  font-size: 0.85em;
+}
+
+.dynamic-island-waveform {
+  spacing: 3px;
+}
+
+.dynamic-island-waveform-bar {
+  width: 3px;
+  border-radius: 2px;
+  background-color: #FF3B30;
+}
+
+.dynamic-island--error .dynamic-island-waveform-bar {
+  background-color: #FF3B30;
+}
+
+.dynamic-island-art {
+  border-radius: 5px;
+  color: white;
+}
+
+.dynamic-island-media-title {
+  color: white;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.dynamic-island-media-artist {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.78em;
+}
+
+/* Peach Intelligence's recent-transcriptions dropdown (lib/dictationHistoryIndicator.js) */
+.dictation-history-label {
+  font-size: 0.92em;
+  padding: 2px 0;
+}
+
+.dictation-history-copy {
+  padding: 4px;
+  border-radius: 6px;
+}

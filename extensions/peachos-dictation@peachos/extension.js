@@ -5,10 +5,17 @@
  * This side owns everything that has to live inside gnome-shell's own process: the global
  * hotkey (press via Main.wm.addKeybinding, release via a modal grab + key-release-event --
  * see _onHotkeyPressed()'s own comment for why a plain keybinding grab alone can't detect
- * release), the small recording/transcribing indicator, and the synthetic Ctrl+V paste
- * (Clutter.VirtualInputDevice, only available in-process -- an ordinary Wayland client can't
- * inject input at all; confirmed live on this machine, `wtype` fails with "Compositor does
- * not support the virtual keyboard protocol").
+ * release) and the synthetic Ctrl+V paste (Clutter.VirtualInputDevice, only available
+ * in-process -- an ordinary Wayland client can't inject input at all; confirmed live on this
+ * machine, `wtype` fails with "Compositor does not support the virtual keyboard protocol").
+ *
+ * The actual recording/transcribing indicator now lives in macos-top-panel@local.dev's
+ * Dynamic Island (lib/dynamicIsland.js) instead of a pill of this extension's own -- this
+ * extension just publishes 'recording-state' on its own gsettings and the Dynamic Island
+ * watches it. Deliberately gsettings, not a direct cross-extension actor/method reference:
+ * these are two independent extensions (each individually enable/disable/reloadable), and a
+ * shared, well-typed schema key is a far more decoupled seam than one reaching into the
+ * other's live JS objects.
  */
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -40,6 +47,10 @@ const SELF_IFACE_XML = `
 // and recording to end instead of leaving the shell stuck refusing every other shortcut.
 const MAX_RECORDING_MS = 60000;
 
+// How long 'error' stays visible in the Dynamic Island before this settles back to 'idle' on
+// its own -- same 1.5s the old floating pill used for the same purpose.
+const ERROR_DISPLAY_MS = 1500;
+
 export default class PeachIntelligenceExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
@@ -48,7 +59,8 @@ export default class PeachIntelligenceExtension extends Extension {
         this._grab = null;
         this._releaseHandlerId = 0;
         this._safetyId = 0;
-        this._indicator = null;
+        this._errorTimeoutId = 0;
+        this._grabAnchor = null;
 
         this._ownerId = Gio.bus_own_name(
             Gio.BusType.SESSION, SELF_BUS_NAME, Gio.BusNameOwnerFlags.NONE,
@@ -58,7 +70,8 @@ export default class PeachIntelligenceExtension extends Extension {
             }, null, null,
         );
 
-        this._buildIndicator();
+        this._buildGrabAnchor();
+        this._setRecordingState('idle');
         this._syncKeybinding();
         this._enabledChangedId = this._settings.connect('changed::dictation-enabled', () => this._syncKeybinding());
     }
@@ -68,14 +81,19 @@ export default class PeachIntelligenceExtension extends Extension {
             this._settings.disconnect(this._enabledChangedId);
             this._enabledChangedId = 0;
         }
+        if (this._errorTimeoutId) {
+            GLib.source_remove(this._errorTimeoutId);
+            this._errorTimeoutId = 0;
+        }
         if (this._recording)
             this._endRecording(false);
         if (this._bound) {
             Main.wm.removeKeybinding('hotkey');
             this._bound = false;
         }
-        this._indicator?.destroy();
-        this._indicator = null;
+        this._setRecordingState('idle');
+        this._grabAnchor?.destroy();
+        this._grabAnchor = null;
 
         if (this._ownerId) {
             Gio.bus_unown_name(this._ownerId);
@@ -111,18 +129,19 @@ export default class PeachIntelligenceExtension extends Extension {
     // Main.wm.addKeybinding only ever fires on PRESS (like any GNOME accelerator/media key --
     // Mutter doesn't deliver a matching release through that API at all). Getting the RELEASE
     // needs the same technique CoverflowAltTab's own switcher.js uses for Alt-Tab's "hold Alt,
-    // release to confirm" gesture: take a modal grab on a real, mapped, reactive actor (here,
-    // the recording indicator itself -- no throwaway invisible actor needed) and listen for
-    // key-release-event directly on it.
+    // release to confirm" gesture: take a modal grab on a real, mapped, reactive actor and
+    // listen for key-release-event directly on it. The Dynamic Island now owns the VISUAL
+    // side of this, so _grabAnchor is invisible -- it exists purely to satisfy pushModal()'s
+    // "needs a real actor" requirement.
     _onHotkeyPressed() {
         if (this._recording)
             return;
         this._recording = true;
-        this._showIndicator('listening');
+        this._setRecordingState('listening');
 
-        this._grab = Main.pushModal(this._indicator, {actionMode: Shell.ActionMode.NONE});
-        global.stage.set_key_focus(this._indicator);
-        this._releaseHandlerId = this._indicator.connect('key-release-event', this._onKeyReleaseEvent.bind(this));
+        this._grab = Main.pushModal(this._grabAnchor, {actionMode: Shell.ActionMode.NONE});
+        global.stage.set_key_focus(this._grabAnchor);
+        this._releaseHandlerId = this._grabAnchor.connect('key-release-event', this._onKeyReleaseEvent.bind(this));
 
         this._safetyId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MAX_RECORDING_MS, () => {
             this._safetyId = 0;
@@ -169,14 +188,14 @@ export default class PeachIntelligenceExtension extends Extension {
             this._safetyId = 0;
         }
         if (this._releaseHandlerId) {
-            this._indicator.disconnect(this._releaseHandlerId);
+            this._grabAnchor.disconnect(this._releaseHandlerId);
             this._releaseHandlerId = 0;
         }
         if (this._grab) {
             Main.popModal(this._grab);
             this._grab = null;
         }
-        this._showIndicator('transcribing');
+        this._setRecordingState('transcribing');
         if (tellDaemon)
             this._callDaemon('StopRecording');
     }
@@ -197,15 +216,18 @@ export default class PeachIntelligenceExtension extends Extension {
     // ---- Called by peachos-dictation-daemon over D-Bus ---------------------
 
     Paste() {
-        this._hideIndicator();
+        this._setRecordingState('idle');
         this._injectPaste();
     }
 
     Failed(message) {
         logError(new Error(message), 'peachos-dictation daemon');
-        this._showIndicator('error');
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-            this._hideIndicator();
+        this._setRecordingState('error');
+        if (this._errorTimeoutId)
+            GLib.source_remove(this._errorTimeoutId);
+        this._errorTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ERROR_DISPLAY_MS, () => {
+            this._errorTimeoutId = 0;
+            this._setRecordingState('idle');
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -219,47 +241,15 @@ export default class PeachIntelligenceExtension extends Extension {
         virtualDevice.notify_keyval(Clutter.CURRENT_TIME, Clutter.KEY_Control_L, Clutter.KeyState.RELEASED);
     }
 
-    // ---- Indicator ----------------------------------------------------------
-
-    _buildIndicator() {
-        this._indicator = new St.BoxLayout({
-            style_class: 'peachos-dictation-pill',
-            reactive: true,
-            can_focus: true,
-            visible: false,
-            vertical: false,
-        });
-        this._indicatorIcon = new St.Icon({icon_name: 'audio-input-microphone-symbolic', icon_size: 16});
-        this._indicatorLabel = new St.Label({y_align: Clutter.ActorAlign.CENTER});
-        this._indicator.add_child(this._indicatorIcon);
-        this._indicator.add_child(this._indicatorLabel);
-        Main.layoutManager.addChrome(this._indicator, {affectsStruts: false, trackFullscreen: false});
+    _setRecordingState(state) {
+        if (this._settings.get_string('recording-state') !== state)
+            this._settings.set_string('recording-state', state);
     }
 
-    _showIndicator(state) {
-        const label = {listening: 'Listening…', transcribing: 'Transcribing…', error: "Couldn't transcribe"}[state];
-        this._indicator.remove_style_class_name('peachos-dictation-pill--listening');
-        this._indicator.remove_style_class_name('peachos-dictation-pill--transcribing');
-        this._indicator.remove_style_class_name('peachos-dictation-pill--error');
-        this._indicator.add_style_class_name(`peachos-dictation-pill--${state}`);
-        this._indicatorLabel.set_text(label);
-        this._indicator.visible = true;
-        this._positionIndicator();
-    }
+    // ---- Modal-grab anchor (invisible -- see this class's own header comment) --------------
 
-    _hideIndicator() {
-        this._indicator.visible = false;
-    }
-
-    _positionIndicator() {
-        const monitor = Main.layoutManager.primaryMonitor;
-        if (!monitor)
-            return;
-        const [, natHeight] = this._indicator.get_preferred_height(-1);
-        const [, natWidth] = this._indicator.get_preferred_width(natHeight);
-        this._indicator.set_position(
-            monitor.x + Math.round((monitor.width - natWidth) / 2),
-            monitor.y + Main.panel.height + 8,
-        );
+    _buildGrabAnchor() {
+        this._grabAnchor = new St.Widget({reactive: true, can_focus: true, opacity: 0});
+        Main.layoutManager.addChrome(this._grabAnchor, {affectsStruts: false, trackFullscreen: false});
     }
 }

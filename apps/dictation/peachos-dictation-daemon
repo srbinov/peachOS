@@ -26,8 +26,10 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import gi
 
@@ -69,6 +71,13 @@ CLEANUP_PROMPT = (
 )
 ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'
 OPENAI_MODEL = 'gpt-4o-mini'
+
+# Recent-transcriptions dropdown (macos-top-panel@local.dev's lib/dictationHistoryIndicator.js
+# reads this same path -- only ever reads it, this daemon is the only writer). Newest first;
+# capped well past the 3 the dropdown actually shows so there's a little slack if that number
+# ever changes without needing to touch this side too.
+HISTORY_PATH = Path.home() / '.local/share/peachos/dictation-history.json'
+HISTORY_MAX_ENTRIES = 10
 
 
 class DictationDaemon:
@@ -130,6 +139,7 @@ class DictationDaemon:
                 return GLib.SOURCE_REMOVE
             text = self._maybe_clean_up(text)
             self._set_clipboard(text)
+            self._save_history(text)
             self._notify_extension('Paste')
         except subprocess.TimeoutExpired:
             self._notify_extension('Failed', 'Transcription timed out')
@@ -214,6 +224,25 @@ class DictationDaemon:
 
     def _set_clipboard(self, text):
         subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=False)
+
+    def _save_history(self, text):
+        try:
+            history = json.loads(HISTORY_PATH.read_text(encoding='utf-8'))
+            if not isinstance(history, list):
+                history = []
+        except (OSError, ValueError):
+            history = []
+
+        history.insert(0, {'text': text, 'timestamp': time.time()})
+        history = history[:HISTORY_MAX_ENTRIES]
+
+        try:
+            HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = HISTORY_PATH.with_suffix(f'.tmp-{os.getpid()}')
+            tmp_path.write_text(json.dumps(history), encoding='utf-8')
+            tmp_path.rename(HISTORY_PATH)  # atomic -- the indicator never reads a torn file
+        except OSError:
+            pass  # history is a nice-to-have -- losing an entry isn't worth failing the paste
 
     def _notify_extension(self, method, *args):
         try:

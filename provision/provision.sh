@@ -1038,6 +1038,27 @@ done
 gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
 gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
+# Peach Intelligence's own top-bar icon (peachos-dictation-topbar) -- a full-color badge, not a
+# recolorable symbolic glyph (it has its own gradient), so it's installed under a plain (non
+# "-symbolic") name, same reasoning as the Bluetooth device icons above: St/GTK only apply
+# automatic currentColor recoloring to names ending in "-symbolic". "status" is the icon-theme
+# context peachos_icon_resolve.py's own ICON_CONTEXT_DIRS already recognizes for exactly this
+# kind of top-bar/tray icon.
+#
+# MacTahoe's own index.theme declares status/16,22,24,32,symbolic but -- unlike devices, which
+# already had a scalable entry -- NOT status/scalable: confirmed live, a file dropped there is
+# silently invisible to Gtk.IconTheme (icon themes only ever scan directories their own
+# index.theme's Directories= list actually names). status/32 IS declared, and an SVG dropped in
+# a nominally fixed-size directory still loads/scales fine -- verified live (has_icon flips
+# true). hicolor already declares scalable/status, so that one's unaffected.
+echo "==> Installing Peach Intelligence top-bar icon -> MacTahoe + hicolor"
+install -Dm644 "$REPO_DIR/assets/topbar-icons/peachos-dictation-topbar.svg" \
+    "/usr/share/icons/MacTahoe/status/32/peachos-dictation-topbar.svg"
+install -Dm644 "$REPO_DIR/assets/topbar-icons/peachos-dictation-topbar.svg" \
+    "/usr/share/icons/hicolor/scalable/status/peachos-dictation-topbar.svg"
+gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+
 echo "==> Installing GNOME Shell extensions system-wide -> /usr/share/gnome-shell/extensions"
 mkdir -p /usr/share/gnome-shell/extensions
 for ext_dir in "$REPO_DIR"/extensions/*/; do

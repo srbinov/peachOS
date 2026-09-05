@@ -20,6 +20,8 @@ import {DockOrderGuard} from './lib/dockOrderGuard.js';
 import {SoundIndicator} from './lib/soundIndicator.js';
 import {MenuManager} from './lib/menuManager.js';
 import {ControlCenterIndicator} from './lib/controlCenterIndicator.js';
+import {DictationHistoryIndicator} from './lib/dictationHistoryIndicator.js';
+import {DynamicIsland} from './lib/dynamicIsland.js';
 import {PanelBackground} from './lib/panelBackground.js';
 import {KiwiMenu} from './src/kiwimenu.js';
 import {QuickSettingsActionsController} from './src/hideQSbuttons.js';
@@ -86,6 +88,15 @@ export default class MacosTopPanelExtension extends Extension {
             this._soundIndicator = new SoundIndicator();
             Main.panel.menuManager.addMenu(this._soundIndicator.menu);
             Main.panel._rightBox.add_child(this._soundIndicator.container);
+
+            this._dictationHistoryIndicator = new DictationHistoryIndicator();
+            Main.panel.menuManager.addMenu(this._dictationHistoryIndicator.menu);
+            Main.panel._rightBox.add_child(this._dictationHistoryIndicator.container);
+
+            // Dynamic Island: Main.panel._centerBox is cleared above (line ~42) but nothing
+            // was ever added back to it -- real, unused space in the middle of the bar.
+            this._dynamicIsland = new DynamicIsland();
+            Main.panel._centerBox.add_child(this._dynamicIsland.container);
 
             this._controlCenter = new ControlCenterIndicator(this.path);
             Main.panel.menuManager.addMenu(this._controlCenter.menu);
@@ -402,6 +413,14 @@ export default class MacosTopPanelExtension extends Extension {
             Main.panel.menuManager.removeMenu(this._controlCenter.menu);
         this._controlCenter?.destroy();
         this._controlCenter = null;
+
+        this._dynamicIsland?.destroy();
+        this._dynamicIsland = null;
+
+        if (this._dictationHistoryIndicator?.menu)
+            Main.panel.menuManager.removeMenu(this._dictationHistoryIndicator.menu);
+        this._dictationHistoryIndicator?.destroy();
+        this._dictationHistoryIndicator = null;
 
         if (this._soundIndicator?.menu)
             Main.panel.menuManager.removeMenu(this._soundIndicator.menu);
