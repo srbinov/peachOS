@@ -40,8 +40,12 @@ const WAVEFORM_MAX_HEIGHT = 8;
 const LEVEL_EASE_MS = 90;
 const WAVEFORM_RESET_MS = 120;
 
-const FADE_IN_MS = 150;
-const FADE_OUT_MS = 130;
+const FADE_IN_MS = 220;
+const FADE_OUT_MS = 200;
+// How small the pill shrinks to on its way out (and grows from on its way in) -- a flat
+// opacity-only cross-fade was the "clunky" part: the pill stayed full-size the whole time and
+// just faded, no actual shrink/grow motion the way a real pop in/out reads as smooth.
+const POP_SCALE = 0.65;
 
 // Media's own "now playing" indicator -- unlike the dictation waveform, MPRIS gives no real
 // audio-level data to drive this with (there's no equivalent of peachos-dictation-daemon's
@@ -142,6 +146,10 @@ export class DynamicIsland {
         this._container = new St.BoxLayout({
             style_class: 'dynamic-island', vertical: false, visible: false, opacity: 0,
         });
+        // Center pivot -- without this, scale transforms in _setVisible() shrink/grow toward
+        // the top-left corner instead of the middle, which reads as lopsided rather than a
+        // clean pop in/out.
+        this._container.set_pivot_point(0.5, 0.5);
 
         this._dictationBox = new St.BoxLayout({style_class: 'dynamic-island-dictation', vertical: false});
         this._dictationIcon = new St.Icon({
@@ -348,12 +356,23 @@ export class DynamicIsland {
     _setVisible(shouldShow) {
         if (shouldShow === this._container.visible)
             return;
+        // Kill any in-flight pop animation before starting the opposite one -- rapidly
+        // flipping states (e.g. bouncing focus between two windows) without this would let a
+        // still-running shrink and a freshly-started grow fight over the same scale/opacity
+        // properties, which is its own kind of "clunky".
+        this._container.remove_all_transitions();
         if (shouldShow) {
             this._container.visible = true;
-            this._container.ease({opacity: 255, duration: FADE_IN_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            this._container.set_scale(POP_SCALE, POP_SCALE);
+            this._container.opacity = 0;
+            this._container.ease({
+                opacity: 255, scale_x: 1, scale_y: 1,
+                duration: FADE_IN_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
         } else {
             this._container.ease({
-                opacity: 0, duration: FADE_OUT_MS, mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                opacity: 0, scale_x: POP_SCALE, scale_y: POP_SCALE,
+                duration: FADE_OUT_MS, mode: Clutter.AnimationMode.EASE_IN_CUBIC,
                 onComplete: () => {
                     if (this._container)
                         this._container.visible = false;
