@@ -31,6 +31,7 @@ from wifi_page import WifiPage
 from bluetooth_page import BluetoothPage
 from network_page import NetworkPage
 from sharing_page import SharingPage
+from network_details_page import NetworkDetailsPage
 from battery_page import BatteryPage
 from appearance_page import AppearancePage
 from custom_icons_page import CustomIconsPage
@@ -120,6 +121,7 @@ EXTRA_PAGE_TITLES = {
     'accessibility_audio': 'Audio',
     'appearance_custom_icons': 'Custom Icons',
     'keyboard_shortcuts': 'Keyboard Shortcuts',
+    'network_details': 'Connection',
     'edit_profile': 'Edit Profile',
 }
 
@@ -139,6 +141,7 @@ EXTRA_PAGE_PARENTS = {
     'accessibility_audio': 'accessibility',
     'appearance_custom_icons': 'appearance',
     'keyboard_shortcuts': 'keyboard',
+    'network_details': 'network',
 }
 
 # Extra search terms for pages whose real name doesn't obviously contain the
@@ -495,7 +498,12 @@ class SettingsWindow(Adw.ApplicationWindow):
             page = BluetoothPage()
         elif row_id == 'network':
             page = NetworkPage(
-                on_open_wifi=lambda: self._go_to('wifi', record_history=True))
+                on_open_wifi=lambda: self._go_to('wifi', record_history=True),
+                on_open_connection=self._open_network_details)
+        elif row_id == 'network_details':
+            page = NetworkDetailsPage(
+                go_back=lambda: self._navigate(-1),
+                on_changed=lambda: self._ensure_page('network') or self._pages['network']._refresh())
         elif row_id == 'energy':
             page = BatteryPage()
         elif row_id == 'sharing':
@@ -822,6 +830,11 @@ class SettingsWindow(Adw.ApplicationWindow):
         self._ensure_page('edit_profile')
         self._pages['edit_profile'].load_user(user_path)
         self._go_to('edit_profile', record_history=True)
+
+    def _open_network_details(self, uuid, name):
+        self._ensure_page('network_details')
+        self._pages['network_details'].load(uuid, name)
+        self._go_to('network_details', record_history=True)
 
     def _on_profile_saved(self, _user_path: str):
         # Both live views of account data (the sidebar's own sign-in row,
