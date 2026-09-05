@@ -44,6 +44,7 @@ export default class PeachosWidgetsExtension extends Extension {
                 settings: this._settings,
                 weather: this._weather,
                 calendar: this._calendar,
+                path: this.path,
             };
 
             this._layer = new WidgetLayer(this._settings, ctx);

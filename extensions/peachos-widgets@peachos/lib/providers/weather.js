@@ -9,41 +9,56 @@ import Soup from 'gi://Soup?version=3.0';
 
 const REFRESH_SECONDS = 900; // 15 min
 
-// WMO weather-code -> label + GNOME symbolic icon name.
-export function wmoInfo(code, isDay = true) {
+function windCompass(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(deg / 45) % 8];
+}
+
+// WMO code -> KDE icon-set basename (icons/weather/*.png).
+export function wmoIconName(code, isDay = true) {
     const night = !isDay;
-    const clear = night ? 'weather-clear-night-symbolic' : 'weather-clear-symbolic';
+    if (code === 0)
+        return night ? 'clearnight' : 'sunny';
+    if (code === 1 || code === 2)
+        return night ? 'partlycloudynight' : 'partlysunny';
+    if (code === 3)
+        return 'cloudy';
+    if (code === 45 || code === 48)
+        return 'fog';
+    if (code >= 51 && code <= 57)
+        return night ? 'nightdrizzle' : 'drizzle';
+    if (code === 61 || code === 63 || code === 66)
+        return 'rain';
+    if (code === 65 || code === 67)
+        return 'heavyrain';
+    if (code === 71 || code === 73 || code === 75 || code === 85 || code === 86)
+        return 'snow';
+    if (code === 77)
+        return 'scatteredsnow';
+    if (code === 80 || code === 81)
+        return 'rain';
+    if (code === 82)
+        return 'heavyrain';
+    if (code >= 95)
+        return 'thunderbolt';
+    return night ? 'clearnight' : 'sunny';
+}
+
+// WMO code -> human condition label (ported from WeatherData.qml).
+export function wmoCondition(code) {
     const map = {
-        0: ['Clear', clear],
-        1: ['Mostly clear', night ? 'weather-few-clouds-night-symbolic' : 'weather-few-clouds-symbolic'],
-        2: ['Partly cloudy', night ? 'weather-few-clouds-night-symbolic' : 'weather-few-clouds-symbolic'],
-        3: ['Overcast', 'weather-overcast-symbolic'],
-        45: ['Fog', 'weather-fog-symbolic'],
-        48: ['Rime fog', 'weather-fog-symbolic'],
-        51: ['Light drizzle', 'weather-showers-scattered-symbolic'],
-        53: ['Drizzle', 'weather-showers-scattered-symbolic'],
-        55: ['Heavy drizzle', 'weather-showers-symbolic'],
-        56: ['Freezing drizzle', 'weather-showers-symbolic'],
-        57: ['Freezing drizzle', 'weather-showers-symbolic'],
-        61: ['Light rain', 'weather-showers-scattered-symbolic'],
-        63: ['Rain', 'weather-showers-symbolic'],
-        65: ['Heavy rain', 'weather-showers-symbolic'],
-        66: ['Freezing rain', 'weather-showers-symbolic'],
-        67: ['Freezing rain', 'weather-showers-symbolic'],
-        71: ['Light snow', 'weather-snow-symbolic'],
-        73: ['Snow', 'weather-snow-symbolic'],
-        75: ['Heavy snow', 'weather-snow-symbolic'],
-        77: ['Snow grains', 'weather-snow-symbolic'],
-        80: ['Rain showers', 'weather-showers-symbolic'],
-        81: ['Rain showers', 'weather-showers-symbolic'],
-        82: ['Violent showers', 'weather-storm-symbolic'],
-        85: ['Snow showers', 'weather-snow-symbolic'],
-        86: ['Snow showers', 'weather-snow-symbolic'],
-        95: ['Thunderstorm', 'weather-storm-symbolic'],
-        96: ['Thunderstorm', 'weather-storm-symbolic'],
-        99: ['Thunderstorm', 'weather-storm-symbolic'],
+        0: 'Clear', 1: 'Mostly Clear', 2: 'Partly Cloudy', 3: 'Cloudy',
+        45: 'Fog', 48: 'Rime Fog',
+        51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle',
+        56: 'Freezing Drizzle', 57: 'Freezing Drizzle',
+        61: 'Light Rain', 63: 'Rain', 65: 'Heavy Rain',
+        66: 'Freezing Rain', 67: 'Freezing Rain',
+        71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow', 77: 'Snow Grains',
+        80: 'Rain Showers', 81: 'Rain Showers', 82: 'Violent Showers',
+        85: 'Snow Showers', 86: 'Snow Showers',
+        95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Heavy Thunderstorm',
     };
-    return map[code] ?? ['—', 'weather-few-clouds-symbolic'];
+    return map[code] ?? '—';
 }
 
 export class WeatherProvider {
@@ -100,9 +115,11 @@ export class WeatherProvider {
 
         const url = 'https://api.open-meteo.com/v1/forecast'
             + `?latitude=${lat}&longitude=${lon}`
-            + '&current=temperature_2m,apparent_temperature,weather_code,is_day'
-            + '&daily=weather_code,temperature_2m_max,temperature_2m_min'
-            + `&temperature_unit=${unit}&timezone=auto&forecast_days=4`;
+            + '&current=temperature_2m,apparent_temperature,weather_code,is_day,'
+            + 'precipitation,wind_speed_10m,wind_direction_10m'
+            + '&hourly=temperature_2m,weather_code'
+            + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max'
+            + `&temperature_unit=${unit}&wind_speed_unit=mph&timezone=auto&forecast_days=5`;
 
         const msg = Soup.Message.new('GET', url);
         this._session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null, (source, result) => {
@@ -129,6 +146,7 @@ export class WeatherProvider {
         const unitLetter = this._settings.get_string('weather-unit') === 'celsius' ? 'C' : 'F';
         const cur = j.current ?? {};
         const daily = j.daily ?? {};
+        const hourly = j.hourly ?? {};
         const days = (daily.time ?? []).map((iso, i) => {
             const d = new Date(`${iso}T12:00:00`);
             return {
@@ -136,8 +154,25 @@ export class WeatherProvider {
                 hi: Math.round(daily.temperature_2m_max?.[i] ?? 0),
                 lo: Math.round(daily.temperature_2m_min?.[i] ?? 0),
                 code: daily.weather_code?.[i] ?? 0,
+                precipProb: daily.precipitation_probability_max?.[i] ?? null,
             };
         });
+
+        // Next 6 hourly slots from now.
+        const nowMs = Date.now();
+        const hours = [];
+        const times = hourly.time ?? [];
+        for (let i = 0; i < times.length && hours.length < 6; i++) {
+            const t = new Date(times[i]).getTime();
+            if (t < nowMs - 3600000)
+                continue;
+            hours.push({
+                hour: new Date(times[i]).toLocaleTimeString(undefined, {hour: 'numeric'}),
+                temp: Math.round(hourly.temperature_2m?.[i] ?? 0),
+                code: hourly.weather_code?.[i] ?? 0,
+            });
+        }
+
         return {
             name: this._settings.get_string('weather-location-name'),
             temp: Math.round(cur.temperature_2m ?? 0),
@@ -145,7 +180,14 @@ export class WeatherProvider {
             code: cur.weather_code ?? 0,
             isDay: cur.is_day !== 0,
             unit: unitLetter,
+            wind: Math.round(cur.wind_speed_10m ?? 0),
+            windDir: windCompass(cur.wind_direction_10m ?? 0),
+            precip: cur.precipitation ?? 0,
+            precipProb: days[0]?.precipProb ?? null,
+            hi: days[0]?.hi ?? 0,
+            lo: days[0]?.lo ?? 0,
             days,
+            hours,
         };
     }
 

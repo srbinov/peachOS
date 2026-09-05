@@ -2,12 +2,15 @@
 //
 // Each type has a left-rail icon and one or more variants. A variant knows its
 // inner (visible-glass) pixel size, corner radius, and a make(contentParent,
-// ctx) that returns an object with a .destroy(). ctx = shared services
-// { settings, weather, calendar }.
+// ctx, size) that returns an object with a .destroy(). ctx = shared services
+// { settings, weather, calendar }. Sizes/radii mirror the KDE liquidglass
+// widgets (cornerRadius ~= 0.46 * min side -> nearly circular corners).
 
 import {DigitalClock, AnalogClock} from '../widgets/clock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
+
+const rad = (w, h) => Math.round(Math.min(w, h) * 0.46);
 
 export const REGISTRY = {
     clock: {
@@ -15,12 +18,12 @@ export const REGISTRY = {
         icon: 'preferences-system-time-symbolic',
         variants: {
             digital: {
-                name: 'Digital', w: 260, h: 118, radius: 28,
-                make: parent => new DigitalClock(parent),
+                name: 'Digital', w: 200, h: 200, radius: rad(200, 200),
+                make: (parent, ctx, size) => new DigitalClock(parent, size),
             },
             analog: {
-                name: 'Analog', w: 168, h: 168, radius: 22,
-                make: parent => new AnalogClock(parent),
+                name: 'Analog', w: 200, h: 200, radius: rad(200, 200),
+                make: (parent, ctx, size) => new AnalogClock(parent, size),
             },
         },
     },
@@ -29,12 +32,12 @@ export const REGISTRY = {
         icon: 'weather-few-clouds-symbolic',
         variants: {
             compact: {
-                name: 'Compact', w: 210, h: 132, radius: 28,
-                make: (parent, ctx) => new WeatherWidget(parent, ctx, 'compact'),
+                name: 'Now', w: 240, h: 240, radius: rad(240, 240),
+                make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'small'),
             },
             panel: {
-                name: 'Forecast', w: 320, h: 176, radius: 30,
-                make: (parent, ctx) => new WeatherWidget(parent, ctx, 'panel'),
+                name: 'Forecast', w: 320, h: 320, radius: rad(320, 320),
+                make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'big'),
             },
         },
     },
@@ -43,12 +46,12 @@ export const REGISTRY = {
         icon: 'x-office-calendar-symbolic',
         variants: {
             month: {
-                name: 'Month', w: 248, h: 236, radius: 26,
-                make: (parent, ctx) => new CalendarWidget(parent, ctx, 'month'),
+                name: 'Month', w: 260, h: 260, radius: rad(260, 260),
+                make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'month'),
             },
             agenda: {
-                name: 'Agenda', w: 300, h: 300, radius: 28,
-                make: (parent, ctx) => new CalendarWidget(parent, ctx, 'agenda'),
+                name: 'Agenda', w: 470, h: 235, radius: 64,
+                make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'agenda'),
             },
         },
     },

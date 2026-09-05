@@ -48,7 +48,8 @@ export class WidgetFrame {
         layer.add_child(this._removeBtn);
 
         try {
-            this._content = def.make(this._glass.content, ctx);
+            this._content = def.make(this._glass.content, ctx,
+                {w: def.w, h: def.h, radius: def.radius, roundness: 7.0});
         } catch (e) {
             logError(e, `[peachos-widgets] failed to build ${instance.type}/${instance.variant}`);
         }

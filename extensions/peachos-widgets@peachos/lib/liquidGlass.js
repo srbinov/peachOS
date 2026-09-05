@@ -141,6 +141,29 @@ export function makeLiquidGlass(opts) {
     };
     applyBackdrop();
 
+    // A gentle frost behind the glass (the KDE original runs a Dual-Kawase blur
+    // pyramid; Shell.BlurEffect in ACTOR mode blurs this actor's own wallpaper
+    // crop, which the shader then refracts). Skipped in solid mode.
+    const blurRadius = opts.blurRadius ?? 10;
+    if (!solid && blurRadius > 0) {
+        try {
+            widget.add_effect(new Shell.BlurEffect({
+                radius: blurRadius * scale,
+                mode: Shell.BlurMode.ACTOR,
+            }));
+        } catch (e) {
+            // Older Shell.BlurEffect used `sigma`; fall back, then give up.
+            try {
+                widget.add_effect(new Shell.BlurEffect({
+                    sigma: blurRadius * scale / 2,
+                    mode: Shell.BlurMode.ACTOR,
+                }));
+            } catch (_e) {
+                logError(e, '[peachos-widgets] blur effect unavailable');
+            }
+        }
+    }
+
     const effect = new LiquidGlassEffect();
     widget.add_effect(effect);
     effect.configure({

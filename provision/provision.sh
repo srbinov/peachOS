@@ -1152,6 +1152,17 @@ glib-compile-schemas /usr/share/glib-2.0/schemas/
 echo "==> Wiring Perfect Lock Screen into the GDM login screen"
 bash "$REPO_DIR/extensions/perfect-lockscreen@chris/scripts/install-gdm-dlc.sh" --no-restart
 
+# peachos-widgets ships fonts (Barlow Condensed, SF Pro Display, SF Pro Rounded)
+# that its widget content references by family name -- St CSS / Cairo resolve
+# those only through fontconfig, so the copies inside the extension dir aren't
+# enough. Install them system-wide and refresh the cache.
+echo "==> Installing peachOS Widgets fonts -> /usr/local/share/fonts/peachos-widgets"
+install -d /usr/local/share/fonts/peachos-widgets
+install -m644 "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.ttf \
+    "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.otf \
+    /usr/local/share/fonts/peachos-widgets/
+fc-cache -f /usr/local/share/fonts/peachos-widgets >/dev/null 2>&1 || true
+
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/

@@ -135,6 +135,15 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
     done
     gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
     gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+    # peachos-widgets fonts (see provision.sh -- resolved by fontconfig, not the
+    # copy inside the extension dir)
+    if [[ -d "$REPO_DIR/extensions/peachos-widgets@peachos/fonts" ]]; then
+        install -d /usr/local/share/fonts/peachos-widgets
+        install -m644 "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.ttf \
+            "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.otf \
+            /usr/local/share/fonts/peachos-widgets/ 2>/dev/null || true
+        fc-cache -f /usr/local/share/fonts/peachos-widgets >/dev/null 2>&1 || true
+    fi
     echo "    extensions + Settings app now match the repo"
 fi
 
