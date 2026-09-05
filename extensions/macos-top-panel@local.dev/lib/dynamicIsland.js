@@ -2,17 +2,16 @@
 //
 // A center-of-the-top-bar pill, mirroring iOS's Dynamic Island in spirit but scoped to what
 // actually has a real, live data source on this desktop: Peach Intelligence's own recording
-// state (an animated waveform while listening -- the concrete request this was built for) and
-// media playback (MPRIS, via the exact same MediaPlayerController controlCenterIndicator.js's
-// own media card already uses -- a second, independent instance here, not shared, to keep the
-// two indicators' lifecycles decoupled). Deliberately NOT attempted: calls, turn-by-turn
-// navigation, ride-share/delivery tracking, Face ID -- none of those have a real backing
-// service on a Linux desktop the way MPRIS/this extension's own gsettings do, and a fake
-// stub would just be decoration with no data behind it.
+// state (a waveform driven by the daemon's real, live microphone level -- see _onAudioLevel(),
+// not a canned animation) and media playback (MPRIS, via the exact same MediaPlayerController
+// controlCenterIndicator.js's own media card already uses -- a second, independent instance
+// here). Deliberately NOT attempted: calls, turn-by-turn navigation, ride-share/delivery
+// tracking, Face ID -- none of those have a real backing service on a Linux desktop the way
+// MPRIS/this extension's own gsettings do, and a fake stub would just be decoration with no
+// data behind it.
 //
-// Hidden (zero width, per Main.panel._centerBox's own layout) whenever nothing is active;
-// fades in/out rather than popping, and Main.panel._centerBox already center-aligns its
-// children in the panel, so no manual positioning math is needed the way the old floating
+// Hidden (faded out) whenever nothing is active; Main.panel._centerBox already center-aligns
+// its children in the panel, so no manual positioning math is needed the way the old floating
 // pill (peachos-dictation@peachos's own, before this) required.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -22,14 +21,20 @@ import St from 'gi://St';
 import {MediaPlayerController} from './mediaPlayerController.js';
 
 const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
+const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
+const DAEMON_OBJECT_PATH = '/org/peachos/DictationDaemon';
 
 const WAVEFORM_BAR_COUNT = 5;
-const WAVEFORM_MIN_HEIGHT = 4;
-const WAVEFORM_MAX_HEIGHT = 15;
-const WAVEFORM_TICK_MS = 160;
+const WAVEFORM_MIN_HEIGHT = 3;
+const WAVEFORM_MAX_HEIGHT = 11;
+// How long each bar takes to ease to a newly-received level -- matched to roughly the
+// daemon's own emission cadence (LEVEL_EMIT_INTERVAL_S, ~80ms) so one bar's motion finishes
+// right as the next value arrives, instead of visibly lagging behind or snapping.
+const LEVEL_EASE_MS = 90;
+const WAVEFORM_RESET_MS = 120;
 
-const FADE_IN_MS = 180;
-const FADE_OUT_MS = 150;
+const FADE_IN_MS = 150;
+const FADE_OUT_MS = 130;
 
 const DICTATION_LABELS = {
     listening: 'Listening…',
@@ -52,15 +57,19 @@ export class DynamicIsland {
     constructor() {
         this._recordingState = 'idle';
         this._mediaState = null;
-        this._waveformTimerId = 0;
+        this._levelHistory = [];
+        this._contentColor = 'white';
 
         this._buildActor();
+        this._subscribeToDaemon();
 
         this._dictationSettings = optionalSettings(DICTATION_SCHEMA_ID);
         if (this._dictationSettings) {
             this._recordingState = this._dictationSettings.get_string('recording-state');
             this._recordingChangedId = this._dictationSettings.connect('changed::recording-state', () => {
                 this._recordingState = this._dictationSettings.get_string('recording-state');
+                if (this._recordingState !== 'listening')
+                    this._resetWaveform();
                 this._sync();
             });
         }
@@ -80,12 +89,15 @@ export class DynamicIsland {
     _buildActor() {
         this._container = new St.BoxLayout({
             style_class: 'dynamic-island', vertical: false, visible: false, opacity: 0,
+            // Sane default before the real _applyPanelForeground()/setForeground() call
+            // lands (wallpaper-brightness analysis is async at enable() time) -- matches the
+            // this._contentColor = 'white' default below.
+            style: 'background-color: black;',
         });
 
         this._dictationBox = new St.BoxLayout({style_class: 'dynamic-island-dictation', vertical: false});
-        this._dictationBox.add_child(new St.Icon({
-            icon_name: 'audio-input-microphone-symbolic', icon_size: 15, style_class: 'dynamic-island-icon',
-        }));
+        this._dictationIcon = new St.Icon({icon_name: 'audio-input-microphone-symbolic', icon_size: 12});
+        this._dictationBox.add_child(this._dictationIcon);
         this._waveformBars = [];
         const waveform = new St.BoxLayout({style_class: 'dynamic-island-waveform', vertical: false});
         for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
@@ -100,7 +112,7 @@ export class DynamicIsland {
 
         this._mediaBox = new St.BoxLayout({style_class: 'dynamic-island-media', vertical: false});
         this._mediaArt = new St.Icon({
-            icon_name: 'audio-x-generic-symbolic', icon_size: 20, style_class: 'dynamic-island-art',
+            icon_name: 'audio-x-generic-symbolic', icon_size: 15, style_class: 'dynamic-island-art',
         });
         this._mediaBox.add_child(this._mediaArt);
         const mediaText = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
@@ -110,7 +122,57 @@ export class DynamicIsland {
         mediaText.add_child(this._mediaArtist);
         this._mediaBox.add_child(mediaText);
         this._container.add_child(this._mediaBox);
+
+        this._applyContentColor();
     }
+
+    // ---- Real microphone level, from peachos-dictation-daemon's own D-Bus signal ------------
+
+    _subscribeToDaemon() {
+        try {
+            this._daemonProxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, null,
+                DAEMON_BUS_NAME, DAEMON_OBJECT_PATH, DAEMON_BUS_NAME, null,
+            );
+            this._daemonSignalId = this._daemonProxy.connect('g-signal', (_proxy, _sender, signalName, params) => {
+                if (signalName === 'Level')
+                    this._onAudioLevel(params.deep_unpack()[0]);
+            });
+        } catch (e) {
+            // No daemon (not installed / not running yet) -- the waveform just stays flat
+            // during 'listening', which is a reasonable degrade, not worth surfacing an error.
+            logError(e, 'dynamicIsland: failed to connect to peachos-dictation-daemon');
+        }
+    }
+
+    // One real amplitude reading (0..1, already noise-floored and gamma-curved by the daemon
+    // -- see peachos-dictation-daemon's own _emit_level() docstring) becomes the newest bar; a
+    // short rolling history slides through the rest, so adjacent bars read as adjacent recent
+    // instants (like a trailing oscilloscope trace) instead of five bars all doing the same
+    // thing at once.
+    _onAudioLevel(level) {
+        if (this._recordingState !== 'listening')
+            return;
+        this._levelHistory.push(level);
+        if (this._levelHistory.length > WAVEFORM_BAR_COUNT)
+            this._levelHistory.shift();
+
+        const n = this._waveformBars.length;
+        for (let i = 0; i < n; i++) {
+            const historyIndex = this._levelHistory.length - n + i;
+            const v = historyIndex >= 0 ? this._levelHistory[historyIndex] : 0;
+            const height = WAVEFORM_MIN_HEIGHT + v * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT);
+            this._waveformBars[i].ease({height, duration: LEVEL_EASE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        }
+    }
+
+    _resetWaveform() {
+        this._levelHistory = [];
+        for (const bar of this._waveformBars)
+            bar.ease({height: WAVEFORM_MIN_HEIGHT, duration: WAVEFORM_RESET_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+    }
+
+    // ---- State -> appearance ------------------------------------------------------------
 
     _sync() {
         const dictationActive = this._recordingState !== 'idle';
@@ -126,7 +188,6 @@ export class DynamicIsland {
             if (this._recordingState === 'error')
                 this._container.add_style_class_name('dynamic-island--error');
         }
-        this._setWaveformActive(dictationActive && this._recordingState === 'listening');
 
         if (!dictationActive && mediaActive) {
             this._mediaTitle.set_text(this._mediaState.title || 'Now Playing');
@@ -155,39 +216,43 @@ export class DynamicIsland {
         }
     }
 
-    _setWaveformActive(active) {
-        if (active === Boolean(this._waveformTimerId))
+    /**
+     * The pill's OWN background becomes the exact same color as the rest of the bar's
+     * text/icons (foreground, 'black' or 'white') rather than a fixed dark surface -- explicit
+     * request: it should read as part of the same bar, not a contrasting dark blob floating in
+     * it. Content drawn ON the pill (icon/label/bars/media text) then needs the OPPOSITE color
+     * to stay legible against its own now-solid background -- inheriting the panel's own
+     * `color` (like most other indicators' text already does for free) would make content
+     * invisible against a same-colored pill, so this pushes an explicit inverse color to every
+     * child instead of relying on inheritance.
+     * @param {'black'|'white'} foreground
+     */
+    setForeground(foreground) {
+        if (foreground !== 'black' && foreground !== 'white')
             return;
-        if (active) {
-            this._tickWaveform();
-            this._waveformTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WAVEFORM_TICK_MS, () => {
-                this._tickWaveform();
-                return GLib.SOURCE_CONTINUE;
-            });
-        } else {
-            GLib.source_remove(this._waveformTimerId);
-            this._waveformTimerId = 0;
-            for (const bar of this._waveformBars)
-                bar.ease({height: WAVEFORM_MIN_HEIGHT, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        }
+        this._container.style = `background-color: ${foreground};`;
+        this._contentColor = foreground === 'black' ? 'white' : 'black';
+        this._applyContentColor();
     }
 
-    // Random per-bar target heights, eased -- an organic VU-meter/voice-memo look rather than
-    // a literal amplitude readout (this extension has no access to the daemon's actual audio
-    // stream, only its listening/transcribing/error state), which is a fair trade for how
-    // simple and cheap it is to run continuously while held.
-    _tickWaveform() {
-        for (const bar of this._waveformBars) {
-            const height = WAVEFORM_MIN_HEIGHT + Math.random() * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT);
-            bar.ease({height, duration: WAVEFORM_TICK_MS, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
-        }
+    _applyContentColor() {
+        const color = this._contentColor;
+        this._dictationIcon.style = `color: ${color};`;
+        this._dictationLabel.style = `color: ${color};`;
+        for (const bar of this._waveformBars)
+            bar.style = `background-color: ${color};`;
+        this._mediaTitle.style = `color: ${color};`;
+        this._mediaArtist.style = `color: ${color}; opacity: 0.65;`;
+        if (!this._mediaState?.artIcon)
+            this._mediaArt.style = `color: ${color};`;
     }
 
     destroy() {
-        if (this._waveformTimerId) {
-            GLib.source_remove(this._waveformTimerId);
-            this._waveformTimerId = 0;
+        if (this._daemonSignalId && this._daemonProxy) {
+            this._daemonProxy.disconnect(this._daemonSignalId);
+            this._daemonSignalId = 0;
         }
+        this._daemonProxy = null;
         if (this._recordingChangedId && this._dictationSettings) {
             this._dictationSettings.disconnect(this._recordingChangedId);
             this._recordingChangedId = 0;

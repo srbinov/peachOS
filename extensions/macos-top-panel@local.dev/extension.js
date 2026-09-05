@@ -270,6 +270,7 @@ export default class MacosTopPanelExtension extends Extension {
         this._bluetoothIndicator?.setForeground?.(foreground);
         this._searchIndicator?.setForeground?.(foreground);
         this._soundIndicator?.setForeground?.(foreground);
+        this._dynamicIsland?.setForeground?.(foreground);
         this._userSwitcherController?.setForeground?.(foreground);
         // Also drive the flyouts' + banners' adaptive-dark glass from the same verdict: a
         // light wallpaper behind the bar should darken the Control Center / Notification

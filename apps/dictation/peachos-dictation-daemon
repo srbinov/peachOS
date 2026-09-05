@@ -20,7 +20,9 @@ transcript (punctuation, grammar, filler words) via Anthropic or OpenAI, gated b
 cleanup-enabled gsetting. No API key configured (or cleanup disabled) means the raw
 whisper.cpp transcript gets pasted exactly as heard.
 """
+import array
 import json
+import math
 import os
 import signal
 import subprocess
@@ -29,6 +31,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import wave
 from pathlib import Path
 
 import gi
@@ -38,6 +41,9 @@ gi.require_version('Gio', '2.0')
 gi.require_version('Secret', '1')
 from gi.repository import Gio, GLib, Secret
 from pydbus import SessionBus
+# Name clash with the stdlib `signal` module (signal.SIGINT, already used below) --
+# pydbus's own signal descriptor is aliased rather than the far more common stdlib one.
+from pydbus.generic import signal as dbus_signal
 
 WHISPER_BIN = '/usr/lib/peachos/dictation/whisper-cli'
 WHISPER_MODEL = '/usr/share/peachos/whisper/ggml-base.en.bin'
@@ -79,6 +85,36 @@ OPENAI_MODEL = 'gpt-4o-mini'
 HISTORY_PATH = Path.home() / '.local/share/peachos/dictation-history.json'
 HISTORY_MAX_ENTRIES = 10
 
+SAMPLE_RATE = 16000
+# How often Level actually gets emitted, independent of how fast pw-record's pipe delivers
+# chunks (PipeWire's own --latency, ~100ms default, roughly sets that already, but this caps
+# it regardless): ~12/sec is plenty smooth for a waveform once the Dynamic Island eases
+# between values, and doesn't spam D-Bus.
+LEVEL_EMIT_INTERVAL_S = 0.08
+# RMS-to-0..1 mapping. Measured live on this machine (silence, no one talking): RMS sits
+# around 2300-3000 at steady state, apparently real ambient/mic-gain noise, not a bug -- a
+# genuine "quiet room" floor here is much hotter than a properly-calibrated mic would read.
+# Both numbers below are set with real headroom above that, but NOT validated against actual
+# speech (nothing in this environment can generate real spoken audio to test with) -- if the
+# waveform pegs at max regardless of how loud you're actually talking, LEVEL_RMS_REFERENCE
+# needs to go higher; if it barely moves, lower it. The <1 exponent (a gamma curve, same idea
+# a real VU meter uses) lifts quiet speech into visible range without letting loud speech peg
+# at max the whole time.
+LEVEL_RMS_REFERENCE = 18000.0
+LEVEL_GAMMA = 0.6
+# Below this RMS, treat it as room/mic-gain noise floor and report exactly 0 -- otherwise the
+# waveform visibly jitters while the user isn't actually talking, which reads as broken. Set
+# above the ~2300-3000 measured silence floor with margin, not right at it.
+LEVEL_NOISE_FLOOR_RMS = 4000.0
+# Opening the audio stream produces a real, brief pop/click transient (measured live: chunks
+# for roughly the first third of a second after StartRecording read far hotter, sometimes
+# near-clipping, than anything that follows) -- not a signal worth showing as a fake
+# "shouting" spike right when the pill first appears. Time-based, not chunk-count-based: an
+# earlier chunk-count version undershot badly because pw-record's actual chunk-arrival rate
+# didn't match the ~0.128s/4096-byte-chunk assumption it was based on (measured live: the
+# transient was still showing at the 3rd *emitted* signal, well past 3 raw chunks in).
+LEVEL_WARMUP_SECONDS = 0.45
+
 
 class DictationDaemon:
     """
@@ -86,14 +122,24 @@ class DictationDaemon:
       <interface name='org.peachos.DictationDaemon'>
         <method name='StartRecording' />
         <method name='StopRecording' />
+        <signal name='Level'>
+          <arg type='d' name='level' />
+        </signal>
       </interface>
     </node>
     """
+    # Emitted at LEVEL_EMIT_INTERVAL_S while (and only while) actually recording, so the
+    # Dynamic Island can draw a waveform driven by real microphone amplitude instead of a
+    # canned animation -- see _emit_level()'s own docstring for the actual math.
+    Level = dbus_signal()
 
     def __init__(self):
         self._settings = Gio.Settings.new(SETTINGS_SCHEMA_ID)
         self._proc = None
-        self._wav_path = None
+        self._audio_watch_id = 0
+        self._pcm_chunks = []
+        self._last_level_emit = 0.0
+        self._record_start_time = 0.0
         self._session_bus = SessionBus()
 
     # ---- D-Bus methods, called by the extension on hotkey press/release ----
@@ -101,29 +147,113 @@ class DictationDaemon:
     def StartRecording(self):
         if self._proc is not None:
             return  # a stray duplicate press while already recording -- ignore, not an error
-        fd, self._wav_path = tempfile.mkstemp(prefix='peachos-dictation-', suffix='.wav')
-        os.close(fd)
+        self._pcm_chunks = []
+        self._last_level_emit = 0.0
+        self._record_start_time = time.monotonic()
         try:
+            # --container raw: headerless s16 mono PCM straight to stdout -- confirmed live
+            # (checked the actual bytes) that '--container raw -' really does skip any WAV/
+            # RIFF header, unlike writing to a plain .wav path. Read directly here (rather
+            # than pw-record writing a file we only reopen afterward) is what makes live
+            # level metering possible at all; StopRecording builds the real WAV file itself
+            # from the buffered bytes once recording ends.
             self._proc = subprocess.Popen(
-                ['pw-record', '--rate', '16000', '--channels', '1', '--format', 's16', self._wav_path],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                ['pw-record', '--rate', str(SAMPLE_RATE), '--channels', '1', '--format', 's16',
+                 '--container', 'raw', '-'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             )
         except OSError as e:
             self._proc = None
             self._notify_extension('Failed', f'Could not start recording: {e}')
+            return
+
+        os.set_blocking(self._proc.stdout.fileno(), False)
+        self._audio_watch_id = GLib.io_add_watch(
+            self._proc.stdout.fileno(), GLib.PRIORITY_DEFAULT,
+            GLib.IOCondition.IN | GLib.IOCondition.HUP, self._on_audio_readable)
+
+    def _on_audio_readable(self, fd, condition):
+        if condition & GLib.IOCondition.HUP and not (condition & GLib.IOCondition.IN):
+            self._audio_watch_id = 0
+            return GLib.SOURCE_REMOVE
+        try:
+            chunk = os.read(fd, 4096)
+        except BlockingIOError:
+            return GLib.SOURCE_CONTINUE
+        except OSError:
+            self._audio_watch_id = 0
+            return GLib.SOURCE_REMOVE
+        if not chunk:
+            self._audio_watch_id = 0
+            return GLib.SOURCE_REMOVE
+
+        self._pcm_chunks.append(chunk)
+        now = time.monotonic()
+        past_warmup = now - self._record_start_time >= LEVEL_WARMUP_SECONDS
+        if past_warmup and now - self._last_level_emit >= LEVEL_EMIT_INTERVAL_S:
+            self._last_level_emit = now
+            self._emit_level(chunk)
+        return GLib.SOURCE_CONTINUE
+
+    def _emit_level(self, chunk):
+        """One chunk's RMS, gamma-curved into 0..1 and emitted as Level. Doesn't accumulate
+        across chunks between emits -- a single ~0.08s-old chunk is representative enough for
+        a waveform bar, and skipping the ones in between is what keeps this cheap."""
+        usable_len = len(chunk) - (len(chunk) % 2)
+        if usable_len <= 0:
+            return
+        samples = array.array('h')
+        samples.frombytes(chunk[:usable_len])
+        if not samples:
+            return
+
+        rms = math.sqrt(sum(s * s for s in samples) / len(samples))
+        if rms < LEVEL_NOISE_FLOOR_RMS:
+            self.Level(0.0)
+            return
+        level = min(1.0, (rms / LEVEL_RMS_REFERENCE) ** LEVEL_GAMMA)
+        self.Level(level)
 
     def StopRecording(self):
         if self._proc is None:
             return
-        proc, wav_path = self._proc, self._wav_path
-        self._proc, self._wav_path = None, None
-        # SIGINT (not SIGKILL/terminate) -- pw-record flushes and finalizes the WAV header on
-        # a clean interrupt; killing it outright can leave a truncated/unreadable file.
+        proc = self._proc
+        self._proc = None
+        if self._audio_watch_id:
+            GLib.source_remove(self._audio_watch_id)
+            self._audio_watch_id = 0
+
+        # SIGINT (not SIGKILL/terminate) -- pw-record flushes cleanly on a clean interrupt;
+        # killing it outright risks losing whatever's still in its own internal buffer.
         proc.send_signal(signal.SIGINT)
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+        # One last synchronous drain: the IO watch only runs the pipe empty on the main
+        # loop's own schedule, so a final chunk written right as pw-record exits can still be
+        # sitting unread in the pipe. The writer is gone by now (proc.wait() above already
+        # returned), so a blocking read here just returns whatever's left, immediately.
+        try:
+            os.set_blocking(proc.stdout.fileno(), True)
+            remainder = proc.stdout.read()
+            if remainder:
+                self._pcm_chunks.append(remainder)
+        except (OSError, ValueError):
+            pass
+
+        pcm_bytes = b''.join(self._pcm_chunks)
+        self._pcm_chunks = []
+
+        fd, wav_path = tempfile.mkstemp(prefix='peachos-dictation-', suffix='.wav')
+        os.close(fd)
+        with wave.open(wav_path, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # s16
+            wav_file.setframerate(SAMPLE_RATE)
+            wav_file.writeframes(pcm_bytes)
+
         # Returns to the D-Bus caller (the extension) immediately -- the actual transcription
         # work happens on the next main-loop iteration, so a slow whisper.cpp run never makes
         # the extension's StopRecording call_sync() hang.
