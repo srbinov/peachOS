@@ -59,6 +59,7 @@ from lockscreen_page import LockScreenPage
 from touchid_page import TouchIDPage
 from users_page import UsersPage
 from internetaccounts_page import InternetAccountsPage
+from keyboard_shortcuts_page import KeyboardShortcutsPage
 from keyboard_page import KeyboardPage
 from mouse_page import MousePage
 from touchpad_page import TouchpadPage
@@ -116,6 +117,7 @@ EXTRA_PAGE_TITLES = {
     'accessibility_display': 'Display',
     'accessibility_audio': 'Audio',
     'appearance_custom_icons': 'Custom Icons',
+    'keyboard_shortcuts': 'Keyboard Shortcuts',
     'edit_profile': 'Edit Profile',
 }
 
@@ -134,6 +136,7 @@ EXTRA_PAGE_PARENTS = {
     'accessibility_display': 'accessibility',
     'accessibility_audio': 'accessibility',
     'appearance_custom_icons': 'appearance',
+    'keyboard_shortcuts': 'keyboard',
 }
 
 # Extra search terms for pages whose real name doesn't obviously contain the
@@ -150,6 +153,9 @@ SEARCH_ALIASES = {
                  'monitor', 'arrangement', 'scale', 'mirror', 'rotate'],
     'multitasking': ['workspaces', 'hot corner', 'edge tiling', 'window tiling',
                      'alt tab', 'app switcher', 'active screen edges'],
+    'keyboard': ['input source', 'keyboard layout', 'add layout', 'key repeat', 'shortcuts'],
+    'keyboard_shortcuts': ['keyboard shortcuts', 'rebind', 'custom shortcut', 'hotkey',
+                           'screenshot shortcut', 'lock screen shortcut'],
     'wifi': ['wireless'],
     'touchid': ['fingerprint', 'change password'],
     'users': ['add user', 'accounts', 'user account'],
@@ -539,7 +545,10 @@ class SettingsWindow(Adw.ApplicationWindow):
         elif row_id == 'internetaccounts':
             page = InternetAccountsPage()
         elif row_id == 'keyboard':
-            page = KeyboardPage()
+            page = KeyboardPage(
+                on_open_shortcuts=lambda: self._go_to('keyboard_shortcuts', record_history=True))
+        elif row_id == 'keyboard_shortcuts':
+            page = KeyboardShortcutsPage()
         elif row_id == 'mouse':
             page = MousePage()
         elif row_id == 'touchpad':
