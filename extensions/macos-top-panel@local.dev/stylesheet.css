@@ -753,8 +753,8 @@
    accent color per active context (red for recording, matching both the voice-memo and
    phone-call references) rather than one foreground/background pair that swaps. */
 .dynamic-island {
-  spacing: 7px;
-  padding: 3px 12px;
+  spacing: 8px;
+  padding: 2px 16px;
   border-radius: 999px;
   background-color: #0a0a0a;
 }

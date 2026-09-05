@@ -195,6 +195,15 @@ export default class PeachIntelligenceExtension extends Extension {
             Main.popModal(this._grab);
             this._grab = null;
         }
+        // _onHotkeyPressed's global.stage.set_key_focus(this._grabAnchor) steals Clutter's own
+        // key focus onto the (invisible) anchor actor -- popModal() alone doesn't hand it back.
+        // Without this, Clutter's key focus stays parked on _grabAnchor (a plain St.Widget,
+        // not a real text field) even after the modal grab ends, so Paste()'s synthetic
+        // Ctrl+V lands nowhere: real bug this fixes -- transcription worked, but nothing got
+        // pasted into whatever text field actually had focus before the hotkey was pressed.
+        // null tells Clutter to fall back to whatever window Mutter itself still considers
+        // focused, which was never actually changed by any of this.
+        global.stage.set_key_focus(null);
         this._setRecordingState('transcribing');
         if (tellDaemon)
             this._callDaemon('StopRecording');

@@ -32,8 +32,8 @@ const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
 const DAEMON_OBJECT_PATH = '/org/peachos/DictationDaemon';
 
 const WAVEFORM_BAR_COUNT = 5;
-const WAVEFORM_MIN_HEIGHT = 3;
-const WAVEFORM_MAX_HEIGHT = 11;
+const WAVEFORM_MIN_HEIGHT = 2;
+const WAVEFORM_MAX_HEIGHT = 8;
 // How long each bar takes to ease to a newly-received level -- matched to roughly the
 // daemon's own emission cadence (LEVEL_EMIT_INTERVAL_S, ~80ms) so one bar's motion finishes
 // right as the next value arrives, instead of visibly lagging behind or snapping.
@@ -117,9 +117,20 @@ export class DynamicIsland {
         });
         this._dictationBox.add_child(this._dictationIcon);
         this._waveformBars = [];
-        this._waveformBox = new St.BoxLayout({style_class: 'dynamic-island-waveform', vertical: false});
+        this._waveformBox = new St.BoxLayout({
+            style_class: 'dynamic-island-waveform', vertical: false, y_align: Clutter.ActorAlign.CENTER,
+        });
         for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
-            const bar = new St.Widget({style_class: 'dynamic-island-waveform-bar', height: WAVEFORM_MIN_HEIGHT});
+            // St.BoxLayout stretches children to fill its own allocated height by default
+            // (a real bug this fixes -- explicit y_expand: false + y_align: CENTER is what
+            // actually lets a bar's own `height` win instead of being re-stretched to match
+            // the box/tallest sibling on every layout pass, which is what made the waveform
+            // look both "too tall" AND "static": every bar was being stretched back to the
+            // same full height regardless of what _onAudioLevel() had just set it to).
+            const bar = new St.Widget({
+                style_class: 'dynamic-island-waveform-bar', height: WAVEFORM_MIN_HEIGHT,
+                y_align: Clutter.ActorAlign.CENTER, y_expand: false,
+            });
             this._waveformBox.add_child(bar);
             this._waveformBars.push(bar);
         }
