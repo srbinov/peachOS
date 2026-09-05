@@ -752,22 +752,11 @@
    context (it's tied to the physical camera cutout, not a themeable surface), with a bright
    accent color per active context (red for recording, matching both the voice-memo and
    phone-call references) rather than one foreground/background pair that swaps. */
-/* Slight liquid glass: same recipe as every other glass surface in this project
-   (docs/liquid-glass-style.md), but pushed way down in intensity -- explicit request was
-   "ever so slight", and the pill's own identity (always near-black, see the block comment
-   above) has to survive it. The actual backdrop blur is Shell.BlurEffect on the container in
-   dynamicIsland.js, BACKGROUND mode, low radius; this gradient/border/inset-highlight is just
-   what makes that blur read as glass instead of a plain translucent box. */
 .dynamic-island {
   spacing: 8px;
   padding: 1px 16px;
   border-radius: 999px;
-  background-color: rgba(10, 10, 10, 0.82);
-  background-gradient-direction: vertical;
-  background-gradient-start: rgba(52, 52, 54, 0.32);
-  background-gradient-end: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  background-color: #0a0a0a;
 }
 
 .dynamic-island--error {

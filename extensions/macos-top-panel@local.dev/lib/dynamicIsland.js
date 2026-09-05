@@ -23,7 +23,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import {MediaPlayerController} from './mediaPlayerController.js';
@@ -49,16 +48,6 @@ const FADE_OUT_MS = 200;
 // opacity-only cross-fade was the "clunky" part: the pill stayed full-size the whole time and
 // just faded, no actual shrink/grow motion the way a real pop in/out reads as smooth.
 const POP_SCALE = 0.65;
-
-// Slight backdrop blur, "liquid glass" style -- see this._container's own comment in
-// _buildActor() for why it's safe here (unlike the Control Center's popup content, which has
-// a documented crash tying a live blur effect to popup teardown during the screenshot-UI
-// handoff, see docs/liquid-glass-style.md and lib/tileBlurController.js). Kept deliberately
-// small: this is meant to read as "ever so slight", not the full-intensity glass the Control
-// Center's own tiles use (BLUR_RADIUS 24, tileBlurController.js).
-const ISLAND_BLUR_NAME = 'dynamic-island-blur';
-const ISLAND_BLUR_RADIUS = 10;
-const ISLAND_BLUR_BRIGHTNESS = 0.85;
 
 // Media's own "now playing" indicator -- unlike the dictation waveform, MPRIS gives no real
 // audio-level data to drive this with (there's no equivalent of peachos-dictation-daemon's
@@ -191,20 +180,6 @@ export class DynamicIsland {
         // the top-left corner instead of the middle, which reads as lopsided rather than a
         // clean pop in/out.
         this._container.set_pivot_point(0.5, 0.5);
-
-        // Slight backdrop blur. Safe to attach for this actor's whole normal lifetime (unlike
-        // the Control Center's popup tiles): this container is a permanent panel child that
-        // only ever gets destroyed once, on extension disable -- never repeatedly torn down
-        // and rebuilt the way a popup/BoxPointer is, so it never races the screenshot-UI
-        // teardown that causes the documented crash. Still detached explicitly in destroy()
-        // before the container itself goes, matching that same safe-lifecycle discipline.
-        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        this._container.add_effect_with_name(ISLAND_BLUR_NAME, new Shell.BlurEffect({
-            name: ISLAND_BLUR_NAME,
-            mode: Shell.BlurMode.BACKGROUND,
-            radius: ISLAND_BLUR_RADIUS * scale,
-            brightness: ISLAND_BLUR_BRIGHTNESS,
-        }));
 
         this._dictationBox = new St.BoxLayout({style_class: 'dynamic-island-dictation', vertical: false});
         this._dictationIcon = new St.Icon({
@@ -541,11 +516,6 @@ export class DynamicIsland {
         this._dictationSettings = null;
         this._mediaController?.destroy();
         this._mediaController = null;
-        try {
-            this._container?.remove_effect_by_name(ISLAND_BLUR_NAME);
-        } catch (e) {
-            // Container may already be mid-destroy -- nothing to clean up either way.
-        }
         this._container?.destroy();
         this._container = null;
     }
