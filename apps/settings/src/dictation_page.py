@@ -22,7 +22,7 @@ from widgets import DropdownRow, ToggleRow, make_hero_header
 # Same recorder widget (and conflict scanner) peachySearch's own shortcut picker uses --
 # reused directly rather than reimplemented, so "choose any shortcut you want" means the
 # exact same capture UX/behavior in both places, not a lookalike with its own quirks.
-from spotlight_page import ShortcutRow, find_conflict
+from spotlight_page import ShortcutRow, accelerator_label, find_conflict, parse_accelerator
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -114,7 +114,7 @@ class DictationPage(Gtk.Box):
         if accel_str == self._current_hotkey():
             return  # re-recorded the exact same combo -- nothing to check or change
 
-        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
+        ok, keyval, mods = parse_accelerator(accel_str)
         label, clear_fn = find_conflict(keyval, mods) if ok else (None, None)
         if label:
             self._show_conflict_dialog(label, clear_fn, accel_str)
@@ -123,8 +123,8 @@ class DictationPage(Gtk.Box):
 
     def _show_conflict_dialog(self, label, clear_fn, accel_str):
         self._hotkey_row.set_accelerator(self._current_hotkey())  # put the row back while the dialog is up
-        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
-        display = Gtk.accelerator_get_label(keyval, mods) if ok else accel_str
+        ok, keyval, mods = parse_accelerator(accel_str)
+        display = accelerator_label(keyval, mods) if ok else accel_str
 
         dialog = Adw.AlertDialog(
             heading='Shortcut Already in Use',

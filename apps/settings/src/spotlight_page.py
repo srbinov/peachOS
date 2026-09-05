@@ -1,4 +1,5 @@
 import os
+import re
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
@@ -45,9 +46,46 @@ _RELEVANT_MODS = (
 # spacebar toggles peachySearch instead of typing a space, anywhere, in any app.
 _REQUIRED_ANCHOR_MODS = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK
 
+# Keys with no character/typing meaning of their own -- unlike Space/letters/arrows, binding
+# one of these bare has no "hijacks normal typing" downside, so they're exempt from the
+# anchor-modifier rule above. Real, explicit request: a push-to-talk key (Peach Intelligence's
+# own Settings tab) is exactly the case a bare dedicated key like Fn is meant for.
+_BARE_SAFE_KEYVALS = {Gdk.KEY_Fn}
+
 
 def _is_usable_global_accel(keyval, mods):
+    if keyval in _BARE_SAFE_KEYVALS:
+        return True
     return bool(mods & _REQUIRED_ANCHOR_MODS) and Gtk.accelerator_valid(keyval, mods)
+
+
+_RAW_HEX_ACCEL_RE = re.compile(r'^0x[0-9a-fA-F]+$')
+
+
+def parse_accelerator(accel_str):
+    """Gtk.accelerator_parse(), with a fallback for keyvals whose OWN accelerator_name()
+    output doesn't round-trip back through accelerator_parse() -- confirmed live: Fn's
+    accelerator_name() is '0x100811d0' (no symbolic name in GTK's own accelerator table for
+    this keysym), and feeding that exact string back into accelerator_parse() fails (returns
+    not-ok, keyval 0) instead of recovering it. Returns (ok, keyval, mods) as
+    accelerator_parse() would if that round-trip actually worked."""
+    ok, keyval, mods = Gtk.accelerator_parse(accel_str)
+    if ok:
+        return ok, keyval, mods
+    if _RAW_HEX_ACCEL_RE.match(accel_str):
+        return True, int(accel_str, 16), 0
+    return False, 0, 0
+
+
+# Gtk.accelerator_get_label(Gdk.KEY_Fn, 0) has the same problem as accelerator_name() above --
+# GTK's own accelerator-label table has no entry for this keysym either, so it falls back to
+# printing the raw '0x100811d0' instead of something readable. Any keyval could in principle
+# hit the same gap; this only special-cases the one already confirmed to.
+_ACCEL_LABEL_OVERRIDES = {Gdk.KEY_Fn: 'Fn'}
+
+
+def accelerator_label(keyval, mods):
+    return _ACCEL_LABEL_OVERRIDES.get(keyval) or Gtk.accelerator_get_label(keyval, mods)
 
 # (glyph, mask, the L/R keyvals that hold it down) -- macOS's canonical modifier order
 # and glyphs (Control, Option, Shift, Command), matching peachOS's styling elsewhere.
@@ -85,7 +123,7 @@ button.shortcut-button.recording {
 def _accel_matches(binding_str, keyval, mods):
     if not binding_str:
         return False
-    ok, b_keyval, b_mods = Gtk.accelerator_parse(binding_str)
+    ok, b_keyval, b_mods = parse_accelerator(binding_str)
     return ok and b_keyval == keyval and b_mods == mods
 
 
@@ -180,8 +218,8 @@ class ShortcutRow(Gtk.Box):
         self.button.remove_css_class('recording')
         self.button.set_child(self._idle_label)
         if accel_str:
-            ok, keyval, mods = Gtk.accelerator_parse(accel_str)
-            self._idle_label.set_label(Gtk.accelerator_get_label(keyval, mods) if ok else accel_str)
+            ok, keyval, mods = parse_accelerator(accel_str)
+            self._idle_label.set_label(accelerator_label(keyval, mods) if ok else accel_str)
         else:
             self._idle_label.set_label('None')
 
@@ -246,7 +284,7 @@ class ShortcutRow(Gtk.Box):
 
     def _finish_recording(self, keyval, mods):
         self._recording = False
-        self._render_chips(final_label=Gtk.accelerator_get_label(keyval, 0))
+        self._render_chips(final_label=accelerator_label(keyval, 0))
         accel_str = Gtk.accelerator_name(keyval, mods)
         # Hold the fully-assembled combo on screen for a beat before handing off --
         # otherwise it flashes straight to whatever happens next (a saved shortcut, or
@@ -338,7 +376,7 @@ class SpotlightPage(Gtk.Box):
     def _binding_is_safe(binding):
         if not binding:
             return False
-        ok, keyval, mods = Gtk.accelerator_parse(binding)
+        ok, keyval, mods = parse_accelerator(binding)
         return ok and _is_usable_global_accel(keyval, mods)
 
     def _connect_settings(self):
@@ -360,7 +398,7 @@ class SpotlightPage(Gtk.Box):
             self._refresh()  # cancelled -- redisplay the real current value
             return
 
-        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
+        ok, keyval, mods = parse_accelerator(accel_str)
         label, clear_fn = find_conflict(keyval, mods) if ok else (None, None)
         if label:
             self._show_conflict_dialog(label, clear_fn, accel_str)
@@ -369,8 +407,8 @@ class SpotlightPage(Gtk.Box):
 
     def _show_conflict_dialog(self, label, clear_fn, accel_str):
         self._refresh()  # put the button back to its real (old) value while the dialog is up
-        ok, keyval, mods = Gtk.accelerator_parse(accel_str)
-        display = Gtk.accelerator_get_label(keyval, mods) if ok else accel_str
+        ok, keyval, mods = parse_accelerator(accel_str)
+        display = accelerator_label(keyval, mods) if ok else accel_str
 
         dialog = Adw.AlertDialog(
             heading='Shortcut Already in Use',
