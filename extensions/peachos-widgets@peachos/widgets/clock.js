@@ -1,29 +1,27 @@
-// Clock widgets, matched to the KDE liquidglass repo:
+// Clock widgets, matched to the KDE liquidglass repo.
 //
-//  DigitalClock -- a tick ring following the glass squircle, with a
-//  comet-trail second indicator, and a centred H:MM in Barlow Condensed
-//  Medium with a two-dot colon.
+//  DigitalClock -- a tick ring following the glass squircle with a subtle
+//  comet-trail second indicator, and a centred H:MM in Barlow Condensed with
+//  a two-dot colon (KDE clock-digital + TickRing.qml + DigitalTime.qml).
 //
-//  AnalogClock -- a translucent disc, 60 pill ticks, SF Pro Rounded hour
-//  numbers, pill hour/minute hands, and an orange (#F6A029) second hand + hinge.
-//
-// Cairo via the legacy `imports.cairo` binding, same as
-// macos-top-panel/lib/batteryCanvas.js.
+//  AnalogClock -- translucent disc, 60 pill ticks, SF Pro Rounded hour
+//  numbers, pill hour/minute hands, an orange (#F6A029) second hand + hinge
+//  (KDE clock-analog/main.qml).
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {squircleRayHit} from '../lib/squircle.js';
+import {applyFont, FAMILIES, Pango} from '../lib/fonts.js';
 
 const {cairo: Cairo} = imports;
 
 const FG = [1, 1, 1];
 const SECOND_ORANGE = [0.965, 0.627, 0.161]; // #F6A029
-const DIGIT_OPACITY = 0.55;                  // glass mode
-const RING_BASE_OPACITY = 0.18;              // glass mode
+const DIGIT_OPACITY = 0.55;                   // glass mode
+const RING_BASE_OPACITY = 0.22;               // glass mode
 
-// A repeating timer that fires `onTick` aligned to the wall clock.
 class Ticker {
     constructor(intervalMs, onTick) {
         this._onTick = onTick;
@@ -47,10 +45,9 @@ class Ticker {
 
 export class DigitalClock {
     constructor(parent, size) {
-        this._w = size.w;
-        this._h = size.h;
         this._radius = size.radius;
         this._roundness = size.roundness ?? 7.0;
+        const minSide = Math.min(size.w, size.h);
 
         this._root = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -63,22 +60,23 @@ export class DigitalClock {
         this._root.add_child(this._ring);
 
         // H : MM  ---------------------------------------------------------
-        const px = Math.round(Math.min(size.w, size.h) * 0.42);
+        const px = Math.round(minSide * 0.44);
         this._row = new St.BoxLayout({
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'peachos-clock-digital-row',
         });
-        this._hour = new St.Label({
-            style_class: 'peachos-clock-digital-num',
-            style: `font-size: ${px}px;`,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
+        this._hour = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        this._min = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        for (const l of [this._hour, this._min]) {
+            applyFont(l, FAMILIES.barlow, px, Pango.Weight.MEDIUM);
+            l.style = `color: rgba(255,255,255,${DIGIT_OPACITY});`;
+        }
+
         const dot = Math.max(3, Math.round(px * 0.11));
         this._colon = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${Math.round(dot * 1.3)}px; margin: 0 ${Math.round(px * 0.10)}px;`,
+            style: `spacing: ${Math.round(dot * 1.35)}px; margin: 0 ${Math.round(px * 0.11)}px;`,
         });
         for (let i = 0; i < 2; i++) {
             this._colon.add_child(new St.Widget({
@@ -86,18 +84,11 @@ export class DigitalClock {
                 style: `background-color: rgba(255,255,255,${DIGIT_OPACITY}); border-radius: ${dot}px;`,
             }));
         }
-        this._min = new St.Label({
-            style_class: 'peachos-clock-digital-num',
-            style: `font-size: ${px}px;`,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
         this._row.add_child(this._hour);
         this._row.add_child(this._colon);
         this._row.add_child(this._min);
         this._root.add_child(this._row);
 
-        // One tick a second -- the second indicator steps like a real clock
-        // (cheaper than a 60fps comet; important on the low-end test hardware).
         this._tick = new Ticker(1000, () => {
             this._updateTime();
             this._ring.queue_repaint();
@@ -106,8 +97,7 @@ export class DigitalClock {
 
     _updateTime() {
         const now = GLib.DateTime.new_now_local();
-        const h12 = ((now.get_hour() + 11) % 12) + 1;
-        this._hour.text = `${h12}`;
+        this._hour.text = `${((now.get_hour() + 11) % 12) + 1}`;
         this._min.text = now.format('%M');
     }
 
@@ -121,20 +111,19 @@ export class DigitalClock {
             const n = Math.max(this._roundness, 2.0);
 
             const outerInset = 0.05 * minSide;
-            const tickLen = 0.026 * minSide;
+            const tickLen = 0.05 * minSide;
             const cornerExt = 0.012 * minSide;
             const innerPad = outerInset + tickLen;
 
-            const nowMs = Date.now();
-            const secPos = (nowMs % 60000) / 1000; // 0..60 continuous
+            const secPos = (Date.now() % 60000) / 1000;
             const curIdx = Math.floor(secPos) % 60;
             const prevIdx = (curIdx - 1 + 60) % 60;
-            let fadeT = secPos - Math.floor(secPos);
+            const fadeT = secPos - Math.floor(secPos);
             const sHead = fadeT * fadeT * (3 - 2 * fadeT);
-            const trailDeg = 270;
+            const trailDeg = 250;
 
             cr.setLineCap(Cairo.LineCap.ROUND);
-            cr.setLineWidth(2.2);
+            cr.setLineWidth(2.4);
 
             for (let i = 0; i < 60; i++) {
                 const rad = i * 6 * Math.PI / 180;
@@ -156,7 +145,7 @@ export class DigitalClock {
                 } else {
                     const off = ((prevIdx * 6) - (i * 6) + 360) % 360;
                     if (off <= trailDeg)
-                        s = Math.pow(1 - off / trailDeg, 0.6);
+                        s = Math.pow(1 - off / trailDeg, 0.7) * 0.9;
                 }
                 const op = RING_BASE_OPACITY + (1 - RING_BASE_OPACITY) * s;
 
@@ -192,9 +181,6 @@ export class AnalogClock {
         this._face.connect('repaint', a => this._draw(a));
         this._root.add_child(this._face);
 
-        // Hour numbers as real labels (SF Pro Rounded), positioned by hand.
-        // Clutter.Actor (fixed layout) so the absolutely-placed labels actually
-        // get allocated.
         this._numbers = new Clutter.Actor({width: size.w, height: size.h});
         this._root.add_child(this._numbers);
         this._layoutNumbers(size.w, size.h);
@@ -210,19 +196,15 @@ export class AnalogClock {
         const fs = Math.max(9, Math.round(faceR * 0.17));
         for (let i = 1; i <= 12; i++) {
             const a = (i / 12) * 2 * Math.PI;
-            const label = new St.Label({
-                text: `${i}`,
-                style_class: 'peachos-clock-analog-num',
-                style: `font-size: ${fs}px;`,
-            });
-            // Estimated glyph box (preferred-size isn't reliable before the
-            // actor is on the stage).
+            const l = new St.Label({text: `${i}`});
+            applyFont(l, FAMILIES.rounded, fs, Pango.Weight.MEDIUM);
+            l.style = 'color: rgba(255,255,255,0.85);';
             const nw = fs * (i < 10 ? 0.52 : 0.98);
             const nh = fs * 1.15;
-            label.set_position(
+            l.set_position(
                 Math.round(cx + Math.sin(a) * dist - nw / 2),
                 Math.round(cy - Math.cos(a) * dist - nh / 2));
-            this._numbers.add_child(label);
+            this._numbers.add_child(l);
         }
     }
 
@@ -232,15 +214,12 @@ export class AnalogClock {
         try {
             const cx = w / 2;
             const cy = h / 2;
-            const margin = Math.min(w, h) * 0.08;
-            const r = Math.min(w, h) / 2 - margin;
+            const r = Math.min(w, h) / 2 - Math.min(w, h) * 0.08;
 
-            // Translucent clock plate
             cr.setSourceRGBA(1, 1, 1, 0.20);
             cr.arc(cx, cy, r, 0, 2 * Math.PI);
             cr.fill();
 
-            // 60 pill ticks
             const tickW = r * 0.020;
             const tickLen = r * 0.09;
             const outerR = r - tickW * 2;
@@ -248,26 +227,24 @@ export class AnalogClock {
             cr.setLineCap(Cairo.LineCap.ROUND);
             cr.setLineWidth(tickW);
             for (let i = 0; i < 60; i++) {
-                const major = i % 5 === 0;
-                cr.setSourceRGBA(FG[0], FG[1], FG[2], major ? 0.75 : 0.30);
+                cr.setSourceRGBA(FG[0], FG[1], FG[2], i % 5 === 0 ? 0.75 : 0.30);
                 const a = i * 6 * Math.PI / 180;
-                const sinA = Math.sin(a);
-                const cosA = Math.cos(a);
-                cr.moveTo(cx + sinA * innerR, cy - cosA * innerR);
-                cr.lineTo(cx + sinA * outerR, cy - cosA * outerR);
+                const s = Math.sin(a);
+                const c = Math.cos(a);
+                cr.moveTo(cx + s * innerR, cy - c * innerR);
+                cr.lineTo(cx + s * outerR, cy - c * outerR);
                 cr.stroke();
             }
 
             const now = GLib.DateTime.new_now_local();
-            const ms = Date.now() % 1000;
-            const sec = now.get_second() + ms / 1000;
+            const sec = now.get_second();
             const min = now.get_minute() + sec / 60;
             const hr = (now.get_hour() % 12) + min / 60;
 
             const minuteLen = (outerR + innerR) / 2;
             const hourLen = minuteLen * 0.65;
 
-            const pillHand = (turns, len, stemEnd, stemW, pillW, rgba) => {
+            const pill = (turns, len, stemEnd, stemW, pillW, rgba) => {
                 cr.save();
                 cr.translate(cx, cy);
                 cr.rotate(turns * 2 * Math.PI);
@@ -282,11 +259,10 @@ export class AnalogClock {
                 cr.restore();
             };
 
-            const hand = [FG[0], FG[1], FG[2], 0.92];
-            pillHand(hr / 12, hourLen, r * 0.15, r * 0.034, r * 0.065, hand);
-            pillHand(min / 60, minuteLen, r * 0.15, r * 0.034, r * 0.065, hand);
+            const hand = [1, 1, 1, 0.92];
+            pill(hr / 12, hourLen, r * 0.15, r * 0.034, r * 0.065, hand);
+            pill(min / 60, minuteLen, r * 0.15, r * 0.034, r * 0.065, hand);
 
-            // Second hand (orange, with tail)
             cr.save();
             cr.translate(cx, cy);
             cr.rotate((sec / 60) * 2 * Math.PI);
@@ -296,7 +272,6 @@ export class AnalogClock {
             cr.fill();
             cr.restore();
 
-            // Hinge
             cr.setSourceRGBA(...hand);
             cr.arc(cx, cy, r * 0.05, 0, 2 * Math.PI);
             cr.fill();

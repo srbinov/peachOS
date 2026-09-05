@@ -14,7 +14,7 @@ import St from 'gi://St';
 
 import {buildWallpaperTexture} from './wallpaperTexture.js';
 
-export const MARGIN = 40;
+export const MARGIN = 52;
 
 // KDE LiquidGlass.qml defaults, tuned for widget-pixel coordinates.
 //
@@ -144,7 +144,7 @@ export function makeLiquidGlass(opts) {
     // A gentle frost behind the glass (the KDE original runs a Dual-Kawase blur
     // pyramid; Shell.BlurEffect in ACTOR mode blurs this actor's own wallpaper
     // crop, which the shader then refracts). Skipped in solid mode.
-    const blurRadius = opts.blurRadius ?? 10;
+    const blurRadius = opts.blurRadius ?? 6;
     if (!solid && blurRadius > 0) {
         try {
             widget.add_effect(new Shell.BlurEffect({
