@@ -754,7 +754,7 @@
    phone-call references) rather than one foreground/background pair that swaps. */
 .dynamic-island {
   spacing: 8px;
-  padding: 2px 16px;
+  padding: 1px 16px;
   border-radius: 999px;
   background-color: #0a0a0a;
 }
@@ -791,6 +791,15 @@
   width: 2.5px;
   border-radius: 1px;
   background-color: #FF3B30;
+}
+
+/* Media's own "now playing" equalizer (canned animation, not real audio levels -- see
+   MEDIA_EQ_* constants' own comment in dynamicIsland.js) -- white/neutral rather than the
+   recording waveform's red, since red is specifically this pill's "mic is live" signal. */
+.dynamic-island-eq-bar {
+  width: 2.5px;
+  border-radius: 1px;
+  background-color: white;
 }
 
 .dynamic-island-art {

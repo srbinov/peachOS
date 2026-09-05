@@ -43,6 +43,16 @@ const WAVEFORM_RESET_MS = 120;
 const FADE_IN_MS = 150;
 const FADE_OUT_MS = 130;
 
+// Media's own "now playing" indicator -- unlike the dictation waveform, MPRIS gives no real
+// audio-level data to drive this with (there's no equivalent of peachos-dictation-daemon's
+// Level signal for whatever's coming out of Spotify/Firefox/etc), so this is deliberately a
+// canned animation, the same way a plain "now playing" equalizer icon anywhere else is -- it
+// means "something is actively playing", not "here is its literal waveform".
+const MEDIA_EQ_BAR_COUNT = 4;
+const MEDIA_EQ_MIN_HEIGHT = 2;
+const MEDIA_EQ_MAX_HEIGHT = 8;
+const MEDIA_EQ_TICK_MS = 220;
+
 // 'listening' shows a real elapsed-time counter instead of text (see the voice-memo
 // reference: no "Listening…" label at all, just the waveform and a running clock).
 const TRANSIENT_LABELS = {
@@ -65,6 +75,23 @@ function formatElapsed(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// MPRIS has no notion of "which window" owns a player -- there's no reliable way to know
+// exactly which browser window/tab a given org.mpris.MediaPlayer2.* bus name belongs to (most
+// browsers expose one player per process, not per tab or per window). This is a coarse but
+// workable approximation instead: guess the owning app's name from its bus name (e.g.
+// 'org.mpris.MediaPlayer2.firefox.instance_1_234' -> 'firefox') and match it against the
+// focused window's own WM_CLASS. Good enough for "hide the pill while I'm actually looking at
+// the app that's playing" in the common single-window case; imprecise if someone has two
+// windows of the same app open, one playing and one not -- there's no fixing that without
+// real per-window media session info, which Linux desktops don't have.
+function guessAppNameFromBusName(busName) {
+    if (!busName)
+        return null;
+    const withoutPrefix = busName.replace(/^org\.mpris\.MediaPlayer2\./, '');
+    const withoutInstance = withoutPrefix.split(/\.instance/i)[0];
+    return withoutInstance.toLowerCase();
 }
 
 export class DynamicIsland {
@@ -96,8 +123,13 @@ export class DynamicIsland {
 
         this._mediaController = new MediaPlayerController(state => {
             this._mediaState = state;
+            this._setMediaEqActive(Boolean(state?.isPlaying));
             this._sync();
         });
+
+        // Re-evaluate every time focus changes -- the media pill's own visibility depends on
+        // whether the playing app's window currently has focus (see _isMediaWindowFocused()).
+        this._focusChangedId = global.display.connect('notify::focus-window', () => this._sync());
 
         this._sync();
     }
@@ -152,6 +184,19 @@ export class DynamicIsland {
         mediaText.add_child(this._mediaTitle);
         mediaText.add_child(this._mediaArtist);
         this._mediaBox.add_child(mediaText);
+        this._mediaEqBars = [];
+        this._mediaEqBox = new St.BoxLayout({
+            style_class: 'dynamic-island-waveform', vertical: false, y_align: Clutter.ActorAlign.CENTER,
+        });
+        for (let i = 0; i < MEDIA_EQ_BAR_COUNT; i++) {
+            const bar = new St.Widget({
+                style_class: 'dynamic-island-eq-bar', height: MEDIA_EQ_MIN_HEIGHT,
+                y_align: Clutter.ActorAlign.CENTER, y_expand: false,
+            });
+            this._mediaEqBox.add_child(bar);
+            this._mediaEqBars.push(bar);
+        }
+        this._mediaBox.add_child(this._mediaEqBox);
         this._container.add_child(this._mediaBox);
     }
 
@@ -201,6 +246,44 @@ export class DynamicIsland {
             bar.ease({height: WAVEFORM_MIN_HEIGHT, duration: WAVEFORM_RESET_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
 
+    // ---- Media "now playing" equalizer (canned -- see MEDIA_EQ_* constants' own comment) ----
+
+    _setMediaEqActive(active) {
+        if (active === Boolean(this._mediaEqTimerId))
+            return;
+        if (active) {
+            this._tickMediaEq();
+            this._mediaEqTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MEDIA_EQ_TICK_MS, () => {
+                this._tickMediaEq();
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (this._mediaEqTimerId) {
+            GLib.source_remove(this._mediaEqTimerId);
+            this._mediaEqTimerId = 0;
+            for (const bar of this._mediaEqBars)
+                bar.ease({height: MEDIA_EQ_MIN_HEIGHT, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        }
+    }
+
+    _tickMediaEq() {
+        for (const bar of this._mediaEqBars) {
+            const height = MEDIA_EQ_MIN_HEIGHT + Math.random() * (MEDIA_EQ_MAX_HEIGHT - MEDIA_EQ_MIN_HEIGHT);
+            bar.ease({height, duration: MEDIA_EQ_TICK_MS, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
+        }
+    }
+
+    // ---- "Am I already looking at whatever's playing?" (see guessAppNameFromBusName's own
+    // docstring for the approximation this relies on) --------------------------------------
+
+    _isMediaWindowFocused() {
+        const appGuess = guessAppNameFromBusName(this._mediaState?.busName);
+        if (!appGuess)
+            return false;
+        const focusWindow = global.display.get_focus_window();
+        const wmClass = focusWindow?.get_wm_class()?.toLowerCase();
+        return Boolean(wmClass && wmClass.includes(appGuess));
+    }
+
     // ---- Elapsed-time counter (the 'listening' state's own label -- see the voice-memo
     // reference: no "Listening…" text, just the waveform and a running clock) ----------------
 
@@ -231,7 +314,10 @@ export class DynamicIsland {
 
     _sync() {
         const dictationActive = this._recordingState !== 'idle';
-        const mediaActive = Boolean(this._mediaState?.isActive);
+        // Explicit request: don't show the media pill while the user is already looking at
+        // whatever's playing (its own window has focus) -- only once they've switched to
+        // something else is it worth a glanceable reminder.
+        const mediaActive = Boolean(this._mediaState?.isActive) && !this._isMediaWindowFocused();
 
         this._dictationBox.visible = dictationActive;
         this._mediaBox.visible = !dictationActive && mediaActive;
@@ -278,6 +364,14 @@ export class DynamicIsland {
 
     destroy() {
         this._stopElapsedTimer();
+        if (this._mediaEqTimerId) {
+            GLib.source_remove(this._mediaEqTimerId);
+            this._mediaEqTimerId = 0;
+        }
+        if (this._focusChangedId) {
+            global.display.disconnect(this._focusChangedId);
+            this._focusChangedId = 0;
+        }
         if (this._daemonSignalId && this._daemonProxy) {
             this._daemonProxy.disconnect(this._daemonSignalId);
             this._daemonSignalId = 0;

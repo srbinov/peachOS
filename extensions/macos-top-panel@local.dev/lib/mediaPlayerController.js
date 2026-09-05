@@ -122,7 +122,10 @@ export class MediaPlayerController {
 
             const {state, artUrl} = this._buildState(selectedEntry.proxy);
 
-            this._onChange({...state, artIcon: artUrl ? (this._artCache.get(artUrl) ?? null) : null});
+            this._onChange({
+                ...state, busName: selectedName,
+                artIcon: artUrl ? (this._artCache.get(artUrl) ?? null) : null,
+            });
 
             if (artUrl && !this._artCache.has(artUrl))
                 this._loadArt(artUrl, selectedName);
@@ -169,7 +172,7 @@ export class MediaPlayerController {
             title: null, artist: null, artUrl: null, playbackStatus: null,
             canGoNext: false, canGoPrevious: false, canPlay: false, canPause: false,
         });
-        this._onChange({...state, artIcon: null});
+        this._onChange({...state, busName: null, artIcon: null});
     }
 
     _loadArt(url, busName) {
@@ -216,7 +219,7 @@ export class MediaPlayerController {
         if (artUrl !== url)
             return;
 
-        this._onChange({...state, artIcon: icon});
+        this._onChange({...state, busName, artIcon: icon});
     }
 
     previous() {
