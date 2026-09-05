@@ -26,6 +26,8 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {MediaPlayerController} from './mediaPlayerController.js';
+import {PowerStatusWatcher, formatTimeToFull} from './powerStatus.js';
+import {LocalSendWatcher} from './localSendWatcher.js';
 
 const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
 const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
@@ -56,6 +58,11 @@ const MEDIA_EQ_BAR_COUNT = 4;
 const MEDIA_EQ_MIN_HEIGHT = 2;
 const MEDIA_EQ_MAX_HEIGHT = 8;
 const MEDIA_EQ_TICK_MS = 220;
+
+// One-off toasts (charging started, a file landed via LocalSend) briefly take over the pill
+// and then hand it back -- explicitly requested to be brief, not a persistent HUD: "I would
+// only want the pill to show up for like a second... then disappearing".
+const TRANSIENT_TOAST_MS = 3000;
 
 // 'listening' shows a real elapsed-time counter instead of text (see the voice-memo
 // reference: no "Listening…" label at all, just the waveform and a running clock).
@@ -105,6 +112,9 @@ export class DynamicIsland {
         this._levelHistory = [];
         this._elapsedTimerId = 0;
         this._listenStartUs = 0;
+        this._transientActive = false;
+        this._transientTimerId = 0;
+        this._transientStyleClass = null;
 
         this._buildActor();
         this._subscribeToDaemon();
@@ -134,6 +144,18 @@ export class DynamicIsland {
         // Re-evaluate every time focus changes -- the media pill's own visibility depends on
         // whether the playing app's window currently has focus (see _isMediaWindowFocused()).
         this._focusChangedId = global.display.connect('notify::focus-window', () => this._sync());
+
+        this._powerWatcher = new PowerStatusWatcher(timeToFullSeconds => {
+            const suffix = formatTimeToFull(timeToFullSeconds);
+            this._showTransient(
+                'battery-good-charging-symbolic',
+                suffix ? `Charging — ${suffix}` : 'Charging',
+                'dynamic-island--charging');
+        });
+
+        this._localSendWatcher = new LocalSendWatcher(filename => {
+            this._showTransient('folder-download-symbolic', `Received "${filename}"`, 'dynamic-island--localsend');
+        });
 
         this._sync();
     }
@@ -214,6 +236,19 @@ export class DynamicIsland {
         }
         this._mediaBox.add_child(this._mediaEqBox);
         this._container.add_child(this._mediaBox);
+
+        this._transientBox = new St.BoxLayout({
+            style_class: 'dynamic-island-transient', vertical: false, visible: false,
+        });
+        this._transientIcon = new St.Icon({
+            icon_size: 13, style_class: 'dynamic-island-transient-icon', y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._transientLabel = new St.Label({
+            style_class: 'dynamic-island-transient-label', y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._transientBox.add_child(this._transientIcon);
+        this._transientBox.add_child(this._transientLabel);
+        this._container.add_child(this._transientBox);
     }
 
     // ---- Real microphone level, from peachos-dictation-daemon's own D-Bus signal ------------
@@ -326,6 +361,58 @@ export class DynamicIsland {
         this._elapsedLabel.set_text(formatElapsed(elapsedSeconds));
     }
 
+    // ---- One-off toasts (charging started, LocalSend receipt) -- briefly take over the pill,
+    // then hand it back to whatever _sync() would otherwise be showing. Explicitly requested
+    // to be a toast, not a persistent status: "I would only want the pill to show up for like
+    // a second... then disappearing" -- unlike dictation/media there's no ongoing state here,
+    // just a moment-in-time event, so a fixed-duration timer (not a state machine) is honest.
+
+    _showTransient(iconName, text, styleClass) {
+        // Never interrupt an active recording with a toast -- dictation is something the user
+        // deliberately started and is mid-way through; a charger toast stealing the pill out
+        // from under them would be worse than just skipping it this once.
+        if (this._recordingState !== 'idle')
+            return;
+
+        if (this._transientTimerId) {
+            GLib.source_remove(this._transientTimerId);
+            this._transientTimerId = 0;
+        }
+        if (this._transientStyleClass)
+            this._container.remove_style_class_name(this._transientStyleClass);
+
+        this._transientIcon.icon_name = iconName;
+        this._transientLabel.set_text(text);
+        this._transientStyleClass = styleClass;
+        this._container.add_style_class_name(styleClass);
+
+        this._transientActive = true;
+        this._dictationBox.visible = false;
+        this._mediaBox.visible = false;
+        this._transientBox.visible = true;
+        this._setVisible(true);
+
+        this._transientTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, TRANSIENT_TOAST_MS, () => {
+            this._transientTimerId = 0;
+            this._clearTransient();
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _clearTransient() {
+        if (this._transientTimerId) {
+            GLib.source_remove(this._transientTimerId);
+            this._transientTimerId = 0;
+        }
+        if (this._transientStyleClass) {
+            this._container.remove_style_class_name(this._transientStyleClass);
+            this._transientStyleClass = null;
+        }
+        this._transientActive = false;
+        this._transientBox.visible = false;
+    }
+
     // ---- State -> appearance ------------------------------------------------------------
 
     _sync() {
@@ -334,6 +421,16 @@ export class DynamicIsland {
         // whatever's playing (its own window has focus) -- only once they've switched to
         // something else is it worth a glanceable reminder.
         const mediaActive = Boolean(this._mediaState?.isActive) && !this._isMediaWindowFocused();
+
+        // Dictation always wins immediately, even mid-toast (see _showTransient's own guard
+        // for the other direction: a toast never starts while already dictating).
+        if (dictationActive && this._transientActive)
+            this._clearTransient();
+
+        // A toast owns the pill until its own timer fires -- leave media/dictation visibility
+        // alone in the meantime so it doesn't get clobbered by e.g. a media-focus change.
+        if (this._transientActive)
+            return;
 
         this._dictationBox.visible = dictationActive;
         this._mediaBox.visible = !dictationActive && mediaActive;
@@ -391,6 +488,14 @@ export class DynamicIsland {
 
     destroy() {
         this._stopElapsedTimer();
+        if (this._transientTimerId) {
+            GLib.source_remove(this._transientTimerId);
+            this._transientTimerId = 0;
+        }
+        this._powerWatcher?.destroy();
+        this._powerWatcher = null;
+        this._localSendWatcher?.destroy();
+        this._localSendWatcher = null;
         if (this._mediaEqTimerId) {
             GLib.source_remove(this._mediaEqTimerId);
             this._mediaEqTimerId = 0;

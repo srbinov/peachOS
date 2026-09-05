@@ -763,6 +763,34 @@
   border: 1px solid rgba(255, 59, 48, 0.6);
 }
 
+/* One-off toasts (charging started, LocalSend receipt) -- green/blue accents so they read as
+   distinct events, not the mic's own red "recording" signal. */
+.dynamic-island--charging {
+  border: 1px solid rgba(52, 199, 89, 0.6);
+}
+
+.dynamic-island--localsend {
+  border: 1px solid rgba(10, 132, 255, 0.6);
+}
+
+.dynamic-island-transient {
+  spacing: 7px;
+}
+
+.dynamic-island--charging .dynamic-island-transient-icon,
+.dynamic-island--charging .dynamic-island-transient-label {
+  color: #34C759;
+}
+
+.dynamic-island--localsend .dynamic-island-transient-icon,
+.dynamic-island--localsend .dynamic-island-transient-label {
+  color: #0A84FF;
+}
+
+.dynamic-island-transient-label {
+  font-size: 0.78em;
+}
+
 .dynamic-island-dictation,
 .dynamic-island-media {
   spacing: 7px;
