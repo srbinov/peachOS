@@ -50,6 +50,8 @@ from accessibility_page import AccessibilityPage
 from accessibility_zoom_page import AccessibilityZoomPage
 from accessibility_display_page import AccessibilityDisplayPage
 from accessibility_audio_page import AccessibilityAudioPage
+from accessibility_typing_page import AccessibilityTypingPage
+from accessibility_pointing_page import AccessibilityPointingPage
 from menubar_page import MenuBarPage
 from spotlight_page import SpotlightPage
 from wallpaper_page import WallpaperPage
@@ -119,6 +121,8 @@ EXTRA_PAGE_TITLES = {
     'accessibility_zoom': 'Zoom',
     'accessibility_display': 'Display',
     'accessibility_audio': 'Audio',
+    'accessibility_typing': 'Typing',
+    'accessibility_pointing': 'Pointing & Clicking',
     'appearance_custom_icons': 'Custom Icons',
     'keyboard_shortcuts': 'Keyboard Shortcuts',
     'network_details': 'Connection',
@@ -139,6 +143,8 @@ EXTRA_PAGE_PARENTS = {
     'accessibility_zoom': 'accessibility',
     'accessibility_display': 'accessibility',
     'accessibility_audio': 'accessibility',
+    'accessibility_typing': 'accessibility',
+    'accessibility_pointing': 'accessibility',
     'appearance_custom_icons': 'appearance',
     'keyboard_shortcuts': 'keyboard',
     'network_details': 'network',
@@ -535,6 +541,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                 on_open_zoom=lambda: self._go_to('accessibility_zoom', record_history=True),
                 on_open_display=lambda: self._go_to('accessibility_display', record_history=True),
                 on_open_audio=lambda: self._go_to('accessibility_audio', record_history=True),
+                on_open_typing=lambda: self._go_to('accessibility_typing', record_history=True),
+                on_open_pointing=lambda: self._go_to('accessibility_pointing', record_history=True),
             )
         elif row_id == 'spotlight':
             page = SpotlightPage()
@@ -587,6 +595,10 @@ class SettingsWindow(Adw.ApplicationWindow):
             page = AccessibilityDisplayPage()
         elif row_id == 'accessibility_audio':
             page = AccessibilityAudioPage()
+        elif row_id == 'accessibility_typing':
+            page = AccessibilityTypingPage()
+        elif row_id == 'accessibility_pointing':
+            page = AccessibilityPointingPage()
         elif row_id == 'edit_profile':
             page = users_page.EditProfilePage(
                 on_saved=self._on_profile_saved, go_back=lambda: self._navigate(-1))

@@ -225,12 +225,14 @@ install -Dm755 "$REPO_DIR/apps/dictation/peachos-dictation-daemon" /usr/lib/peac
 install -Dm644 "$REPO_DIR/apps/dictation/peachos-dictation-daemon.service" /usr/lib/systemd/user/peachos-dictation-daemon.service
 systemctl --global enable peachos-dictation-daemon.service
 
-# Settings app (apps/settings) runtime dep: gir1.2-goa-1.0 gives the Internet Accounts tab
-# real GNOME Online Accounts bindings -- gnome-online-accounts itself (the goa-daemon and
-# its D-Bus service) ships by default, but its GObject-Introspection typelib is a separate
-# package that doesn't get pulled in automatically.
-echo "==> Installing Settings app (Internet Accounts) runtime dependencies"
-apt-get install -y --no-install-recommends gir1.2-goa-1.0
+# Settings app (apps/settings) runtime deps -- the daemons/libraries themselves ship by
+# default, but their GObject-Introspection typelibs are separate packages that aren't always
+# pulled in automatically:
+#   gir1.2-goa-1.0          Internet Accounts (GNOME Online Accounts)
+#   gir1.2-gnomedesktop-4.0 Keyboard > Input Sources (XkbInfo layout list)
+#   gir1.2-nm-1.0           Network panel (NetworkManager device/VPN list)
+echo "==> Installing Settings app runtime dependencies"
+apt-get install -y --no-install-recommends gir1.2-goa-1.0 gir1.2-gnomedesktop-4.0 gir1.2-nm-1.0
 
 # Extension Manager (com.mattjakeman.ExtensionManager) -- browse/install/configure GNOME
 # Shell extensions with a real GUI. peachOS's app-grid folder (provision/dconf/01-peachos)

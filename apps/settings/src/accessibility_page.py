@@ -15,7 +15,8 @@ class GroupCard(Gtk.ListBox):
 
 
 class AccessibilityPage(Gtk.Box):
-    def __init__(self, on_open_zoom=None, on_open_display=None, on_open_audio=None):
+    def __init__(self, on_open_zoom=None, on_open_display=None, on_open_audio=None,
+                 on_open_typing=None, on_open_pointing=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.set_margin_start(24)
         self.set_margin_end(24)
@@ -25,6 +26,8 @@ class AccessibilityPage(Gtk.Box):
         self._on_open_zoom = on_open_zoom
         self._on_open_display = on_open_display
         self._on_open_audio = on_open_audio
+        self._on_open_typing = on_open_typing
+        self._on_open_pointing = on_open_pointing
 
         self._syncing = False
         self._a11y_apps = Gio.Settings.new('org.gnome.desktop.a11y.applications')
@@ -69,6 +72,18 @@ class AccessibilityPage(Gtk.Box):
             IconPlaceholderRow(
                 'Audio', 'audio-volume-high-symbolic', 'accent-red', on_click=self._on_open_audio,
                 icon_file=os.path.join(ICON_DIR, 'accessibility_audio.svg'),
+            ),
+        ]))
+
+        self.append(Gtk.Label(label='Interaction', xalign=0, css_classes=['heading'], margin_start=4))
+        self.append(GroupCard([
+            IconPlaceholderRow(
+                'Typing', 'input-keyboard-symbolic', 'accent-gray', on_click=self._on_open_typing,
+                icon_file=os.path.join(ICON_DIR, 'accessibility_typing.svg'),
+            ),
+            IconPlaceholderRow(
+                'Pointing & Clicking', 'input-mouse-symbolic', 'accent-gray', on_click=self._on_open_pointing,
+                icon_file=os.path.join(ICON_DIR, 'accessibility_pointing.svg'),
             ),
         ]))
 

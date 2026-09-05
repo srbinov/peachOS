@@ -1,13 +1,18 @@
 import os
 
-from gi.repository import Gio, Gtk
+from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header, ToggleRow
+from widgets import DropdownRow, make_hero_header, ToggleRow
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 PRIVACY_SCHEMA = 'org.gnome.desktop.privacy'
 LOCATION_SCHEMA = 'org.gnome.system.location'
+HOUSEKEEPING_NAME = 'org.gnome.SettingsDaemon.Housekeeping'
+HOUSEKEEPING_PATH = '/org/gnome/SettingsDaemon/Housekeeping'
+
+RECENT_AGE_OPTIONS = [('Forever', -1), ('30 days', 30), ('14 days', 14), ('7 days', 7), ('1 day', 1)]
+OLD_FILE_AGE_OPTIONS = [('Never', 0), ('30 days', 30), ('14 days', 14), ('7 days', 7), ('1 day', 1)]
 
 
 def _section(page: Gtk.Box, heading: str):
@@ -51,18 +56,35 @@ class PrivacyPage(Gtk.Box):
         self._bind_inverted('disable-sound-output', sound_row.switch)
         hardware_card.append(sound_row)
 
-        files_card = _section(self, 'File History & Trash')
+        files_card = _section(self, 'File History')
         recent_row = ToggleRow('Remember Recent Files', 'Keep a list of recently opened files and folders.')
         self._privacy.bind('remember-recent-files', recent_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
         files_card.append(recent_row)
 
+        self._recent_age_row = DropdownRow('Keep History', RECENT_AGE_OPTIONS)
+        self._recent_age_row.set_selected_value(self._privacy.get_int('recent-files-max-age'))
+        self._recent_age_row.dropdown.connect('notify::selected', lambda *_a: self._privacy.set_int(
+            'recent-files-max-age', self._recent_age_row.get_selected_value()))
+        files_card.append(self._recent_age_row)
+        files_card.append(self._action_row('Clear Recent History…', self._clear_recent))
+
+        trash_card = _section(self, 'Trash & Temporary Files')
         trash_row = ToggleRow('Automatically Empty Trash', 'Permanently delete old items from the Trash.')
         self._privacy.bind('remove-old-trash-files', trash_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
-        files_card.append(trash_row)
+        trash_card.append(trash_row)
 
         temp_row = ToggleRow('Automatically Delete Temporary Files', 'Remove old temporary files apps no longer need.')
         self._privacy.bind('remove-old-temp-files', temp_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
-        files_card.append(temp_row)
+        trash_card.append(temp_row)
+
+        self._old_age_row = DropdownRow('Delete After', OLD_FILE_AGE_OPTIONS)
+        self._old_age_row.set_selected_value(int(self._privacy.get_uint('old-files-age')))
+        self._old_age_row.dropdown.connect('notify::selected', lambda *_a: self._privacy.set_uint(
+            'old-files-age', max(self._old_age_row.get_selected_value(), 0)))
+        trash_card.append(self._old_age_row)
+        trash_card.append(self._action_row('Empty Trash…', lambda: self._housekeeping('EmptyTrash')))
+        trash_card.append(self._action_row('Delete Temporary Files…',
+                                           lambda: self._housekeeping('RemoveTempFiles')))
 
         diagnostics_card = _section(self, 'Analytics & Diagnostics')
         usage_row = ToggleRow('Share System & App Usage Data', 'Help improve peachOS by sharing anonymous usage statistics.')
@@ -81,6 +103,32 @@ class PrivacyPage(Gtk.Box):
         usb_row = ToggleRow('USB Protection', 'Block new USB devices from accessing the system while the screen is locked.')
         self._privacy.bind('usb-protection', usb_row.switch, 'active', Gio.SettingsBindFlags.DEFAULT)
         security_card.append(usb_row)
+
+    def _action_row(self, label, callback):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, css_classes=['network-row'])
+        row.set_margin_start(14)
+        row.set_margin_end(14)
+        row.set_margin_top(6)
+        row.set_margin_bottom(6)
+        button = Gtk.Button(label=label, css_classes=['flat'], halign=Gtk.Align.START, hexpand=True)
+        button.get_child().set_xalign(0)
+        button.connect('clicked', lambda *_a: callback())
+        row.append(button)
+        return row
+
+    def _clear_recent(self):
+        try:
+            Gtk.RecentManager.get_default().purge_items()
+        except GLib.Error:
+            pass
+
+    def _housekeeping(self, method):
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            bus.call_sync(HOUSEKEEPING_NAME, HOUSEKEEPING_PATH, HOUSEKEEPING_NAME, method,
+                          None, None, Gio.DBusCallFlags.NONE, 5000, None)
+        except GLib.Error:
+            pass
 
     def _bind_inverted(self, key: str, switch: Gtk.Switch):
         """disable-camera/-microphone/-sound-output are phrased as "disable",

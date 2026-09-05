@@ -117,6 +117,13 @@ class SoundPage(Gtk.Box):
         )
         self.append(self._status_label)
 
+        self._apps_heading = Gtk.Label(label='Applications', xalign=0, css_classes=['heading'], visible=False)
+        self.append(self._apps_heading)
+        self._apps_list = Gtk.ListBox(css_classes=['wifi-card', 'boxed-list'],
+                                      selection_mode=Gtk.SelectionMode.NONE, visible=False)
+        self.append(self._apps_list)
+        self._app_stream_handlers = {}
+
         # Real device enumeration/selection via libpulse (through Gvc, the same library
         # gnome-control-center's own Sound panel is built on) instead of the screenshot's
         # AirPlay device list, which has no Linux equivalent -- these are whatever's actually
@@ -125,12 +132,15 @@ class SoundPage(Gtk.Box):
         self._mixer_state_id = self._mixer.connect('state-changed', self._on_mixer_state_changed)
         self._mixer_default_sink_id = self._mixer.connect('default-sink-changed', lambda *_a: self._rebuild_device_list())
         self._mixer_default_source_id = self._mixer.connect('default-source-changed', lambda *_a: self._rebuild_device_list())
+        self._mixer_stream_added_id = self._mixer.connect('stream-added', lambda *_a: self._rebuild_app_list())
+        self._mixer_stream_removed_id = self._mixer.connect('stream-removed', lambda *_a: self._rebuild_app_list())
         self._mixer.open()
 
         self.connect('destroy', self._on_destroy)
 
         if self._mixer.get_state() == _STATE_READY:
             self._rebuild_device_list()
+            self._rebuild_app_list()
         else:
             self._status_label.set_visible(True)
 
@@ -138,8 +148,55 @@ class SoundPage(Gtk.Box):
         if state == _STATE_READY:
             self._status_label.set_visible(False)
             self._rebuild_device_list()
+            self._rebuild_app_list()
         else:
             self._status_label.set_visible(True)
+
+    # ---- per-application volume ----------------------------------------
+
+    def _rebuild_app_list(self):
+        child = self._apps_list.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self._apps_list.remove(child)
+            child = nxt
+
+        streams = self._mixer.get_sink_inputs() if self._mixer.get_state() == _STATE_READY else []
+        self._apps_heading.set_visible(bool(streams))
+        self._apps_list.set_visible(bool(streams))
+
+        max_volume = self._mixer.get_vol_max_norm() or 1
+        for stream in streams:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, css_classes=['network-row'])
+            row.set_margin_start(14)
+            row.set_margin_end(14)
+            row.set_margin_top(8)
+            row.set_margin_bottom(8)
+
+            icon = Gtk.Image.new_from_icon_name(stream.get_icon_name() or 'application-x-executable-symbolic')
+            icon.set_pixel_size(22)
+            row.append(icon)
+            row.append(Gtk.Label(label=stream.get_name() or stream.get_description() or 'Application',
+                                 xalign=0, valign=Gtk.Align.CENTER, width_chars=12, ellipsize=3))
+
+            scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+            scale.set_draw_value(False)
+            scale.set_hexpand(True)
+            scale.set_value(round((stream.get_volume() / max_volume) * 100))
+            scale.connect('value-changed', self._on_app_volume_changed, stream)
+            row.append(scale)
+
+            mute = Gtk.ToggleButton(icon_name='audio-volume-muted-symbolic', css_classes=['flat'],
+                                    valign=Gtk.Align.CENTER, active=stream.get_is_muted())
+            mute.connect('toggled', lambda b, s=stream: s.change_is_muted(b.get_active()))
+            row.append(mute)
+
+            self._apps_list.append(row)
+
+    def _on_app_volume_changed(self, scale, stream):
+        max_volume = self._mixer.get_vol_max_norm() or 1
+        stream.set_volume(round((scale.get_value() / 100) * max_volume))
+        stream.push_volume()
 
     def _on_tab_toggled(self, _btn):
         self._showing_outputs = not self._showing_outputs
@@ -235,7 +292,8 @@ class SoundPage(Gtk.Box):
             self._volume_stream.change_is_muted(btn.get_active())
 
     def _on_destroy(self, _widget):
-        for signal_id in (self._mixer_state_id, self._mixer_default_sink_id, self._mixer_default_source_id):
+        for signal_id in (self._mixer_state_id, self._mixer_default_sink_id, self._mixer_default_source_id,
+                          self._mixer_stream_added_id, self._mixer_stream_removed_id):
             if signal_id:
                 self._mixer.disconnect(signal_id)
         if self._volume_stream:
