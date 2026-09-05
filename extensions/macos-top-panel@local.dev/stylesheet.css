@@ -746,18 +746,17 @@
 }
 
 /* Dynamic Island (lib/dynamicIsland.js) -- centered pill in Main.panel._centerBox, hidden
-   (faded out) whenever nothing is active. Slim on purpose: this sits directly in the bar
-   itself, at bar height, not a popup card -- padding/sizes here are deliberately tight rather
-   than matching the bigger glass surfaces elsewhere in this stylesheet. Every actual COLOR
-   (background, icon, label, bars, media text) is pushed inline by dynamicIsland.js's own
-   setForeground()/_applyContentColor(), not set here -- the pill's background has to exactly
-   match the bar's current adaptive black/white foreground (explicit request), which a static
-   background-color in this stylesheet can't express, so nothing color-related is declared in
-   this rule at all beyond the one fixed accent (the error-state border) that doesn't adapt. */
+   (faded out) whenever nothing is active. Colors here are copied directly off real Dynamic
+   Island reference screenshots (voice memo, phone call, Focus), not adapted from this bar's
+   own theme -- the real thing is always a fixed near-black pill regardless of light/dark
+   context (it's tied to the physical camera cutout, not a themeable surface), with a bright
+   accent color per active context (red for recording, matching both the voice-memo and
+   phone-call references) rather than one foreground/background pair that swaps. */
 .dynamic-island {
-  spacing: 6px;
-  padding: 2px 10px;
+  spacing: 7px;
+  padding: 3px 12px;
   border-radius: 999px;
+  background-color: #0a0a0a;
 }
 
 .dynamic-island--error {
@@ -766,11 +765,22 @@
 
 .dynamic-island-dictation,
 .dynamic-island-media {
-  spacing: 6px;
+  spacing: 7px;
+}
+
+.dynamic-island-mic-icon {
+  color: #FF3B30;
 }
 
 .dynamic-island-label {
   font-size: 0.78em;
+  color: white;
+}
+
+.dynamic-island-elapsed {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #FF3B30;
 }
 
 .dynamic-island-waveform {
@@ -778,21 +788,25 @@
 }
 
 .dynamic-island-waveform-bar {
-  width: 2px;
+  width: 2.5px;
   border-radius: 1px;
+  background-color: #FF3B30;
 }
 
 .dynamic-island-art {
   border-radius: 4px;
+  color: white;
 }
 
 .dynamic-island-media-title {
   font-size: 0.78em;
   font-weight: 600;
+  color: white;
 }
 
 .dynamic-island-media-artist {
   font-size: 0.7em;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 /* Peach Intelligence's recent-transcriptions dropdown (lib/dictationHistoryIndicator.js) */

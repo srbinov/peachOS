@@ -3,12 +3,19 @@
 // A center-of-the-top-bar pill, mirroring iOS's Dynamic Island in spirit but scoped to what
 // actually has a real, live data source on this desktop: Peach Intelligence's own recording
 // state (a waveform driven by the daemon's real, live microphone level -- see _onAudioLevel(),
-// not a canned animation) and media playback (MPRIS, via the exact same MediaPlayerController
-// controlCenterIndicator.js's own media card already uses -- a second, independent instance
-// here). Deliberately NOT attempted: calls, turn-by-turn navigation, ride-share/delivery
-// tracking, Face ID -- none of those have a real backing service on a Linux desktop the way
-// MPRIS/this extension's own gsettings do, and a fake stub would just be decoration with no
-// data behind it.
+// not a canned animation -- plus a real elapsed-time counter) and media playback (MPRIS, via
+// the exact same MediaPlayerController controlCenterIndicator.js's own media card already
+// uses -- a second, independent instance here). Deliberately NOT attempted: calls, turn-by-
+// turn navigation, ride-share/delivery tracking, Face ID -- none of those have a real backing
+// service on a Linux desktop the way MPRIS/this extension's own gsettings do, and a fake stub
+// would just be decoration with no data behind it.
+//
+// Styled directly off real Dynamic Island reference screenshots (voice memo, phone call,
+// Focus): always a fixed near-black pill, never adapting to the bar's own light/dark
+// foreground the way every other indicator in this stylesheet does -- the real thing doesn't
+// either, it's tied to the physical camera cutout, always black -- with a bright per-context
+// accent color for whatever's actually active (red for recording, matching both the voice-
+// memo and phone-call references) rather than a single foreground/background swap.
 //
 // Hidden (faded out) whenever nothing is active; Main.panel._centerBox already center-aligns
 // its children in the panel, so no manual positioning math is needed the way the old floating
@@ -36,8 +43,9 @@ const WAVEFORM_RESET_MS = 120;
 const FADE_IN_MS = 150;
 const FADE_OUT_MS = 130;
 
-const DICTATION_LABELS = {
-    listening: 'Listening…',
+// 'listening' shows a real elapsed-time counter instead of text (see the voice-memo
+// reference: no "Listening…" label at all, just the waveform and a running clock).
+const TRANSIENT_LABELS = {
     transcribing: 'Transcribing…',
     error: "Couldn't transcribe",
 };
@@ -53,12 +61,19 @@ function optionalSettings(schemaId) {
     return new Gio.Settings({schema_id: schemaId});
 }
 
+function formatElapsed(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export class DynamicIsland {
     constructor() {
         this._recordingState = 'idle';
         this._mediaState = null;
         this._levelHistory = [];
-        this._contentColor = 'white';
+        this._elapsedTimerId = 0;
+        this._listenStartUs = 0;
 
         this._buildActor();
         this._subscribeToDaemon();
@@ -67,9 +82,14 @@ export class DynamicIsland {
         if (this._dictationSettings) {
             this._recordingState = this._dictationSettings.get_string('recording-state');
             this._recordingChangedId = this._dictationSettings.connect('changed::recording-state', () => {
+                const previous = this._recordingState;
                 this._recordingState = this._dictationSettings.get_string('recording-state');
                 if (this._recordingState !== 'listening')
                     this._resetWaveform();
+                if (this._recordingState === 'listening' && previous !== 'listening')
+                    this._startElapsedTimer();
+                else if (this._recordingState !== 'listening')
+                    this._stopElapsedTimer();
                 this._sync();
             });
         }
@@ -89,25 +109,25 @@ export class DynamicIsland {
     _buildActor() {
         this._container = new St.BoxLayout({
             style_class: 'dynamic-island', vertical: false, visible: false, opacity: 0,
-            // Sane default before the real _applyPanelForeground()/setForeground() call
-            // lands (wallpaper-brightness analysis is async at enable() time) -- matches the
-            // this._contentColor = 'white' default below.
-            style: 'background-color: black;',
         });
 
         this._dictationBox = new St.BoxLayout({style_class: 'dynamic-island-dictation', vertical: false});
-        this._dictationIcon = new St.Icon({icon_name: 'audio-input-microphone-symbolic', icon_size: 12});
+        this._dictationIcon = new St.Icon({
+            icon_name: 'audio-input-microphone-symbolic', icon_size: 12, style_class: 'dynamic-island-mic-icon',
+        });
         this._dictationBox.add_child(this._dictationIcon);
         this._waveformBars = [];
-        const waveform = new St.BoxLayout({style_class: 'dynamic-island-waveform', vertical: false});
+        this._waveformBox = new St.BoxLayout({style_class: 'dynamic-island-waveform', vertical: false});
         for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
             const bar = new St.Widget({style_class: 'dynamic-island-waveform-bar', height: WAVEFORM_MIN_HEIGHT});
-            waveform.add_child(bar);
+            this._waveformBox.add_child(bar);
             this._waveformBars.push(bar);
         }
-        this._dictationBox.add_child(waveform);
+        this._dictationBox.add_child(this._waveformBox);
         this._dictationLabel = new St.Label({style_class: 'dynamic-island-label', y_align: Clutter.ActorAlign.CENTER});
         this._dictationBox.add_child(this._dictationLabel);
+        this._elapsedLabel = new St.Label({style_class: 'dynamic-island-elapsed', y_align: Clutter.ActorAlign.CENTER});
+        this._dictationBox.add_child(this._elapsedLabel);
         this._container.add_child(this._dictationBox);
 
         this._mediaBox = new St.BoxLayout({style_class: 'dynamic-island-media', vertical: false});
@@ -122,8 +142,6 @@ export class DynamicIsland {
         mediaText.add_child(this._mediaArtist);
         this._mediaBox.add_child(mediaText);
         this._container.add_child(this._mediaBox);
-
-        this._applyContentColor();
     }
 
     // ---- Real microphone level, from peachos-dictation-daemon's own D-Bus signal ------------
@@ -172,6 +190,32 @@ export class DynamicIsland {
             bar.ease({height: WAVEFORM_MIN_HEIGHT, duration: WAVEFORM_RESET_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
 
+    // ---- Elapsed-time counter (the 'listening' state's own label -- see the voice-memo
+    // reference: no "Listening…" text, just the waveform and a running clock) ----------------
+
+    _startElapsedTimer() {
+        this._listenStartUs = GLib.get_monotonic_time();
+        this._updateElapsedLabel();
+        if (this._elapsedTimerId)
+            GLib.source_remove(this._elapsedTimerId);
+        this._elapsedTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            this._updateElapsedLabel();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _stopElapsedTimer() {
+        if (this._elapsedTimerId) {
+            GLib.source_remove(this._elapsedTimerId);
+            this._elapsedTimerId = 0;
+        }
+    }
+
+    _updateElapsedLabel() {
+        const elapsedSeconds = (GLib.get_monotonic_time() - this._listenStartUs) / 1000000;
+        this._elapsedLabel.set_text(formatElapsed(elapsedSeconds));
+    }
+
     // ---- State -> appearance ------------------------------------------------------------
 
     _sync() {
@@ -183,7 +227,12 @@ export class DynamicIsland {
         this._setVisible(dictationActive || mediaActive);
 
         if (dictationActive) {
-            this._dictationLabel.set_text(DICTATION_LABELS[this._recordingState] ?? '');
+            const listening = this._recordingState === 'listening';
+            this._dictationLabel.set_text(TRANSIENT_LABELS[this._recordingState] ?? '');
+            this._dictationLabel.visible = !listening;
+            this._elapsedLabel.visible = listening;
+            this._waveformBox.visible = listening;
+
             this._container.remove_style_class_name('dynamic-island--error');
             if (this._recordingState === 'error')
                 this._container.add_style_class_name('dynamic-island--error');
@@ -216,38 +265,8 @@ export class DynamicIsland {
         }
     }
 
-    /**
-     * The pill's OWN background becomes the exact same color as the rest of the bar's
-     * text/icons (foreground, 'black' or 'white') rather than a fixed dark surface -- explicit
-     * request: it should read as part of the same bar, not a contrasting dark blob floating in
-     * it. Content drawn ON the pill (icon/label/bars/media text) then needs the OPPOSITE color
-     * to stay legible against its own now-solid background -- inheriting the panel's own
-     * `color` (like most other indicators' text already does for free) would make content
-     * invisible against a same-colored pill, so this pushes an explicit inverse color to every
-     * child instead of relying on inheritance.
-     * @param {'black'|'white'} foreground
-     */
-    setForeground(foreground) {
-        if (foreground !== 'black' && foreground !== 'white')
-            return;
-        this._container.style = `background-color: ${foreground};`;
-        this._contentColor = foreground === 'black' ? 'white' : 'black';
-        this._applyContentColor();
-    }
-
-    _applyContentColor() {
-        const color = this._contentColor;
-        this._dictationIcon.style = `color: ${color};`;
-        this._dictationLabel.style = `color: ${color};`;
-        for (const bar of this._waveformBars)
-            bar.style = `background-color: ${color};`;
-        this._mediaTitle.style = `color: ${color};`;
-        this._mediaArtist.style = `color: ${color}; opacity: 0.65;`;
-        if (!this._mediaState?.artIcon)
-            this._mediaArt.style = `color: ${color};`;
-    }
-
     destroy() {
+        this._stopElapsedTimer();
         if (this._daemonSignalId && this._daemonProxy) {
             this._daemonProxy.disconnect(this._daemonSignalId);
             this._daemonSignalId = 0;
