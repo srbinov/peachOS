@@ -757,6 +757,11 @@
   padding: 1px 16px;
   border-radius: 999px;
   background-color: #0a0a0a;
+  /* Every pill type is this tall, not just the media one -- the "now playing" pill's
+     two-line text block set its natural height, and the single-line pills (charging,
+     Peach Intelligence, recording, all the toasts) used to come out shorter. Their content
+     is y_align: CENTER, so it centres in this fixed height. */
+  min-height: 24px;
 }
 
 .dynamic-island--error {
