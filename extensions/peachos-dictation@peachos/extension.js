@@ -61,6 +61,7 @@ export default class PeachIntelligenceExtension extends Extension {
         this._safetyId = 0;
         this._errorTimeoutId = 0;
         this._grabAnchor = null;
+        this._targetWindow = null;
 
         this._ownerId = Gio.bus_own_name(
             Gio.BusType.SESSION, SELF_BUS_NAME, Gio.BusNameOwnerFlags.NONE,
@@ -139,6 +140,12 @@ export default class PeachIntelligenceExtension extends Extension {
         this._recording = true;
         this._setRecordingState('listening');
 
+        // The window the user was actually typing into, captured BEFORE anything below
+        // touches focus -- see _endRecording()'s own comment for why this is what actually
+        // fixes the paste, not just clearing Clutter's stage-level key focus.
+        this._targetWindow = global.display.get_focus_window();
+        console.log(`peachos-dictation: recording started, target window = ${this._focusedWindowLabel()}`);
+
         this._grab = Main.pushModal(this._grabAnchor, {actionMode: Shell.ActionMode.NONE});
         global.stage.set_key_focus(this._grabAnchor);
         this._releaseHandlerId = this._grabAnchor.connect('key-release-event', this._onKeyReleaseEvent.bind(this));
@@ -195,15 +202,22 @@ export default class PeachIntelligenceExtension extends Extension {
             Main.popModal(this._grab);
             this._grab = null;
         }
-        // _onHotkeyPressed's global.stage.set_key_focus(this._grabAnchor) steals Clutter's own
-        // key focus onto the (invisible) anchor actor -- popModal() alone doesn't hand it back.
-        // Without this, Clutter's key focus stays parked on _grabAnchor (a plain St.Widget,
-        // not a real text field) even after the modal grab ends, so Paste()'s synthetic
-        // Ctrl+V lands nowhere: real bug this fixes -- transcription worked, but nothing got
-        // pasted into whatever text field actually had focus before the hotkey was pressed.
-        // null tells Clutter to fall back to whatever window Mutter itself still considers
-        // focused, which was never actually changed by any of this.
+        // global.stage.set_key_focus(null) alone (the previous fix here) turned out not to be
+        // enough -- it only clears Clutter's own stage-level actor focus, which is a SEPARATE
+        // thing from Mutter's real window-manager focus (which window/surface actually
+        // receives input at the Wayland level). Nothing here was verified to actually move
+        // Mutter's own focused-window state away from the target in the first place, so
+        // clearing Clutter's side alone didn't reliably restore where the synthetic Ctrl+V
+        // would land. Explicitly re-activating the exact window captured at press time is the
+        // direct, verifiable fix instead of hoping focus comes back on its own.
         global.stage.set_key_focus(null);
+        try {
+            if (this._targetWindow)
+                Main.activateWindow(this._targetWindow, global.get_current_time());
+        } catch (e) {
+            // Window may have closed while recording -- nothing to focus back to, not an error.
+        }
+        this._targetWindow = null;
         this._setRecordingState('transcribing');
         if (tellDaemon)
             this._callDaemon('StopRecording');
@@ -226,7 +240,16 @@ export default class PeachIntelligenceExtension extends Extension {
 
     Paste() {
         this._setRecordingState('idle');
+        // Diagnostic, deliberately left in rather than stripped after debugging -- this fires
+        // once per dictation (not a hot path), and confirming which window a paste actually
+        // targeted is the fastest way to tell a genuinely-fixed run from a regression here.
+        console.log(`peachos-dictation: pasting into ${this._focusedWindowLabel()}`);
         this._injectPaste();
+    }
+
+    _focusedWindowLabel() {
+        const win = global.display.get_focus_window();
+        return win ? (win.get_wm_class() ?? '(no wm_class)') : '(no focused window)';
     }
 
     Failed(message) {
