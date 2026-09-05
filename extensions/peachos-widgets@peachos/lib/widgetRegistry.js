@@ -1,57 +1,58 @@
 // The catalogue the picker reads and widgetLayer instantiates from.
 //
-// Each type has a left-rail icon and one or more variants. A variant knows its
-// inner (visible-glass) pixel size, corner radius, and a make(contentParent,
-// ctx, size) that returns an object with a .destroy(). ctx = shared services
-// { settings, weather, calendar, path }.
+// type -> { name, appIcon (themed icon name, resolves in the MacTahoe theme),
+//           variants: { id -> { name, base:{w,h}, radiusRatio, make } } }
 //
-// Radius ratios mirror the KDE liquidglass screenshots: the clocks are
-// near-circular iOS squircles, weather a touch less round, the calendar
-// gently rounded.
+// Every placed widget also has a `scale` (sm | md | lg); the real pixel size is
+// base * SCALE[scale], and each widget's layout is derived from those pixels
+// (KDE-style), so one variant covers all three sizes.
 
 import {DigitalClock, AnalogClock} from '../widgets/clock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
 
+export const SCALES = {sm: 0.78, md: 1.0, lg: 1.32};
+export const SCALE_ORDER = ['sm', 'md', 'lg'];
+
 export const REGISTRY = {
     clock: {
         name: 'Clock',
-        icon: 'preferences-system-time-symbolic',
+        appIcon: 'org.gnome.Clocks',
         variants: {
             digital: {
-                name: 'Digital', w: 200, h: 200, radius: 92,
+                name: 'Digital', base: {w: 200, h: 200}, radiusRatio: 0.46,
                 make: (parent, ctx, size) => new DigitalClock(parent, size),
             },
             analog: {
-                name: 'Analog', w: 200, h: 200, radius: 92,
+                name: 'Analog', base: {w: 200, h: 200}, radiusRatio: 0.46,
                 make: (parent, ctx, size) => new AnalogClock(parent, size),
             },
         },
     },
     weather: {
         name: 'Weather',
-        icon: 'weather-few-clouds-symbolic',
+        appIcon: 'org.gnome.Weather',
         variants: {
-            compact: {
-                name: 'Now', w: 230, h: 230, radius: 68,
+            conditions: {
+                name: 'Conditions', base: {w: 230, h: 230}, radiusRatio: 0.30,
                 make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'small'),
             },
-            panel: {
-                name: 'Forecast', w: 330, h: 330, radius: 84,
+            forecast: {
+                name: 'Forecast', base: {w: 250, h: 300}, radiusRatio: 0.20,
                 make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'big'),
             },
         },
     },
     calendar: {
         name: 'Calendar',
-        icon: 'x-office-calendar-symbolic',
+        appIcon: 'org.gnome.Calendar',
         variants: {
             month: {
-                name: 'Month', w: 300, h: 280, radius: 44,
+                name: 'Month', base: {w: 280, h: 280}, radiusRatio: 0.16,
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'month'),
             },
             agenda: {
-                name: 'Agenda', w: 560, h: 280, radius: 44,
+                name: 'Agenda', base: {w: 520, h: 280}, radiusRatio: 0.16,
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'agenda'),
             },
         },
@@ -59,8 +60,16 @@ export const REGISTRY = {
 };
 
 export function variantDef(type, variant) {
-    const t = REGISTRY[type];
-    if (!t)
+    return REGISTRY[type]?.variants[variant] ?? null;
+}
+
+/** Real pixel geometry for a (type, variant, scale). */
+export function sizeFor(type, variant, scale) {
+    const def = variantDef(type, variant);
+    if (!def)
         return null;
-    return t.variants[variant] ?? null;
+    const k = SCALES[scale] ?? 1;
+    const w = Math.round(def.base.w * k);
+    const h = Math.round(def.base.h * k);
+    return {w, h, radius: Math.round(Math.min(w, h) * def.radiusRatio)};
 }

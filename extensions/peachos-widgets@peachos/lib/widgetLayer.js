@@ -10,7 +10,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {WidgetFrame} from '../widgets/frame.js';
-import {variantDef} from './widgetRegistry.js';
+import {variantDef, sizeFor} from './widgetRegistry.js';
 
 const EDIT_DIM = 40; // scrim opacity (0-255) in edit mode
 
@@ -121,14 +121,16 @@ export class WidgetLayer {
     // --- placement -------------------------------------------------------
 
     _createFrame(inst) {
-        const def = variantDef(inst.type, inst.variant);
-        if (!def) {
+        if (!variantDef(inst.type, inst.variant)) {
             log(`[peachos-widgets] unknown widget ${inst.type}/${inst.variant}, skipping`);
             return null;
         }
+        if (!inst.scale)
+            inst.scale = 'md';
         const frame = new WidgetFrame(inst, this._ctx, this._layer, {
             onMoved: f => this._onFrameMoved(f),
             onRemove: f => this.removeWidget(f),
+            onResized: f => this._onFrameResized(f),
         });
         this._frames.set(inst.id, frame);
         this._placeFrame(frame);
@@ -138,16 +140,20 @@ export class WidgetLayer {
 
     _placeFrame(frame) {
         const inst = frame.instance;
-        const def = variantDef(inst.type, inst.variant);
+        const size = sizeFor(inst.type, inst.variant, inst.scale);
         const monitors = Main.layoutManager.monitors;
         const m = monitors[inst.monitor] || Main.layoutManager.primaryMonitor;
 
         let x = m.x + inst.xRel * m.width;
         let y = m.y + inst.yRel * m.height;
-        x = Math.max(m.x + 8, Math.min(m.x + m.width - def.w - 8, x));
-        y = Math.max(m.y + 8, Math.min(m.y + m.height - def.h - 8, y));
+        x = Math.max(m.x + 8, Math.min(m.x + m.width - size.w - 8, x));
+        y = Math.max(m.y + 8, Math.min(m.y + m.height - size.h - 8, y));
         frame.setInnerPos(Math.round(x), Math.round(y));
-        frame.refreshBackdrop();
+    }
+
+    _onFrameResized(frame) {
+        this._placeFrame(frame);
+        this._onFrameMoved(frame);
     }
 
     _locate(innerX, innerY) {
@@ -180,14 +186,14 @@ export class WidgetLayer {
 
     // --- public API -----------------------------------------------------
 
-    addWidget(type, variant, stageX, stageY) {
-        const def = variantDef(type, variant);
-        if (!def)
+    addWidget(type, variant, stageX, stageY, scale = 'md') {
+        const size = sizeFor(type, variant, scale);
+        if (!size)
             return null;
         const id = `${type}-${variant}-${Date.now().toString(36)}`;
         const inst = {
-            id, type, variant,
-            ...this._locate(stageX - def.w / 2, stageY - def.h / 2),
+            id, type, variant, scale,
+            ...this._locate(stageX - size.w / 2, stageY - size.h / 2),
         };
         const frame = this._createFrame(inst);
         if (frame)

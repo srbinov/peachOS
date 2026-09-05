@@ -1,19 +1,11 @@
-// A single placed widget: a liquid-glass squircle (shader) with a crisp content
-// overlay on top, a drag-to-move handler and a remove button -- the last two
-// only active in edit mode.
-//
-// This is a plain controller, not an actor subclass: its three actors (glass,
-// content overlay, remove button) go straight into widgetLayer's layer -- a
-// Clutter.Actor with the default fixed layout, which is what actually allocates
-// fixed-positioned children at their preferred size (an St.Widget wrapper does
-// not). Drag is done by hand rather than dnd.js, whose reparent-during-drag
-// mangles the ShaderEffect + painted wallpaper content.
+// A single placed widget: the glass card + its content, plus edit-mode chrome
+// (remove button, S/M/L size cycle) and hand-rolled drag-to-move.
 
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
-import {makeLiquidGlass, MARGIN} from '../lib/liquidGlass.js';
-import {variantDef} from '../lib/widgetRegistry.js';
+import {makeLiquidGlass} from '../lib/liquidGlass.js';
+import {variantDef, sizeFor, SCALE_ORDER} from '../lib/widgetRegistry.js';
 
 const GRID = 8;
 
@@ -22,105 +14,133 @@ export class WidgetFrame {
         this.instance = instance;
         this._ctx = ctx;
         this._layer = layer;
-        this._callbacks = callbacks; // { onMoved(frame), onRemove(frame) }
+        this._callbacks = callbacks; // { onMoved(frame), onRemove(frame), onResized(frame) }
         this._editing = false;
         this._capturedId = 0;
 
-        const def = variantDef(instance.type, instance.variant);
-        this._innerW = def.w;
-        this._innerH = def.h;
+        this._buildGlass();
+    }
+
+    _buildGlass() {
+        const inst = this.instance;
+        this._size = sizeFor(inst.type, inst.variant, inst.scale || 'md');
 
         this._glass = makeLiquidGlass({
-            innerW: def.w, innerH: def.h, x: 0, y: 0,
-            radius: def.radius, roundness: 7.0,
+            innerW: this._size.w, innerH: this._size.h, x: 0, y: 0,
+            radius: this._size.radius,
         });
+        this._layer.add_child(this._glass.widget);
 
-        this._removeBtn = new St.Button({
-            style_class: 'peachos-widget-remove',
-            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 14}),
-            visible: false,
-        });
-        this._removeBtn.connect('clicked', () => this._callbacks.onRemove(this));
-
-        // glass (shader) first, crisp content overlay on top, then chrome.
-        layer.add_child(this._glass.widget);
-        layer.add_child(this._glass.content);
-        layer.add_child(this._removeBtn);
-
+        const def = variantDef(inst.type, inst.variant);
         try {
-            this._content = def.make(this._glass.content, ctx,
-                {w: def.w, h: def.h, radius: def.radius, roundness: 7.0});
+            this._content = def.make(this._glass.content, this._ctx, {
+                w: this._size.w, h: this._size.h,
+                radius: this._size.radius, roundness: 7.0,
+            });
         } catch (e) {
-            logError(e, `[peachos-widgets] failed to build ${instance.type}/${instance.variant}`);
+            logError(e, `[peachos-widgets] failed to build ${inst.type}/${inst.variant}`);
         }
+
+        this._buildChrome();
 
         this._pressId = this._glass.widget.connect('button-press-event',
             (_a, event) => this._onPress(event));
     }
 
-    /** The visible-glass rect in stage coords (excludes the invisible MARGIN). */
+    _buildChrome() {
+        // On the layer (a sibling of the glass), not a child of it -- the glass
+        // uses a BinLayout for its content overlay, which would ignore a fixed
+        // position.
+        this._chrome = new St.BoxLayout({
+            style_class: 'peachos-widget-chrome',
+            visible: this._editing,
+        });
+
+        const sizeCycle = new St.Button({
+            style_class: 'peachos-widget-chrome-btn',
+            child: new St.Label({text: (this.instance.scale || 'md').toUpperCase()}),
+        });
+        sizeCycle.connect('clicked', () => this._cycleScale());
+        this._chrome.add_child(sizeCycle);
+
+        const removeBtn = new St.Button({
+            style_class: 'peachos-widget-chrome-btn peachos-widget-chrome-remove',
+            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 13}),
+        });
+        removeBtn.connect('clicked', () => this._callbacks.onRemove(this));
+        this._chrome.add_child(removeBtn);
+
+        this._layer.add_child(this._chrome);
+        this._syncChrome();
+    }
+
+    _syncChrome() {
+        const r = this.innerRect();
+        this._chrome.set_position(Math.round(r.x + r.w - 76), Math.round(r.y - 12));
+        this._layer.set_child_above_sibling(this._chrome, null);
+    }
+
     innerRect() {
-        return {
-            x: this._glass.widget.x + MARGIN,
-            y: this._glass.widget.y + MARGIN,
-            w: this._innerW,
-            h: this._innerH,
-        };
+        return {x: this._glass.widget.x, y: this._glass.widget.y, w: this._size.w, h: this._size.h};
     }
 
     setInnerPos(x, y) {
         this._glass.setInnerPos(x, y);
-        this._removeBtn.set_position(x - 10, y - 10);
+        this._syncChrome();
     }
 
-    refreshBackdrop() {
-        this._glass.refresh();
-    }
-
-    raise() {
-        const parent = this._glass.widget.get_parent();
-        if (!parent)
-            return;
-        parent.set_child_above_sibling(this._glass.widget, null);
-        parent.set_child_above_sibling(this._glass.content, null);
-        parent.set_child_above_sibling(this._removeBtn, null);
-    }
+    refreshBackdrop() {}
 
     setEditing(editing) {
         this._editing = editing;
         this._glass.widget.reactive = editing;
-        this._removeBtn.visible = editing;
+        this._chrome.visible = editing;
         if (editing)
-            this._glass.content.add_style_class_name('peachos-widget--editing');
+            this._glass.widget.add_style_class_name('peachos-widget--editing');
         else
-            this._glass.content.remove_style_class_name('peachos-widget--editing');
+            this._glass.widget.remove_style_class_name('peachos-widget--editing');
+    }
+
+    _cycleScale() {
+        const cur = this.instance.scale || 'md';
+        const next = SCALE_ORDER[(SCALE_ORDER.indexOf(cur) + 1) % SCALE_ORDER.length];
+        this.instance.scale = next;
+
+        const anchor = this.innerRect();
+        this._teardownContent();
+        this._chrome.destroy();
+        this._glass.widget.destroy();
+
+        this._buildGlass();
+        this.setEditing(true);
+        // keep the top-left anchored, then let the layer clamp + persist
+        this.setInnerPos(anchor.x, anchor.y);
+        this._callbacks.onResized(this);
     }
 
     _onPress(event) {
         if (!this._editing || event.get_button() !== Clutter.BUTTON_PRIMARY)
             return Clutter.EVENT_PROPAGATE;
-
         const [px, py] = event.get_coords();
         const r = this.innerRect();
         this._drag = {px, py, ax: r.x, ay: r.y};
-        this._capturedId = global.stage.connect('captured-event',
-            (_s, ev) => this._onDragEvent(ev));
-        this._glass.content.add_style_class_name('peachos-widget--dragging');
+        this._capturedId = global.stage.connect('captured-event', (_s, ev) => this._onDragEvent(ev));
+        this._glass.widget.add_style_class_name('peachos-widget--dragging');
         return Clutter.EVENT_STOP;
     }
 
     _onDragEvent(ev) {
-        const type = ev.type();
-        if (type === Clutter.EventType.MOTION) {
+        const t = ev.type();
+        if (t === Clutter.EventType.MOTION) {
             const [x, y] = ev.get_coords();
-            this.setInnerPos(
-                Math.round(this._drag.ax + (x - this._drag.px)),
-                Math.round(this._drag.ay + (y - this._drag.py)));
+            this.setInnerPos(this._drag.ax + (x - this._drag.px), this._drag.ay + (y - this._drag.py));
             return Clutter.EVENT_STOP;
         }
-        if (type === Clutter.EventType.BUTTON_RELEASE) {
+        if (t === Clutter.EventType.BUTTON_RELEASE) {
             this._endDrag();
-            this._snapAndCommit();
+            const r = this.innerRect();
+            this.setInnerPos(Math.round(r.x / GRID) * GRID, Math.round(r.y / GRID) * GRID);
+            this._callbacks.onMoved(this);
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
@@ -131,33 +151,25 @@ export class WidgetFrame {
             global.stage.disconnect(this._capturedId);
             this._capturedId = 0;
         }
-        this._glass.content.remove_style_class_name('peachos-widget--dragging');
+        this._glass.widget.remove_style_class_name('peachos-widget--dragging');
     }
 
-    _snapAndCommit() {
-        const r = this.innerRect();
-        this.setInnerPos(
-            Math.round(r.x / GRID) * GRID,
-            Math.round(r.y / GRID) * GRID);
-        this.refreshBackdrop();
-        this._callbacks.onMoved(this);
-    }
-
-    destroy() {
-        this._endDrag();
-        if (this._pressId) {
-            this._glass.widget.disconnect(this._pressId);
-            this._pressId = 0;
-        }
+    _teardownContent() {
         try {
             this._content?.destroy?.();
         } catch (e) {
             logError(e, '[peachos-widgets] content destroy failed');
         }
         this._content = null;
-        this._glass.content.destroy();
+    }
+
+    destroy() {
+        this._endDrag();
+        this._pressId = 0;
+        this._teardownContent();
+        this._chrome?.destroy();
+        this._chrome = null;
         this._glass.widget.destroy();
-        this._removeBtn.destroy();
         this._glass = null;
     }
 }

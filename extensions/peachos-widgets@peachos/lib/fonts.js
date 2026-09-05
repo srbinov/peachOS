@@ -16,10 +16,11 @@ export const FONT = {
     displayThin: 'PeachDisplayThin', // SF Pro Display Thin
 };
 
-/** Inline St style string for a text label. */
+/** Inline St style string for a text label sitting on the glass card. */
 export function fontStyle(family, px, opacity = 1) {
     const color = opacity >= 1 ? '#ffffff' : `rgba(255,255,255,${opacity})`;
-    return `font-family: "${family}"; font-size: ${Math.max(1, Math.round(px))}px; color: ${color};`;
+    return `font-family: "${family}"; font-size: ${Math.max(1, Math.round(px))}px; `
+        + `color: ${color}; text-shadow: 0 1px 3px rgba(0,0,0,0.35);`;
 }
 
 /** Pango.FontDescription for PangoCairo text (calendar today badge). */

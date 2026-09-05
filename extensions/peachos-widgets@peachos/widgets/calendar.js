@@ -148,7 +148,7 @@ export class CalendarWidget {
             const isToday = sameDay(new Date(today.getFullYear(), today.getMonth(), day), today);
 
             if (isToday) {
-                const dia = Math.round(Math.min(colW, rowH) * 1.15);
+                const dia = Math.round(Math.min(colW, rowH) * 0.95);
                 const badge = new TodayBadge(dia, day, ls);
                 this._add(badge.actor, cx - dia / 2, cy - dia / 2);
             } else {

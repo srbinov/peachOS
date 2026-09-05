@@ -1,177 +1,98 @@
-/* peachOS Desktop Widgets -- content styling.
+/* peachOS Desktop Widgets.
  *
- * The squircle silhouette + refraction + frost come from the shader
- * (lib/liquidGlass.js). CSS here styles the content laid over it, matched to
- * the KDE liquidglass widgets: monochrome-white in glass mode, SF Pro Display
- * for weather/calendar, SF Pro Rounded for the analog dial, Barlow Condensed
- * for the digital readout. Font files are vendored in fonts/ and installed
- * system-wide by provision.sh. */
-
-/* ---- clock: digital ------------------------------------------------- */
-
-.peachos-clock-digital-num {
-    font-family: "Barlow Condensed Medium", "Barlow Condensed", sans-serif;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.55);
-}
-
-/* ---- clock: analog ------------------------------------------------- */
-
-.peachos-clock-analog-num {
-    font-family: "SF Pro Rounded", "SF Pro Display", sans-serif;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.85);
-}
-
-/* ---- weather ----------------------------------------------------- */
-
-.peachos-weather-city,
-.peachos-weather-cond,
-.peachos-weather-hl,
-.peachos-weather-hour,
-.peachos-weather-day,
-.peachos-weather-info-key,
-.peachos-weather-info-val,
-.peachos-weather-status {
-    font-family: "SF Pro Display", "SF Pro Text", sans-serif;
-    color: #ffffff;
-}
-
-.peachos-weather-city {
-    font-weight: 500;
-}
-
-.peachos-weather-temp-big {
-    font-family: "SF Pro Display", sans-serif;
-    font-weight: 100;
-    color: #ffffff;
-}
-
-.peachos-weather-cond,
-.peachos-weather-info-key {
-    font-weight: 500;
-}
-
-.peachos-weather-icon {
-    /* PNGs already the right tone (mono-light set) */
-}
-
-.peachos-weather-status {
-    opacity: 0.8;
-}
-
-/* ---- calendar --------------------------------------------------- */
-
-.peachos-cal-month,
-.peachos-cal-weekday,
-.peachos-cal-day,
-.peachos-cal-section,
-.peachos-cal-card-title,
-.peachos-cal-card-time,
-.peachos-cal-empty {
-    font-family: "SF Pro Display", "SF Pro Text", sans-serif;
-    color: #ffffff;
-}
-
-.peachos-cal-month {
-    font-weight: 400;
-    letter-spacing: 1px;
-}
-
-.peachos-cal-section {
-    font-weight: 400;
-    opacity: 0.55;
-    letter-spacing: 0.5px;
-}
-
-.peachos-cal-card {
-    background-color: rgba(255, 255, 255, 0.10);
-}
-
-.peachos-cal-card-time {
-    opacity: 0.6;
-}
-
-.peachos-cal-empty {
-    opacity: 0.45;
-}
+ * The glass card is peachOS's Notification Center recipe (lib/liquidGlass.js).
+ * Widget text is coloured/sized inline in JS via lib/fonts.js. This sheet
+ * covers the edit-mode chrome and the picker. */
 
 /* ---- edit-mode chrome on a placed widget --------------------------- */
 
 .peachos-widget--editing {
-    /* the shader draws no border; the ✕ button + dim backdrop are the cue */
+    /* the glass card is the affordance; nothing extra */
 }
 
-.peachos-widget-remove {
-    background-color: rgba(20, 20, 22, 0.82);
+.peachos-widget-chrome {
+    spacing: 4px;
+}
+
+.peachos-widget-chrome-btn {
+    background-color: rgba(20, 20, 22, 0.85);
     color: #ffffff;
-    border-radius: 12px;
-    width: 22px;
-    height: 22px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 11px;
+    min-height: 22px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-.peachos-widget-remove:hover {
+.peachos-widget-chrome-btn:hover {
+    background-color: rgba(40, 40, 44, 0.95);
+}
+
+.peachos-widget-chrome-remove {
+    padding: 1px 4px;
+}
+
+.peachos-widget-chrome-remove:hover {
     background-color: rgba(220, 60, 55, 0.95);
 }
 
-/* ---- picker -------------------------------------------------------- */
+/* ---- picker ------------------------------------------------------- */
 
 .peachos-picker-body {
     spacing: 0;
 }
 
 .peachos-picker-rail {
-    spacing: 8px;
-    padding: 14px 10px;
-    background-color: rgba(0, 0, 0, 0.18);
+    spacing: 10px;
+    padding: 16px 12px;
+    background-color: rgba(0, 0, 0, 0.16);
 }
 
 .peachos-picker-rail-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    color: #ffffff;
-    background-color: rgba(255, 255, 255, 0.08);
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .peachos-picker-rail-btn:hover {
-    background-color: rgba(255, 255, 255, 0.16);
+    background-color: rgba(255, 255, 255, 0.14);
 }
 
 .peachos-picker-rail-btn.selected {
-    background-color: rgba(255, 255, 255, 0.28);
+    background-color: rgba(255, 255, 255, 0.26);
 }
 
 .peachos-picker-done {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
     color: #ffffff;
-    background-color: rgba(60, 170, 90, 0.45);
+    background-color: rgba(60, 175, 95, 0.5);
 }
 
 .peachos-picker-done:hover {
-    background-color: rgba(60, 190, 100, 0.7);
+    background-color: rgba(60, 195, 105, 0.75);
 }
 
 .peachos-picker-main {
-    padding: 16px 18px;
+    padding: 18px 20px;
     spacing: 2px;
     color: #ffffff;
-    font-family: "SF Pro Display", sans-serif;
+    font-family: "PeachDisplay", sans-serif;
 }
 
 .peachos-picker-title {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 700;
 }
 
 .peachos-picker-hint {
     font-size: 11px;
-    opacity: 0.7;
-    padding-bottom: 10px;
+    opacity: 0.65;
+    padding-bottom: 12px;
 }
 
 .peachos-picker-scroll {
@@ -180,15 +101,18 @@
 
 .peachos-picker-grid {
     spacing: 12px;
-    padding: 4px 0;
+}
+
+.peachos-picker-grid-row {
+    spacing: 12px;
 }
 
 .peachos-picker-card {
-    width: 116px;
-    height: 108px;
+    width: 128px;
+    height: 116px;
     border-radius: 16px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background-color: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     color: #ffffff;
 }
 
@@ -197,8 +121,7 @@
 }
 
 .peachos-picker-card-icon {
-    color: #ffffff;
-    padding-bottom: 6px;
+    padding-bottom: 8px;
 }
 
 .peachos-picker-card-label {
@@ -212,10 +135,10 @@
 }
 
 .peachos-picker-ghost {
-    background-color: rgba(20, 20, 22, 0.78);
+    background-color: rgba(20, 20, 22, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 14px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     spacing: 4px;
     color: #ffffff;
 }
