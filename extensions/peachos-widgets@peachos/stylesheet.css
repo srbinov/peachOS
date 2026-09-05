@@ -89,6 +89,30 @@
     font-weight: 700;
 }
 
+.peachos-picker-modeseg {
+    spacing: 2px;
+    background-color: rgba(0, 0, 0, 0.22);
+    border-radius: 9px;
+    padding: 2px;
+}
+
+.peachos-picker-modeseg-btn {
+    padding: 3px 10px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.peachos-picker-modeseg-btn:hover {
+    color: #ffffff;
+}
+
+.peachos-picker-modeseg-btn.selected {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
 .peachos-picker-hint {
     font-size: 11px;
     opacity: 0.65;

@@ -127,6 +127,8 @@ export class WidgetLayer {
         }
         if (!inst.scale)
             inst.scale = 'md';
+        if (!inst.mode)
+            inst.mode = 'glass';
         const frame = new WidgetFrame(inst, this._ctx, this._layer, {
             onMoved: f => this._onFrameMoved(f),
             onRemove: f => this.removeWidget(f),
@@ -186,13 +188,13 @@ export class WidgetLayer {
 
     // --- public API -----------------------------------------------------
 
-    addWidget(type, variant, stageX, stageY, scale = 'md') {
+    addWidget(type, variant, stageX, stageY, scale = 'md', mode = 'glass') {
         const size = sizeFor(type, variant, scale);
         if (!size)
             return null;
         const id = `${type}-${variant}-${Date.now().toString(36)}`;
         const inst = {
-            id, type, variant, scale,
+            id, type, variant, scale, mode,
             ...this._locate(stageX - size.w / 2, stageY - size.h / 2),
         };
         const frame = this._createFrame(inst);

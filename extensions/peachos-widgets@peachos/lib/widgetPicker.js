@@ -13,6 +13,7 @@ import {REGISTRY, SCALE_ORDER} from './widgetRegistry.js';
 
 const INSET = 20;
 const SIZE_LABEL = {sm: 'Small', md: 'Medium', lg: 'Large'};
+const MODES = [['glass', 'Glass'], ['dark', 'Dark'], ['light', 'Light']];
 const CARDS_PER_ROW = 3;
 
 export const WidgetPicker = GObject.registerClass(
@@ -22,6 +23,7 @@ class WidgetPicker extends Clutter.Actor {
         this._widgetLayer = widgetLayer;
         this._callbacks = callbacks;
         this._selectedType = Object.keys(REGISTRY)[0];
+        this._mode = 'glass';
 
         const mon = Main.layoutManager.primaryMonitor;
         this._pw = Math.round(mon.width / 3);
@@ -37,7 +39,14 @@ class WidgetPicker extends Clutter.Actor {
         this.add_child(this._glass.widget);
 
         this._buildContents();
+        this._setMode('glass');
         this._selectType(this._selectedType);
+    }
+
+    _setMode(mode) {
+        this._mode = mode;
+        for (const [id, b] of this._modeButtons)
+            b[id === mode ? 'add_style_class_name' : 'remove_style_class_name']('selected');
     }
 
     _buildContents() {
@@ -83,8 +92,25 @@ class WidgetPicker extends Clutter.Actor {
         });
         row.add_child(right);
 
-        this._title = new St.Label({style_class: 'peachos-picker-title'});
-        right.add_child(this._title);
+        const titleRow = new St.BoxLayout({x_expand: true});
+        this._title = new St.Label({style_class: 'peachos-picker-title', x_expand: true});
+        titleRow.add_child(this._title);
+
+        this._modeSeg = new St.BoxLayout({style_class: 'peachos-picker-modeseg'});
+        this._modeButtons = new Map();
+        for (const [id, label] of MODES) {
+            const b = new St.Button({
+                style_class: 'peachos-picker-modeseg-btn',
+                child: new St.Label({text: label}),
+                can_focus: true,
+            });
+            b.connect('clicked', () => this._setMode(id));
+            this._modeSeg.add_child(b);
+            this._modeButtons.set(id, b);
+        }
+        titleRow.add_child(this._modeSeg);
+        right.add_child(titleRow);
+
         right.add_child(new St.Label({
             text: 'Drag a widget onto the desktop',
             style_class: 'peachos-picker-hint',
@@ -201,7 +227,7 @@ class WidgetPicker extends Clutter.Actor {
                 const p = this._panelRect();
                 const onPanel = x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
                 if (!onPanel) {
-                    this._widgetLayer.addWidget(type, variant, x, y, scale);
+                    this._widgetLayer.addWidget(type, variant, x, y, scale, this._mode);
                     this.get_parent()?.set_child_above_sibling(this, null);
                 }
                 return Clutter.EVENT_STOP;

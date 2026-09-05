@@ -27,12 +27,14 @@ function sameDay(a, b) {
         a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-// A filled white circle with the day number punched out via DEST_OUT.
+// Today marker: a filled circle. Glass mode punches the day number out
+// (Cairo DEST_OUT) so the backdrop shows through; solid modes draw it normally.
 class TodayBadge {
-    constructor(diameter, dayNumber, fontPx) {
+    constructor(diameter, dayNumber, fontPx, mode) {
         this.actor = new St.DrawingArea({width: diameter, height: diameter});
         this._day = dayNumber;
         this._fs = fontPx;
+        this._mode = mode;
         this.actor.connect('repaint', a => this._draw(a));
     }
 
@@ -40,7 +42,11 @@ class TodayBadge {
         const [w, h] = area.get_surface_size();
         const cr = area.get_context();
         try {
-            cr.setSourceRGBA(1, 1, 1, 1);
+            // circle: white in glass/dark, red in light (KDE accentRed)
+            if (this._mode === 'light')
+                cr.setSourceRGBA(0.84, 0, 0.08, 1);
+            else
+                cr.setSourceRGBA(1, 1, 1, 1);
             cr.arc(w / 2, h / 2, Math.min(w, h) / 2, 0, 2 * Math.PI);
             cr.fill();
 
@@ -48,7 +54,13 @@ class TodayBadge {
             layout.set_font_description(fontDesc(FONT.display, this._fs));
             layout.set_text(`${this._day}`, -1);
             const [lw, lh] = layout.get_pixel_size();
-            cr.setOperator(Cairo.Operator.DEST_OUT);
+            if (this._mode === 'glass') {
+                cr.setOperator(Cairo.Operator.DEST_OUT);
+            } else {
+                cr.setOperator(Cairo.Operator.OVER);
+                cr.setSourceRGBA(this._mode === 'light' ? 1 : 0.1, this._mode === 'light' ? 1 : 0.1,
+                    this._mode === 'light' ? 1 : 0.11, 1);
+            }
             cr.moveTo((w - lw) / 2, (h - lh) / 2);
             PangoCairo.show_layout(cr, layout);
             cr.setOperator(Cairo.Operator.OVER);
@@ -64,6 +76,7 @@ export class CalendarWidget {
         this._mode = mode;
         this._w = size.w;
         this._h = size.h;
+        this._fg = size.fg || '255,255,255';
 
         this._root = new Clutter.Actor({width: size.w, height: size.h});
         parent.add_child(this._root);
@@ -106,7 +119,7 @@ export class CalendarWidget {
         // Month header, left-edge roughly over the first weekday column.
         const header = new St.Label({
             text: MONTHS[today.getMonth()],
-            style: fontStyle(FONT.display, ls, 0.95),
+            style: fontStyle(FONT.display, ls, 0.95, this._fg),
         });
         this._add(header, x0, y);
         y += Math.round(ls * 1.6);
@@ -116,7 +129,7 @@ export class CalendarWidget {
             const weekend = c === 0 || c === 6;
             const wl = new St.Label({
                 text: WEEKDAYS[c],
-                style: fontStyle(FONT.display, ls, weekend ? 0.45 : 0.75),
+                style: fontStyle(FONT.display, ls, weekend ? 0.45 : 0.75, this._fg),
             });
             this._add(wl, x0 + c * colW + colW / 2 - ls * 0.32, y);
         }
@@ -149,18 +162,18 @@ export class CalendarWidget {
 
             if (isToday) {
                 const dia = Math.round(Math.min(colW, rowH) * 0.95);
-                const badge = new TodayBadge(dia, day, ls);
+                const badge = new TodayBadge(dia, day, ls, this._mode);
                 this._add(badge.actor, cx - dia / 2, cy - dia / 2);
             } else {
                 const dl = new St.Label({
                     text: `${day}`,
-                    style: fontStyle(FONT.display, ls, weekend ? 0.45 : 1),
+                    style: fontStyle(FONT.display, ls, weekend ? 0.45 : 1, this._fg),
                 });
                 this._add(dl, cx - ls * 0.32, cy - ls * 0.62);
                 if (hasEvent(day)) {
                     this._add(new St.Widget({
                         width: 4, height: 4,
-                        style: 'background-color: rgba(255,255,255,0.85); border-radius: 2px;',
+                        style: `background-color: rgba(${this._fg},0.85); border-radius: 2px;`,
                     }), cx - 2, cy + ls * 0.55);
                 }
             }
@@ -187,7 +200,7 @@ export class CalendarWidget {
         if (!events.length) {
             const l = new St.Label({
                 text: this._ctx.calendar.available ? 'No upcoming events' : 'No calendar connected',
-                style: fontStyle(FONT.display, ls, 0.45),
+                style: fontStyle(FONT.display, ls, 0.45, this._fg),
             });
             list.add_child(l);
             return;
@@ -208,7 +221,7 @@ export class CalendarWidget {
                 return;
             const hl = new St.Label({
                 text: title,
-                style: fontStyle(FONT.display, ls, 0.55) + ' padding-top: 4px;',
+                style: fontStyle(FONT.display, ls, 0.55, this._fg) + ' padding-top: 4px;',
             });
             list.add_child(hl);
             for (const ev of evs)
@@ -240,14 +253,14 @@ export class CalendarWidget {
         }));
         const title = new St.Label({
             text: ev.summary || '(untitled)', x_expand: true,
-            style: fontStyle(FONT.display, Math.round(ls * 0.92)),
+            style: fontStyle(FONT.display, Math.round(ls * 0.92), 1, this._fg),
         });
         title.y_align = Clutter.ActorAlign.CENTER;
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         inner.add_child(title);
         const time = new St.Label({
             text: timeText,
-            style: fontStyle(FONT.display, Math.round(ls * 0.78), 0.6),
+            style: fontStyle(FONT.display, Math.round(ls * 0.78), 0.6, this._fg),
         });
         time.y_align = Clutter.ActorAlign.CENTER;
         inner.add_child(time);

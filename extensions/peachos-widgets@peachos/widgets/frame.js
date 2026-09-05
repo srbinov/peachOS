@@ -4,10 +4,12 @@
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
-import {makeLiquidGlass} from '../lib/liquidGlass.js';
+import {makeLiquidGlass, MODE_FG} from '../lib/liquidGlass.js';
 import {variantDef, sizeFor, SCALE_ORDER} from '../lib/widgetRegistry.js';
 
 const GRID = 8;
+const MODE_ORDER = ['glass', 'dark', 'light'];
+const MODE_LABEL = {glass: 'GLASS', dark: 'DARK', light: 'LIGHT'};
 
 export class WidgetFrame {
     constructor(instance, ctx, layer, callbacks) {
@@ -23,11 +25,12 @@ export class WidgetFrame {
 
     _buildGlass() {
         const inst = this.instance;
+        const mode = inst.mode || 'glass';
         this._size = sizeFor(inst.type, inst.variant, inst.scale || 'md');
 
         this._glass = makeLiquidGlass({
             innerW: this._size.w, innerH: this._size.h, x: 0, y: 0,
-            radius: this._size.radius,
+            radius: this._size.radius, mode,
         });
         this._layer.add_child(this._glass.widget);
 
@@ -35,7 +38,8 @@ export class WidgetFrame {
         try {
             this._content = def.make(this._glass.content, this._ctx, {
                 w: this._size.w, h: this._size.h,
-                radius: this._size.radius, roundness: 7.0,
+                radius: this._size.radius, roundness: 7.5,
+                mode, fg: MODE_FG[mode],
             });
         } catch (e) {
             logError(e, `[peachos-widgets] failed to build ${inst.type}/${inst.variant}`);
@@ -56,11 +60,18 @@ export class WidgetFrame {
             visible: this._editing,
         });
 
+        const modeCycle = new St.Button({
+            style_class: 'peachos-widget-chrome-btn',
+            child: new St.Label({text: MODE_LABEL[this.instance.mode || 'glass']}),
+        });
+        modeCycle.connect('clicked', () => this._cycle('mode', MODE_ORDER));
+        this._chrome.add_child(modeCycle);
+
         const sizeCycle = new St.Button({
             style_class: 'peachos-widget-chrome-btn',
             child: new St.Label({text: (this.instance.scale || 'md').toUpperCase()}),
         });
-        sizeCycle.connect('clicked', () => this._cycleScale());
+        sizeCycle.connect('clicked', () => this._cycle('scale', SCALE_ORDER));
         this._chrome.add_child(sizeCycle);
 
         const removeBtn = new St.Button({
@@ -101,10 +112,9 @@ export class WidgetFrame {
             this._glass.widget.remove_style_class_name('peachos-widget--editing');
     }
 
-    _cycleScale() {
-        const cur = this.instance.scale || 'md';
-        const next = SCALE_ORDER[(SCALE_ORDER.indexOf(cur) + 1) % SCALE_ORDER.length];
-        this.instance.scale = next;
+    _cycle(key, order) {
+        const cur = this.instance[key] || order[0];
+        this.instance[key] = order[(order.indexOf(cur) + 1) % order.length];
 
         const anchor = this.innerRect();
         this._teardownContent();
