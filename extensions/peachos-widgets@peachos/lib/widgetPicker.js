@@ -13,8 +13,11 @@ import {REGISTRY} from './widgetRegistry.js';
 
 const INSET = 18;
 
+// A Clutter.Actor, not St.Widget: its glass/content children are fixed-
+// positioned at stage coords, and only the default (Clutter) fixed layout
+// allocates those; a bare St.Widget would leave them at 0x0.
 export const WidgetPicker = GObject.registerClass(
-class WidgetPicker extends St.Widget {
+class WidgetPicker extends Clutter.Actor {
     _init(widgetLayer, callbacks) {
         super._init({name: 'peachos-widget-picker', reactive: false});
         this._widgetLayer = widgetLayer;
@@ -201,8 +204,11 @@ class WidgetPicker extends St.Widget {
 
                 const p = this._panelStageRect();
                 const onPanel = x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
-                if (!onPanel)
+                if (!onPanel) {
                     this._widgetLayer.addWidget(type, variant, x, y);
+                    // The new widget's actors were appended above us -- come back on top.
+                    this.get_parent()?.set_child_above_sibling(this, null);
+                }
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;

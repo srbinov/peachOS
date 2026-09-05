@@ -126,12 +126,11 @@ export class WidgetLayer {
             log(`[peachos-widgets] unknown widget ${inst.type}/${inst.variant}, skipping`);
             return null;
         }
-        const frame = new WidgetFrame(inst, this._ctx, {
+        const frame = new WidgetFrame(inst, this._ctx, this._layer, {
             onMoved: f => this._onFrameMoved(f),
             onRemove: f => this.removeWidget(f),
         });
         this._frames.set(inst.id, frame);
-        this._layer.add_child(frame);
         this._placeFrame(frame);
         frame.setEditing(this._editing);
         return frame;
