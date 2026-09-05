@@ -470,6 +470,19 @@ rsync -a --delete "$REPO_DIR/apps/settings/src/" /usr/lib/peachos/settings/src/
 rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data/
 install -Dm755 "$REPO_DIR/apps/settings/peachos-settings" /usr/bin/peachos-settings
 install -Dm644 "$REPO_DIR/apps/settings/peachos-settings.desktop" /usr/share/applications/peachos-settings.desktop
+
+# Redirect the launchers gnome-control-center registered so anything that opens "Settings",
+# the Wallpaper panel or the Displays panel -- the desktop background right-click menu, the
+# Quick Settings gear, GNOME search for "wallpaper"/"display" -- lands in peachOS's own
+# Settings app (on the matching tab) instead of the stock one. Installed under
+# /usr/local/share/applications, which precedes /usr/share in XDG_DATA_DIRS, so these win the
+# GAppInfo lookup AND survive an apt upgrade of gnome-control-center clobbering its own files.
+echo "==> Redirecting Settings / Wallpaper / Displays launchers -> peachOS Settings"
+install -d /usr/local/share/applications
+for f in "$REPO_DIR"/provision/desktop-overrides/*.desktop; do
+    install -Dm644 "$f" "/usr/local/share/applications/$(basename "$f")"
+done
+update-desktop-database /usr/local/share/applications
 update-desktop-database /usr/share/applications
 
 # Emoji set for the Settings app's Edit-Profile emoji avatar picker. Sparse-checkout just

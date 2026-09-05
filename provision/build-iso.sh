@@ -108,6 +108,12 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
     glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
     rsync -a --delete "$REPO_DIR/apps/settings/src/" /usr/lib/peachos/settings/src/
     rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data/
+    # Settings/Wallpaper/Displays launcher redirects (see provision.sh)
+    install -d /usr/local/share/applications
+    for f in "$REPO_DIR"/provision/desktop-overrides/*.desktop; do
+        install -Dm644 "$f" "/usr/local/share/applications/$(basename "$f")"
+    done
+    update-desktop-database /usr/local/share/applications 2>/dev/null || true
     # Bluetooth device-type icons (see provision.sh -- same targets)
     for f in "$REPO_DIR"/assets/bluetooth-device-icons/*.svg; do
         [[ -e "$f" ]] || continue

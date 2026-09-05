@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Displays
+Comment=Choose how to use connected monitors and projectors
+Exec=/usr/bin/peachos-settings displays
+Icon=/usr/share/icons/peachos/systemsettings_icon.svg
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupNotify=true
+StartupWMClass=org.peachos.Settings
+Categories=GNOME;GTK;Settings;HardwareSettings;X-GNOME-Settings-Panel;
+OnlyShowIn=GNOME;Unity;
+Keywords=Panel;Projector;xrandr;Screen;Resolution;Refresh;Monitor;Night;Light;

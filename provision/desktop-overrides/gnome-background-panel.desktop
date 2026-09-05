@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Wallpaper
+Comment=Change your desktop wallpaper
+Exec=/usr/bin/peachos-settings wallpaper
+Icon=/usr/share/icons/peachos/systemsettings_icon.svg
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupNotify=true
+StartupWMClass=org.peachos.Settings
+Categories=GNOME;GTK;Settings;DesktopSettings;X-GNOME-Settings-Panel;
+OnlyShowIn=GNOME;
+Keywords=Background;Wallpaper;Screen;Desktop;
