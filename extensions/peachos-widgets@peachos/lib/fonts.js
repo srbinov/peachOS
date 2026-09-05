@@ -1,38 +1,30 @@
-// Font application for widget labels.
+// Font helpers for widget labels.
 //
-// St CSS `font-family` and Clutter.Text.set_font_name() both round-trip through
-// pango_font_description_from_string(), which parses a trailing "Condensed" (or
-// "Light", "Black", ...) as a stretch/weight keyword -- so "Barlow Condensed"
-// resolves to family "Barlow" + condensed stretch, finds nothing, and falls
-// back to the UI font. Building the PangoFontDescription by hand with
-// set_family() avoids that entirely.
+// The widget fonts (Barlow Condensed, SF Pro Display/Rounded) are vendored in
+// fonts/ and installed system-wide by provision.sh, together with a fontconfig
+// alias file (provision/fontconfig/49-peachos-widgets.conf) that maps
+// keyword-free names -- Pango parses a literal "Barlow Condensed" as family
+// "Barlow" + condensed-stretch and fails otherwise. Use the alias names below
+// in St `font-family` (via fontStyle()).
 
 import Pango from 'gi://Pango';
 
-export const FAMILIES = {
-    // digital clock readout
-    barlow: 'Barlow Condensed',
-    // analog dial numbers
-    rounded: 'SF Pro Rounded',
-    // everything else (weather, calendar)
-    display: 'SF Pro Display',
+export const FONT = {
+    clock: 'PeachClock',            // Barlow Condensed Medium
+    rounded: 'PeachRounded',        // SF Pro Rounded
+    display: 'PeachDisplay',        // SF Pro Display Regular
+    displayThin: 'PeachDisplayThin', // SF Pro Display Thin
 };
 
-/**
- * @param {St.Label} stLabel
- * @param {string} family  one of FAMILIES.*
- * @param {number} px      pixel size
- * @param {Pango.Weight} [weight]
- */
-export function applyFont(stLabel, family, px, weight = Pango.Weight.NORMAL) {
-    stLabel.clutter_text.set_font_description(fontDesc(family, px, weight));
+/** Inline St style string for a text label. */
+export function fontStyle(family, px, opacity = 1) {
+    const color = opacity >= 1 ? '#ffffff' : `rgba(255,255,255,${opacity})`;
+    return `font-family: "${family}"; font-size: ${Math.max(1, Math.round(px))}px; color: ${color};`;
 }
 
-/** A Pango.FontDescription for Cairo (PangoCairo) text. */
-export function fontDesc(family, px, weight = Pango.Weight.NORMAL) {
-    const d = Pango.FontDescription.new();
-    d.set_family(family);
-    d.set_weight(weight);
+/** Pango.FontDescription for PangoCairo text (calendar today badge). */
+export function fontDesc(family, px) {
+    const d = Pango.FontDescription.from_string(family);
     d.set_absolute_size(Math.max(1, Math.round(px)) * Pango.SCALE);
     return d;
 }

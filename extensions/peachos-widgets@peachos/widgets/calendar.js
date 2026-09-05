@@ -14,7 +14,7 @@ import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 
 import {formatEventTime} from '../lib/providers/calendar.js';
-import {applyFont, fontDesc, FAMILIES, Pango} from '../lib/fonts.js';
+import {FONT, fontStyle, fontDesc, Pango} from '../lib/fonts.js';
 
 const {cairo: Cairo} = imports;
 
@@ -45,7 +45,7 @@ class TodayBadge {
             cr.fill();
 
             const layout = PangoCairo.create_layout(cr);
-            layout.set_font_description(fontDesc(FAMILIES.display, this._fs, Pango.Weight.MEDIUM));
+            layout.set_font_description(fontDesc(FONT.display, this._fs));
             layout.set_text(`${this._day}`, -1);
             const [lw, lh] = layout.get_pixel_size();
             cr.setOperator(Cairo.Operator.DEST_OUT);
@@ -104,28 +104,32 @@ export class CalendarWidget {
         let y = padTop;
 
         // Month header, left-edge roughly over the first weekday column.
-        const header = new St.Label({text: MONTHS[today.getMonth()]});
-        applyFont(header, FAMILIES.display, ls, Pango.Weight.NORMAL);
-        header.style = 'color: rgba(255,255,255,0.95);';
+        const header = new St.Label({
+            text: MONTHS[today.getMonth()],
+            style: fontStyle(FONT.display, ls, 0.95),
+        });
         this._add(header, x0, y);
         y += Math.round(ls * 1.6);
 
         // Weekday row
         for (let c = 0; c < 7; c++) {
             const weekend = c === 0 || c === 6;
-            const wl = new St.Label({text: WEEKDAYS[c]});
-            applyFont(wl, FAMILIES.display, ls, Pango.Weight.NORMAL);
-            wl.style = `color: rgba(255,255,255,${weekend ? 0.45 : 0.75});`;
+            const wl = new St.Label({
+                text: WEEKDAYS[c],
+                style: fontStyle(FONT.display, ls, weekend ? 0.45 : 0.75),
+            });
             this._add(wl, x0 + c * colW + colW / 2 - ls * 0.32, y);
         }
         y += Math.round(ls * 1.55);
 
-        // Day grid
+        // Day grid -- rows sized to the month's actual week count so it fills
+        // the widget (months span 4-6 weeks).
         const gridH = this._h - padBottom - y;
-        const rowH = gridH / 6;
         const first = new Date(today.getFullYear(), today.getMonth(), 1);
         const offset = first.getDay();
         const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const numRows = Math.ceil((offset + daysInMonth) / 7);
+        const rowH = gridH / numRows;
 
         const monthEvents = this._ctx.calendar.getEvents(
             new Date(today.getFullYear(), today.getMonth(), 1),
@@ -148,9 +152,10 @@ export class CalendarWidget {
                 const badge = new TodayBadge(dia, day, ls);
                 this._add(badge.actor, cx - dia / 2, cy - dia / 2);
             } else {
-                const dl = new St.Label({text: `${day}`});
-                applyFont(dl, FAMILIES.display, ls, Pango.Weight.NORMAL);
-                dl.style = `color: rgba(255,255,255,${weekend ? 0.45 : 1});`;
+                const dl = new St.Label({
+                    text: `${day}`,
+                    style: fontStyle(FONT.display, ls, weekend ? 0.45 : 1),
+                });
                 this._add(dl, cx - ls * 0.32, cy - ls * 0.62);
                 if (hasEvent(day)) {
                     this._add(new St.Widget({
@@ -182,9 +187,8 @@ export class CalendarWidget {
         if (!events.length) {
             const l = new St.Label({
                 text: this._ctx.calendar.available ? 'No upcoming events' : 'No calendar connected',
+                style: fontStyle(FONT.display, ls, 0.45),
             });
-            applyFont(l, FAMILIES.display, ls, Pango.Weight.NORMAL);
-            l.style = 'color: rgba(255,255,255,0.45);';
             list.add_child(l);
             return;
         }
@@ -202,9 +206,10 @@ export class CalendarWidget {
         const section = (title, evs, fmt) => {
             if (!evs.length)
                 return;
-            const hl = new St.Label({text: title});
-            applyFont(hl, FAMILIES.display, ls, Pango.Weight.NORMAL);
-            hl.style = 'color: rgba(255,255,255,0.55); padding-top: 4px;';
+            const hl = new St.Label({
+                text: title,
+                style: fontStyle(FONT.display, ls, 0.55) + ' padding-top: 4px;',
+            });
             list.add_child(hl);
             for (const ev of evs)
                 list.add_child(this._eventCard(ev, fmt(ev), ls));
@@ -233,14 +238,17 @@ export class CalendarWidget {
             y_align: Clutter.ActorAlign.CENTER,
             style: `background-color: ${ev.allDay ? '#FF9500' : '#4B9EFF'}; border-radius: 2px;`,
         }));
-        const title = new St.Label({text: ev.summary || '(untitled)', x_expand: true});
-        applyFont(title, FAMILIES.display, Math.round(ls * 0.92), Pango.Weight.NORMAL);
+        const title = new St.Label({
+            text: ev.summary || '(untitled)', x_expand: true,
+            style: fontStyle(FONT.display, Math.round(ls * 0.92)),
+        });
         title.y_align = Clutter.ActorAlign.CENTER;
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         inner.add_child(title);
-        const time = new St.Label({text: timeText});
-        applyFont(time, FAMILIES.display, Math.round(ls * 0.78), Pango.Weight.NORMAL);
-        time.style = 'color: rgba(255,255,255,0.6);';
+        const time = new St.Label({
+            text: timeText,
+            style: fontStyle(FONT.display, Math.round(ls * 0.78), 0.6),
+        });
         time.y_align = Clutter.ActorAlign.CENTER;
         inner.add_child(time);
         card.add_child(inner);

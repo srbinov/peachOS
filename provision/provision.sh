@@ -1161,7 +1161,12 @@ install -d /usr/local/share/fonts/peachos-widgets
 install -m644 "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.ttf \
     "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.otf \
     /usr/local/share/fonts/peachos-widgets/
-fc-cache -f /usr/local/share/fonts/peachos-widgets >/dev/null 2>&1 || true
+# Alias file: Pango parses "Barlow Condensed" / "SF Pro Display Thin" family
+# names as stretch/weight keywords, so widget CSS uses keyword-free alias names
+# that this maps back.
+install -Dm644 "$REPO_DIR/provision/fontconfig/49-peachos-widgets.conf" \
+    /etc/fonts/conf.d/49-peachos-widgets.conf
+fc-cache -f >/dev/null 2>&1 || true
 
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos

@@ -1,11 +1,8 @@
 // Weather widget, matched to the KDE liquidglass repo (packages/weather).
 //
-//  'small' -- city, a very large thin temperature, the condition icon
-//   top-right with H/L below it, precipitation + wind bottom-left.
+//  'small' -- city, a very large thin temperature, condition icon top-right
+//   with H/L below it, precipitation + wind bottom-left.
 //  'big'   -- header + an hourly strip + a 4-day forecast with range bars.
-//
-// Icons: bundled KDE mono-light PNGs. Fonts: SF Pro Display (Thin for the
-// temperature, Regular elsewhere).
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -13,7 +10,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {wmoCondition, wmoIconName} from '../lib/providers/weather.js';
-import {applyFont, FAMILIES, Pango} from '../lib/fonts.js';
+import {FONT, fontStyle} from '../lib/fonts.js';
 
 function wIcon(ctxPath, name, size) {
     return new St.Icon({
@@ -23,11 +20,8 @@ function wIcon(ctxPath, name, size) {
     });
 }
 
-function txt(text, px, weight = Pango.Weight.NORMAL, opacity = 1) {
-    const l = new St.Label({text});
-    applyFont(l, FAMILIES.display, px, weight);
-    l.style = `color: rgba(255,255,255,${opacity});`;
-    return l;
+function txt(text, family, px, opacity = 1) {
+    return new St.Label({text, style: fontStyle(family, px, opacity)});
 }
 
 export class WeatherWidget {
@@ -46,9 +40,8 @@ export class WeatherWidget {
     _render(data, err) {
         this._root.destroy_all_children();
         if (!data) {
-            const l = txt(err ? 'Weather unavailable' : 'Loading…', 13, Pango.Weight.NORMAL, 0.8);
-            l.set_position(Math.round(this._w * 0.1), Math.round(this._h / 2 - 10));
-            this._root.add_child(l);
+            this._add(txt(err ? 'Weather unavailable' : 'Loading…', FONT.display, 13, 0.8),
+                this._w * 0.1, this._h / 2 - 10);
             return;
         }
         if (this._mode === 'big')
@@ -67,45 +60,41 @@ export class WeatherWidget {
         const w = this._w;
         const h = this._h;
         const m = Math.round(h * 0.09);
-        const ls = Math.max(10, Math.round(Math.min(h, 350) * 0.065));
+        const ls = Math.max(11, Math.round(Math.min(h, 350) * 0.066));
         const p = this._ctx.path;
 
-        this._add(txt(d.name, ls * 1.1, Pango.Weight.MEDIUM), m, m);
-
-        const temp = txt(`${d.temp}°`, ls * 4, Pango.Weight.THIN);
-        this._add(temp, m - Math.round(ls * 0.06), m + Math.round(ls * 1.35));
+        this._add(txt(d.name, FONT.display, ls * 1.15), m, m);
+        this._add(txt(`${d.temp}°`, FONT.displayThin, ls * 4),
+            m - Math.round(ls * 0.06), m + Math.round(ls * 1.3));
 
         const iconSize = Math.round(ls * 3);
         this._add(wIcon(p, wmoIconName(d.code, d.isDay), iconSize),
-            w - m - iconSize, m - Math.round(ls * 0.3));
+            w - m - iconSize, m - Math.round(ls * 0.35));
 
-        // H / L, right-aligned, below the icon
         const hl = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            x_align: Clutter.ActorAlign.END,
-            style: `spacing: ${Math.round(ls * 0.15)}px;`,
+            style: `spacing: ${Math.round(ls * 0.18)}px;`,
         });
         const mkRow = (arrow, val, op) => {
-            const r = new St.BoxLayout({style: `spacing: ${Math.round(ls * 0.15)}px;`});
-            r.add_child(txt(arrow, ls, Pango.Weight.NORMAL, op));
-            r.add_child(txt(val, ls, Pango.Weight.NORMAL, op));
+            const r = new St.BoxLayout({style: `spacing: ${Math.round(ls * 0.12)}px;`});
+            r.add_child(txt(arrow, FONT.display, ls, op));
+            r.add_child(txt(val, FONT.display, ls, op));
             return r;
         };
         hl.add_child(mkRow('↑', `${d.hi}°`, 1));
         hl.add_child(mkRow('↓', `${d.lo}°`, 0.7));
-        this._add(hl, w - m - Math.round(ls * 3.4), m + iconSize + Math.round(ls * 0.1));
+        this._add(hl, w - m - Math.round(ls * 3.2), m + iconSize + Math.round(ls * 0.1));
 
-        // Precipitation + wind, pinned bottom-left
         const info = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
-        const is = Math.round(ls * 0.86);
-        info.add_child(txt('Precipitation', is, Pango.Weight.MEDIUM));
+        const is = Math.round(ls * 0.88);
+        info.add_child(txt('Precipitation', FONT.display, is));
         info.add_child(txt(
             d.precipProb != null ? `${d.precipProb}% chance` : `${d.precip}"`,
-            is, Pango.Weight.NORMAL, 0.55));
+            FONT.display, is, 0.55));
         info.add_child(new St.Widget({height: Math.round(ls * 0.4), width: 1}));
-        info.add_child(txt('Wind', is, Pango.Weight.MEDIUM));
-        info.add_child(txt(`${d.wind} mph ${d.windDir}`, is, Pango.Weight.NORMAL, 0.55));
-        const infoH = Math.round(is * 4 * 1.35 + ls * 0.4);
+        info.add_child(txt('Wind', FONT.display, is));
+        info.add_child(txt(`${d.wind} mph ${d.windDir}`, FONT.display, is, 0.55));
+        const infoH = Math.round(is * 4.6 + ls * 0.4);
         this._add(info, m, h - m - infoH);
     }
 
@@ -113,36 +102,31 @@ export class WeatherWidget {
         const w = this._w;
         const h = this._h;
         const m = Math.round(h * 0.06);
-        const ls = Math.max(10, Math.round(Math.min(h, 350) * 0.062));
+        const ls = Math.max(11, Math.round(Math.min(h, 350) * 0.062));
         const p = this._ctx.path;
 
-        // Header: city + temp left, icon + condition + H/L right
         const left = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
-        left.add_child(txt(d.name, ls * 1.15, Pango.Weight.MEDIUM));
-        left.add_child(txt(`${d.temp}°`, ls * 3.3, Pango.Weight.THIN));
+        left.add_child(txt(d.name, FONT.display, ls * 1.15));
+        left.add_child(txt(`${d.temp}°`, FONT.displayThin, ls * 3.3));
         this._add(left, m, m);
 
         const iconSize = Math.round(ls * 2.6);
         const right = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            x_align: Clutter.ActorAlign.END,
             style: `spacing: ${Math.round(ls * 0.15)}px;`,
         });
-        const ri = wIcon(p, wmoIconName(d.code, d.isDay), iconSize);
-        ri.x_align = Clutter.ActorAlign.END;
-        right.add_child(ri);
-        const cond = txt(wmoCondition(d.code), ls, Pango.Weight.MEDIUM);
-        cond.x_align = Clutter.ActorAlign.END;
-        right.add_child(cond);
-        const hlL = txt(`H:${d.hi}°  L:${d.lo}°`, ls, Pango.Weight.MEDIUM, 0.7);
-        hlL.x_align = Clutter.ActorAlign.END;
-        right.add_child(hlL);
+        const rAlign = a => {
+            a.x_align = Clutter.ActorAlign.END;
+            return a;
+        };
+        right.add_child(rAlign(wIcon(p, wmoIconName(d.code, d.isDay), iconSize)));
+        right.add_child(rAlign(txt(wmoCondition(d.code), FONT.display, ls)));
+        right.add_child(rAlign(txt(`H:${d.hi}°  L:${d.lo}°`, FONT.display, ls, 0.7)));
         this._add(right, w - m - Math.round(ls * 7), m);
 
         let y = m + Math.round(ls * 4.2);
         this._add(this._sep(w - 2 * m), m, y);
 
-        // Hourly strip
         y += Math.round(ls * 0.55);
         const hourly = new St.BoxLayout({width: w - 2 * m});
         for (const slot of d.hours.slice(0, 6)) {
@@ -152,15 +136,13 @@ export class WeatherWidget {
                 x_align: Clutter.ActorAlign.CENTER,
                 style: 'spacing: 4px;',
             });
-            const hl = txt(slot.hour, ls * 0.8, Pango.Weight.NORMAL, 0.7);
-            hl.x_align = Clutter.ActorAlign.CENTER;
-            col.add_child(hl);
-            const ic = wIcon(p, wmoIconName(slot.code, d.isDay), Math.round(ls * 1.6));
-            ic.x_align = Clutter.ActorAlign.CENTER;
-            col.add_child(ic);
-            const tl = txt(`${slot.temp}°`, ls * 0.92);
-            tl.x_align = Clutter.ActorAlign.CENTER;
-            col.add_child(tl);
+            const cAlign = a => {
+                a.x_align = Clutter.ActorAlign.CENTER;
+                return a;
+            };
+            col.add_child(cAlign(txt(slot.hour, FONT.display, ls * 0.8, 0.7)));
+            col.add_child(cAlign(wIcon(p, wmoIconName(slot.code, d.isDay), Math.round(ls * 1.6))));
+            col.add_child(cAlign(txt(`${slot.temp}°`, FONT.display, ls * 0.92)));
             hourly.add_child(col);
         }
         this._add(hourly, m, y);
@@ -168,7 +150,6 @@ export class WeatherWidget {
         y += Math.round(ls * 4.4);
         this._add(this._sep(w - 2 * m), m, y);
 
-        // 4-day forecast with range bars
         y += Math.round(ls * 0.55);
         const lows = d.days.map(x => x.lo);
         const highs = d.days.map(x => x.hi);
@@ -180,15 +161,13 @@ export class WeatherWidget {
 
         d.days.slice(0, 4).forEach((day, i) => {
             const row = new St.BoxLayout({width: w - 2 * m, style: 'spacing: 10px;'});
-            const dl = txt(day.label, ls, Pango.Weight.MEDIUM, i === 0 ? 1 : 0.9);
-            dl.y_align = Clutter.ActorAlign.CENTER;
-            row.add_child(dl);
-            const di = wIcon(p, wmoIconName(day.code, true), Math.round(ls * 1.35));
-            di.y_align = Clutter.ActorAlign.CENTER;
-            row.add_child(di);
-            const loL = txt(`${day.lo}°`, ls, Pango.Weight.NORMAL, 0.6);
-            loL.y_align = Clutter.ActorAlign.CENTER;
-            row.add_child(loL);
+            const vc = a => {
+                a.y_align = Clutter.ActorAlign.CENTER;
+                return a;
+            };
+            row.add_child(vc(txt(day.label, FONT.display, ls, i === 0 ? 1 : 0.9)));
+            row.add_child(vc(wIcon(p, wmoIconName(day.code, true), Math.round(ls * 1.35))));
+            row.add_child(vc(txt(`${day.lo}°`, FONT.display, ls, 0.6)));
 
             const barH = Math.round(ls * 0.34);
             const track = new St.Widget({
@@ -205,9 +184,7 @@ export class WeatherWidget {
                 style: `margin-left: ${fx}px; background-color: rgba(255,255,255,0.55); border-radius: ${ls}px;`,
             }));
             row.add_child(track);
-            const hiL = txt(`${day.hi}°`, ls);
-            hiL.y_align = Clutter.ActorAlign.CENTER;
-            row.add_child(hiL);
+            row.add_child(vc(txt(`${day.hi}°`, FONT.display, ls)));
             this._add(row, m, y + i * rowStep);
         });
     }

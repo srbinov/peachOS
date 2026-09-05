@@ -1,30 +1,28 @@
 // Clock widgets, matched to the KDE liquidglass repo.
 //
-//  DigitalClock -- a tick ring following the glass squircle with a subtle
-//  comet-trail second indicator, and a centred H:MM in Barlow Condensed with
-//  a two-dot colon (KDE clock-digital + TickRing.qml + DigitalTime.qml).
+//  DigitalClock -- a tick ring hugging the glass squircle with a subtle
+//  moving highlight, and a centred H:MM in Barlow Condensed with a two-dot
+//  colon.
 //
 //  AnalogClock -- translucent disc, 60 pill ticks, SF Pro Rounded hour
-//  numbers, pill hour/minute hands, an orange (#F6A029) second hand + hinge
-//  (KDE clock-analog/main.qml).
+//  numbers, pill hands, an orange (#F6A029) second hand + hinge.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {squircleRayHit} from '../lib/squircle.js';
-import {applyFont, FAMILIES, Pango} from '../lib/fonts.js';
+import {FONT, fontStyle} from '../lib/fonts.js';
 
 const {cairo: Cairo} = imports;
 
 const FG = [1, 1, 1];
 const SECOND_ORANGE = [0.965, 0.627, 0.161]; // #F6A029
-const DIGIT_OPACITY = 0.55;                   // glass mode
-const RING_BASE_OPACITY = 0.22;               // glass mode
+const DIGIT_OPACITY = 0.55;
+const RING_BASE = 0.30;
 
 class Ticker {
     constructor(intervalMs, onTick) {
-        this._onTick = onTick;
         onTick();
         this._id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, intervalMs, () => {
             onTick();
@@ -59,24 +57,25 @@ export class DigitalClock {
         this._ring.connect('repaint', a => this._drawRing(a));
         this._root.add_child(this._ring);
 
-        // H : MM  ---------------------------------------------------------
-        const px = Math.round(minSide * 0.44);
+        const px = Math.round(minSide * 0.46);
         this._row = new St.BoxLayout({
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._hour = new St.Label({y_align: Clutter.ActorAlign.CENTER});
-        this._min = new St.Label({y_align: Clutter.ActorAlign.CENTER});
-        for (const l of [this._hour, this._min]) {
-            applyFont(l, FAMILIES.barlow, px, Pango.Weight.MEDIUM);
-            l.style = `color: rgba(255,255,255,${DIGIT_OPACITY});`;
-        }
+        this._hour = new St.Label({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: fontStyle(FONT.clock, px, DIGIT_OPACITY),
+        });
+        this._min = new St.Label({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: fontStyle(FONT.clock, px, DIGIT_OPACITY),
+        });
 
-        const dot = Math.max(3, Math.round(px * 0.11));
+        const dot = Math.max(3, Math.round(px * 0.10));
         this._colon = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${Math.round(dot * 1.35)}px; margin: 0 ${Math.round(px * 0.11)}px;`,
+            style: `spacing: ${Math.round(dot * 1.4)}px; margin: 0 ${Math.round(px * 0.12)}px;`,
         });
         for (let i = 0; i < 2; i++) {
             this._colon.add_child(new St.Widget({
@@ -109,45 +108,37 @@ export class DigitalClock {
             const cx = w / 2;
             const cy = h / 2;
             const n = Math.max(this._roundness, 2.0);
+            const gap = minSide * 0.055;    // edge -> tick tip
+            const tickLen = minSide * 0.05;
 
-            const outerInset = 0.05 * minSide;
-            const tickLen = 0.05 * minSide;
-            const cornerExt = 0.012 * minSide;
-            const innerPad = outerInset + tickLen;
+            const hw = w / 2 - gap;
+            const hh = h / 2 - gap;
+            const rr = Math.max(0, this._radius - gap);
 
-            const secPos = (Date.now() % 60000) / 1000;
-            const curIdx = Math.floor(secPos) % 60;
-            const prevIdx = (curIdx - 1 + 60) % 60;
-            const fadeT = secPos - Math.floor(secPos);
-            const sHead = fadeT * fadeT * (3 - 2 * fadeT);
-            const trailDeg = 250;
+            const secAngle = (Date.now() % 60000) / 60000 * 360;
 
             cr.setLineCap(Cairo.LineCap.ROUND);
             cr.setLineWidth(2.4);
 
             for (let i = 0; i < 60; i++) {
-                const rad = i * 6 * Math.PI / 180;
+                const deg = i * 6;
+                const rad = deg * Math.PI / 180;
                 const dx = Math.sin(rad);
                 const dy = -Math.cos(rad);
-                const cornerBlend = 1 - Math.abs(Math.abs(dx) - Math.abs(dy));
-                const oInset = Math.max(0, outerInset - cornerExt * cornerBlend);
 
-                const [ox, oy] = squircleRayHit(dx, dy,
-                    Math.max(1, w / 2 - oInset), Math.max(1, h / 2 - oInset),
-                    Math.max(0, this._radius - oInset), n);
-                const [ix, iy] = squircleRayHit(dx, dy,
-                    Math.max(1, w / 2 - innerPad), Math.max(1, h / 2 - innerPad),
-                    Math.max(0, this._radius - innerPad), n);
+                const [ox, oy] = squircleRayHit(dx, dy, hw, hh, rr, n);
+                const len = Math.hypot(ox, oy);
+                const k = Math.max(0, (len - tickLen) / len);
+                const ix = ox * k;
+                const iy = oy * k;
 
-                let s = 0;
-                if (i === curIdx) {
-                    s = sHead;
-                } else {
-                    const off = ((prevIdx * 6) - (i * 6) + 360) % 360;
-                    if (off <= trailDeg)
-                        s = Math.pow(1 - off / trailDeg, 0.7) * 0.9;
-                }
-                const op = RING_BASE_OPACITY + (1 - RING_BASE_OPACITY) * s;
+                // subtle moving highlight: brightest at the current second,
+                // short fade behind it
+                let off = (secAngle - deg + 360) % 360;
+                if (off > 180)
+                    off -= 360;
+                const near = Math.max(0, 1 - Math.abs(off) / 42);
+                const op = RING_BASE + (1 - RING_BASE) * near * near * 0.55;
 
                 cr.setSourceRGBA(FG[0], FG[1], FG[2], op);
                 cr.moveTo(cx + ix, cy + iy);
@@ -196,9 +187,10 @@ export class AnalogClock {
         const fs = Math.max(9, Math.round(faceR * 0.17));
         for (let i = 1; i <= 12; i++) {
             const a = (i / 12) * 2 * Math.PI;
-            const l = new St.Label({text: `${i}`});
-            applyFont(l, FAMILIES.rounded, fs, Pango.Weight.MEDIUM);
-            l.style = 'color: rgba(255,255,255,0.85);';
+            const l = new St.Label({
+                text: `${i}`,
+                style: fontStyle(FONT.rounded, fs, 0.85),
+            });
             const nw = fs * (i < 10 ? 0.52 : 0.98);
             const nh = fs * 1.15;
             l.set_position(

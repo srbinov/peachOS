@@ -142,7 +142,9 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
         install -m644 "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.ttf \
             "$REPO_DIR"/extensions/peachos-widgets@peachos/fonts/*.otf \
             /usr/local/share/fonts/peachos-widgets/ 2>/dev/null || true
-        fc-cache -f /usr/local/share/fonts/peachos-widgets >/dev/null 2>&1 || true
+        install -Dm644 "$REPO_DIR/provision/fontconfig/49-peachos-widgets.conf" \
+            /etc/fonts/conf.d/49-peachos-widgets.conf 2>/dev/null || true
+        fc-cache -f >/dev/null 2>&1 || true
     fi
     echo "    extensions + Settings app now match the repo"
 fi
