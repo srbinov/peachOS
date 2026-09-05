@@ -202,18 +202,23 @@ export default class PeachIntelligenceExtension extends Extension {
             Main.popModal(this._grab);
             this._grab = null;
         }
-        // global.stage.set_key_focus(null) alone (the previous fix here) turned out not to be
-        // enough -- it only clears Clutter's own stage-level actor focus, which is a SEPARATE
-        // thing from Mutter's real window-manager focus (which window/surface actually
-        // receives input at the Wayland level). Nothing here was verified to actually move
-        // Mutter's own focused-window state away from the target in the first place, so
-        // clearing Clutter's side alone didn't reliably restore where the synthetic Ctrl+V
-        // would land. Explicitly re-activating the exact window captured at press time is the
-        // direct, verifiable fix instead of hoping focus comes back on its own.
+        // global.stage.set_key_focus(null) alone (an earlier fix here) turned out not to be
+        // enough -- it only clears Clutter's own stage-level actor focus, a separate thing
+        // from Mutter's real window-manager focus (which surface actually receives input at
+        // the Wayland level). Nothing here was verified to actually move Mutter's own
+        // focused-window state away from the target in the first place, so clearing Clutter's
+        // side alone didn't reliably restore where the synthetic Ctrl+V would land.
+        //
+        // window.focus() directly, NOT Main.activateWindow()/window.activate(): those are the
+        // same high-level "the user just switched to this app" call the dock/dash use to
+        // decide when to show their own "just activated" feedback -- real bug this caused, an
+        // app icon flashing in the dock on every single paste. The target window was already
+        // focused, on the current workspace, already raised, right up until this code grabbed
+        // focus away from it; it only needs its keyboard focus back, not a full re-activation
+        // with every side effect that implies.
         global.stage.set_key_focus(null);
         try {
-            if (this._targetWindow)
-                Main.activateWindow(this._targetWindow, global.get_current_time());
+            this._targetWindow?.focus(global.get_current_time());
         } catch (e) {
             // Window may have closed while recording -- nothing to focus back to, not an error.
         }

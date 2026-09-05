@@ -145,6 +145,14 @@ export class DynamicIsland {
     _buildActor() {
         this._container = new St.BoxLayout({
             style_class: 'dynamic-island', vertical: false, visible: false, opacity: 0,
+            // Main.panel._centerBox stretches its children to fill its own (full panel)
+            // height by default -- the exact same St.BoxLayout behavior already found and
+            // fixed for the waveform bars, just never applied to the outer pill itself. This
+            // is why repeated padding/font-size trims never actually made the pill shorter:
+            // the container was being stretched back to full panel height regardless of what
+            // its own CSS asked for. y_expand: false + y_align: CENTER lets the pill's real,
+            // small content size actually win.
+            y_expand: false, y_align: Clutter.ActorAlign.CENTER,
         });
         // Center pivot -- without this, scale transforms in _setVisible() shrink/grow toward
         // the top-left corner instead of the middle, which reads as lopsided rather than a
