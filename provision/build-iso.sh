@@ -119,6 +119,14 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
         install -Dm644 "$f" "/usr/share/icons/MacTahoe/devices/32/$(basename "$f")"
         install -Dm644 "$f" "/usr/share/icons/hicolor/64x64/devices/$(basename "$f")"
     done
+    # macOS-pill battery symbolics (see provision.sh -- same targets)
+    for f in "$REPO_DIR"/assets/battery-icons/*.svg; do
+        [[ -e "$f" ]] || continue
+        b="$(basename "$f")"
+        for d in status/symbolic status/16 status@2x/symbolic status@2x/16; do
+            install -Dm644 "$f" "/usr/share/icons/MacTahoe/$d/$b"
+        done
+    done
     gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
     gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
     echo "    extensions + Settings app now match the repo"

@@ -1070,6 +1070,28 @@ install -Dm644 "$REPO_DIR/assets/topbar-icons/peachos-dictation-topbar.svg" \
 gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
 gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
+# macOS-pill battery symbolics (assets/battery-icons/generate.py) -- MacTahoe's own
+# battery-level-*-symbolic set has a fixed ~70%-full bar regardless of the level in the
+# name, so the login / lock screen Quick Settings battery never matched the menu bar's
+# real proportional-fill glyph (extensions/macos-top-panel's batteryCanvas.js). These
+# replace them with level-accurate pills of the same proportions. Symbolic = one colour
+# (the shell recolours currentColor / #363636), so the menu bar's yellow/red/green fill
+# can't carry here -- the greeter battery follows the shell's own low-battery colouring.
+# Overrides MacTahoe's status/symbolic (Size=16, the exact match for a symbolic request)
+# and status/16.
+echo "==> Installing macOS-pill battery symbolics -> MacTahoe"
+for f in "$REPO_DIR"/assets/battery-icons/*.svg; do
+    [ -e "$f" ] || continue
+    b="$(basename "$f")"
+    # status/symbolic + status/16 and their @2x HiDPI twins -- MacTahoe carries the stock
+    # battery-level-* icons in all four, and GTK picks status@2x/symbolic first on a scale-2
+    # display, so all four must be overridden (the SVG scales, same file everywhere).
+    for d in status/symbolic status/16 status@2x/symbolic status@2x/16; do
+        install -Dm644 "$f" "/usr/share/icons/MacTahoe/$d/$b"
+    done
+done
+gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
+
 echo "==> Installing GNOME Shell extensions system-wide -> /usr/share/gnome-shell/extensions"
 mkdir -p /usr/share/gnome-shell/extensions
 for ext_dir in "$REPO_DIR"/extensions/*/; do

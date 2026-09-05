@@ -18,7 +18,13 @@ const NUB_HEIGHT_RATIO = 0.42;
 const OUTLINE_WIDTH = 1.3;
 const CORNER_RADIUS = 2.3;
 const FILL_INSET = 2;
-const LOW_BATTERY_THRESHOLD = 20; // matches real macOS's own low-battery red cutoff
+// Fill-color thresholds (explicit request): <=10% red, 11-20% yellow while on battery;
+// green once it's hit 100% but the charger is still plugged in; normal foreground otherwise.
+const RED_THRESHOLD = 10;
+const YELLOW_THRESHOLD = 20;
+const FILL_RED = [1, 0.23, 0.19, 1];       // macOS low-battery red
+const FILL_YELLOW = [1, 0.8, 0.0, 1];      // macOS charging-bolt yellow
+const FILL_GREEN = [0.3, 0.85, 0.39, 1];   // macOS "full" green
 
 function roundedRectPath(cr, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -68,11 +74,16 @@ export function drawBattery(cr, widthPx, heightPx, state) {
     const fillW = Math.max(0, Math.round((innerW * pct) / 100));
 
     if (fillW > 0) {
-        const isLow = pct <= LOW_BATTERY_THRESHOLD && !state.charging;
-        if (isLow)
-            cr.setSourceRGBA(1, 0.23, 0.19, 1); // matches macOS's own low-battery red
+        let color;
+        if (state.charging && pct >= 100)
+            color = FILL_GREEN;
+        else if (!state.charging && pct <= RED_THRESHOLD)
+            color = FILL_RED;
+        else if (!state.charging && pct <= YELLOW_THRESHOLD)
+            color = FILL_YELLOW;
         else
-            cr.setSourceRGBA(fg[0], fg[1], fg[2], 0.9);
+            color = [fg[0], fg[1], fg[2], 0.9];
+        cr.setSourceRGBA(color[0], color[1], color[2], color[3]);
         roundedRectPath(cr, innerX, innerY, fillW, innerH, Math.min(1.2, innerH / 2));
         cr.fill();
     }

@@ -181,8 +181,12 @@ class WifiIndicator extends PanelMenu.Button {
             strength,
         });
 
+        // Show the real signal strength, not a fixed "full bars" -- this uses the exact same
+        // signalIconName() the dropdown rows do, and matches what GNOME's own Quick Settings
+        // (login / lock screen) shows for the same connection, so the panel and the greeter
+        // read the same.
         this._icon.icon_name = state.connected
-            ? 'network-wireless-signal-excellent-symbolic'
+            ? signalIconName(strength ?? 100)
             : 'network-wireless-offline-symbolic';
         this._statusItem.label.text = state.statusLabel;
         this._syncingToggle = true;
