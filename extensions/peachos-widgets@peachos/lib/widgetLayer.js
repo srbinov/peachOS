@@ -163,8 +163,15 @@ export class WidgetLayer {
     }
 
     _onFrameResized(frame) {
-        this._placeFrame(frame);
-        this._onFrameMoved(frame);
+        // The frame kept its top-left through the resize; clamp + push it out
+        // of any collision at the new size, then persist.
+        const inst = frame.instance;
+        const r = frame.innerRect();
+        const sn = this.snapPosition(inst.id, r.x, r.y, r.w, r.h);
+        frame.setInnerPos(sn.x, sn.y);
+        frame.refreshBackdrop();
+        Object.assign(inst, this._locate(sn.x, sn.y));
+        this._persist();
     }
 
     // Clamp to the work area (never above TOP_MARGIN) and snap a dragged
