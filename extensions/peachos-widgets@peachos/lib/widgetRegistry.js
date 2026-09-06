@@ -43,7 +43,9 @@ export const REGISTRY = {
                 make: (parent, ctx, size) => new CityClock(parent, ctx, {...size, layout: 'grid'}),
             },
             worldRow: {
-                name: 'World Row', base: {w: 500, h: 210}, radiusRatio: 0.13,
+                // ~= two square clocks side by side (+ their gap); same height
+                // and same corner curvature as a normal clock.
+                name: 'World Row', base: {w: 408, h: 200}, radiusRatio: 0.24,
                 configurable: true,
                 make: (parent, ctx, size) => new CityClock(parent, ctx, {...size, layout: 'row'}),
             },

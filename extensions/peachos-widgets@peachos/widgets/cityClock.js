@@ -176,26 +176,27 @@ export class CityClock {
 
             if (this._layout === 'row') {
                 const cols = 4;
-                const colGap = margin * 0.6;
-                const cellW = (w - 2 * margin - (cols - 1) * colGap) / cols;
-                const innerH = h - 2 * margin;
+                const rowMargin = Math.round(Math.min(w, h) * 0.05);
+                const colGap = rowMargin * 0.55;
+                const cellW = (w - 2 * rowMargin - (cols - 1) * colGap) / cols;
+                const innerH = h - 2 * rowMargin;
 
                 // Face fills most of the cell width but leaves room for the
                 // 3-line label block below it (name + day word + offset).
-                const base = Math.max(8, cellW * 0.14);
-                const gapFL = base * 0.55;
-                const labelH = base * 1.25 + base * 0.85 * 1.2 * 2 + base * 0.4;
-                const faceSize = Math.max(0, Math.min(cellW * 0.88, innerH - gapFL - labelH));
+                const base = Math.max(8, cellW * 0.135);
+                const gapFL = base * 0.45;
+                const labelH = base * 1.2 + base * 0.82 * 1.15 * 2 + base * 0.3;
+                const faceSize = Math.max(0, Math.min(cellW * 0.94, innerH - gapFL - labelH));
                 const faceR = faceSize / 2;
 
                 // vertically centre [face | gap | labels] in the card
                 const contentH = faceSize + gapFL + labelH;
-                const topY = margin + Math.max(0, (innerH - contentH) / 2);
+                const topY = rowMargin + Math.max(0, (innerH - contentH) / 2);
 
                 for (let i = 0; i < 4; i++) {
                     const tz = this._clocks[i] || DEFAULT_CITY_CLOCKS[i];
                     const city = computeCity(tz, now);
-                    const cx = margin + i * (cellW + colGap) + cellW / 2;
+                    const cx = rowMargin + i * (cellW + colGap) + cellW / 2;
                     drawFace(cr, cx, topY + faceR, faceR, city, true);
                     let ly = topY + faceSize + gapFL;
                     ly += txt(cr, city.name, cx, ly, base, [fg[0], fg[1], fg[2], 1], true)
