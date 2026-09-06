@@ -12,11 +12,13 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {WidgetFrame} from '../widgets/frame.js';
 import {variantDef, sizeFor} from './widgetRegistry.js';
 
-const EDIT_DIM = 40;    // scrim opacity (0-255) in edit mode
-const GAP = 20;         // consistent gap between adjacent widget edges
-const SNAP = 13;        // distance within which a drag snaps to that gap / an edge
-const TOP_MARGIN = 46;  // highest a widget can sit (clears the top bar)
-const EDGE = 8;         // margin from the screen edges
+const EDIT_DIM = 40;      // scrim opacity (0-255) in edit mode
+const GAP = 20;          // consistent gap between adjacent widget edges
+const SNAP = 13;         // distance within which a drag snaps to that gap / an edge
+// Placeable area, from the two reference widgets the user positioned:
+const TOP_MARGIN = 48;   // highest a widget can sit (clears the top bar)
+const BOTTOM_MARGIN = 116; // lowest a widget's bottom edge can reach (clears the dock)
+const EDGE = 8;          // left / right margin
 
 export class WidgetLayer {
     constructor(settings, ctx) {
@@ -154,7 +156,7 @@ export class WidgetLayer {
         let x = m.x + inst.xRel * m.width;
         let y = m.y + inst.yRel * m.height;
         x = Math.max(m.x + EDGE, Math.min(m.x + m.width - size.w - EDGE, x));
-        y = Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - size.h - EDGE, y));
+        y = Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - size.h - BOTTOM_MARGIN, y));
         frame.setInnerPos(Math.round(x), Math.round(y));
         frame.refreshBackdrop();
     }
@@ -176,7 +178,7 @@ export class WidgetLayer {
             || Main.layoutManager.primaryMonitor;
 
         const clampX = v => Math.max(m.x + EDGE, Math.min(m.x + m.width - w - EDGE, v));
-        const clampY = v => Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - h - EDGE, v));
+        const clampY = v => Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - h - BOTTOM_MARGIN, v));
         x = clampX(x);
         y = clampY(y);
 
