@@ -10,11 +10,11 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {WidgetFrame} from '../widgets/frame.js';
-import {variantDef, sizeFor} from './widgetRegistry.js';
+import {variantDef, sizeFor, UNIT, ROW_GAP} from './widgetRegistry.js';
 
 const EDIT_DIM = 40;      // scrim opacity (0-255) in edit mode
-const GAP = 8;           // hard minimum gap between any two widgets
-const SNAP = 13;         // distance within which a drag snaps to that gap / an edge
+const GAP = ROW_GAP;     // gap between any two widgets (also the grid gutter)
+const CELL = UNIT + GAP; // one grid cell = a square widget + its gutter
 // Placeable area, from the two reference widgets the user positioned:
 const TOP_MARGIN = 48;   // highest a widget can sit (clears the top bar)
 const BOTTOM_MARGIN = 116; // lowest a widget's bottom edge can reach (clears the dock)
@@ -153,12 +153,12 @@ export class WidgetLayer {
         const monitors = Main.layoutManager.monitors;
         const m = monitors[inst.monitor] || Main.layoutManager.primaryMonitor;
 
-        let x = m.x + inst.xRel * m.width;
-        let y = m.y + inst.yRel * m.height;
-        x = Math.max(m.x + EDGE, Math.min(m.x + m.width - size.w - EDGE, x));
-        y = Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - size.h - BOTTOM_MARGIN, y));
-        frame.setInnerPos(Math.round(x), Math.round(y));
+        const x = m.x + inst.xRel * m.width;
+        const y = m.y + inst.yRel * m.height;
+        const sn = this.snapPosition(inst.id, x, y, size.w, size.h);
+        frame.setInnerPos(sn.x, sn.y);
         frame.refreshBackdrop();
+        Object.assign(inst, this._locate(sn.x, sn.y));
     }
 
     _onFrameResized(frame) {
@@ -173,9 +173,10 @@ export class WidgetLayer {
         this._persist();
     }
 
-    // Clamp to the work area (never above TOP_MARGIN) and snap a dragged
-    // widget so it keeps a consistent GAP to -- or aligns an edge with -- any
-    // other widget it overlaps on the perpendicular axis.
+    // Snap a widget onto the invisible desktop grid: cells of CELL px, origin
+    // at (EDGE, TOP_MARGIN) per monitor. A square widget is 1x1 cell, a row
+    // widget 2x1. The dragged widget lands on the nearest free cell block to
+    // where it was let go; if that block is taken, the closest free one.
     snapPosition(exceptId, x, y, w, h) {
         const monitors = Main.layoutManager.monitors;
         const cx = x + w / 2;
@@ -184,77 +185,71 @@ export class WidgetLayer {
             cx >= mm.x && cx < mm.x + mm.width && cy >= mm.y && cy < mm.y + mm.height)
             || Main.layoutManager.primaryMonitor;
 
-        const clampX = v => Math.max(m.x + EDGE, Math.min(m.x + m.width - w - EDGE, v));
-        const clampY = v => Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - h - BOTTOM_MARGIN, v));
-        x = clampX(x);
-        y = clampY(y);
+        const originX = m.x + EDGE;
+        const originY = m.y + TOP_MARGIN;
+        const cols = Math.max(1, Math.floor((m.width - 2 * EDGE + GAP) / CELL));
+        const rows = Math.max(1, Math.floor(
+            (m.height - TOP_MARGIN - BOTTOM_MARGIN + GAP) / CELL));
 
-        const others = [...this._frames.values()]
-            .filter(f => f.instance.id !== exceptId)
-            .map(f => f.innerRect());
+        const spanOf = px => Math.max(1, Math.round((px + GAP) / CELL));
+        const cs = Math.min(cols, spanOf(w));
+        const rs = Math.min(rows, spanOf(h));
 
-        let bestDX = SNAP + 1;
-        let bestDY = SNAP + 1;
-        let snapX = x;
-        let snapY = y;
-        for (const o of others) {
-            const overlapY = y < o.y + o.h + GAP && y + h + GAP > o.y;
-            const overlapX = x < o.x + o.w + GAP && x + w + GAP > o.x;
-            if (overlapY) {
-                for (const c of [o.x + o.w + GAP, o.x - GAP - w, o.x, o.x + o.w - w]) {
-                    const d = Math.abs(c - x);
-                    if (d < bestDX) {
-                        bestDX = d;
-                        snapX = c;
+        const cellOf = (v, origin) => Math.round((v - origin) / CELL);
+        const clampCol = c => Math.max(0, Math.min(cols - cs, c));
+        const clampRow = r => Math.max(0, Math.min(rows - rs, r));
+        const wantCol = clampCol(cellOf(x, originX));
+        const wantRow = clampRow(cellOf(y, originY));
+
+        // Cells occupied by the other widgets on this monitor.
+        const taken = new Set();
+        for (const f of this._frames.values()) {
+            if (f.instance.id === exceptId)
+                continue;
+            const r = f.innerRect();
+            if (r.x + r.w / 2 < m.x || r.x + r.w / 2 >= m.x + m.width)
+                continue;
+            const oc = cellOf(r.x, originX);
+            const or = cellOf(r.y, originY);
+            const ocs = spanOf(r.w);
+            const ors = spanOf(r.h);
+            for (let i = 0; i < ocs; i++)
+                for (let j = 0; j < ors; j++)
+                    taken.add(`${oc + i},${or + j}`);
+        }
+
+        const fits = (c, r) => {
+            for (let i = 0; i < cs; i++)
+                for (let j = 0; j < rs; j++)
+                    if (taken.has(`${c + i},${r + j}`))
+                        return false;
+            return true;
+        };
+
+        let col = wantCol;
+        let row = wantRow;
+        if (!fits(col, row)) {
+            let best = null;
+            let bestD = Infinity;
+            for (let r = 0; r <= rows - rs; r++) {
+                for (let c = 0; c <= cols - cs; c++) {
+                    if (!fits(c, r))
+                        continue;
+                    const d = (c - wantCol) ** 2 + (r - wantRow) ** 2;
+                    if (d < bestD) {
+                        bestD = d;
+                        best = [c, r];
                     }
                 }
             }
-            if (overlapX) {
-                for (const c of [o.y + o.h + GAP, o.y - GAP - h, o.y, o.y + o.h - h]) {
-                    const d = Math.abs(c - y);
-                    if (d < bestDY) {
-                        bestDY = d;
-                        snapY = c;
-                    }
-                }
-            }
-        }
-        if (bestDX <= SNAP)
-            x = snapX;
-        if (bestDY <= SNAP)
-            y = snapY;
-
-        // Hard collision resolution: no two widgets may be closer than GAP.
-        // Push the dragged widget out along its axis of least penetration.
-        for (let iter = 0; iter < 12; iter++) {
-            let moved = false;
-            for (const o of others) {
-                const ox1 = o.x - GAP;
-                const oy1 = o.y - GAP;
-                const ox2 = o.x + o.w + GAP;
-                const oy2 = o.y + o.h + GAP;
-                if (x < ox2 && x + w > ox1 && y < oy2 && y + h > oy1) {
-                    const pushL = x + w - ox1;
-                    const pushR = ox2 - x;
-                    const pushU = y + h - oy1;
-                    const pushD = oy2 - y;
-                    const min = Math.min(pushL, pushR, pushU, pushD);
-                    if (min === pushL)
-                        x = clampX(x - pushL);
-                    else if (min === pushR)
-                        x = clampX(x + pushR);
-                    else if (min === pushU)
-                        y = clampY(y - pushU);
-                    else
-                        y = clampY(y + pushD);
-                    moved = true;
-                }
-            }
-            if (!moved)
-                break;
+            if (best)
+                [col, row] = best;
         }
 
-        return {x: Math.round(clampX(x)), y: Math.round(clampY(y))};
+        return {
+            x: Math.round(originX + col * CELL),
+            y: Math.round(originY + row * CELL),
+        };
     }
 
     _locate(innerX, innerY) {
