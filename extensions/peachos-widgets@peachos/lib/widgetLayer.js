@@ -44,6 +44,21 @@ export class WidgetLayer {
 
         Main.layoutManager.connectObject(
             'monitors-changed', () => this._onMonitorsChanged(), this);
+
+        // The layer lives at the bottom of global.window_group (inside the
+        // shell's own background group). Two shell transitions would otherwise
+        // hide it: a workspace-switch drops an opaque MonitorGroup above
+        // window_group, and the overview covers the desktop entirely. Follow
+        // the first; fade with the second.
+        Main.uiGroup.connectObject('child-added', (_g, child) => {
+            if (child.style_class === 'workspace-animation')
+                this._pinAboveAnimation(child);
+        }, this);
+        Main.overview.connectObject(
+            'showing', () => this._fadeForOverview(true),
+            'hiding', () => this._fadeForOverview(false),
+            this);
+
         settings.connectObject(
             'changed::widgets', () => {
                 // Skip our own writes (Gio.Settings::changed fires async, so a
@@ -58,6 +73,8 @@ export class WidgetLayer {
     // --- stacking -----------------------------------------------------------
 
     _raise() {
+        if (this._animPin)
+            return; // pinned above a workspace-switch animation; leave it there
         const parent = this._layer.get_parent();
         if (parent)
             parent.set_child_above_sibling(this._layer, null);
@@ -65,6 +82,51 @@ export class WidgetLayer {
 
     raise() {
         this._raise();
+    }
+
+    // --- surviving shell transitions --------------------------------------
+
+    _pinAboveAnimation(animActor) {
+        if (this._animPin || !this._layer)
+            return;
+        const parent = this._layer.get_parent();
+        this._animPin = {parent};
+        this._animActor = animActor;
+        parent?.remove_child(this._layer);
+        Main.uiGroup.add_child(this._layer);
+        Main.uiGroup.set_child_above_sibling(this._layer, animActor);
+        animActor.connectObject('destroy', () => this._unpinAnimation(), this);
+    }
+
+    _unpinAnimation() {
+        if (!this._animPin || !this._layer)
+            return;
+        const {parent} = this._animPin;
+        this._animActor?.disconnectObject(this);
+        this._animActor = null;
+        this._animPin = null;
+        if (this._layer.get_parent() === Main.uiGroup)
+            Main.uiGroup.remove_child(this._layer);
+        if (parent) {
+            parent.add_child(this._layer);
+            parent.set_child_above_sibling(this._layer, null);
+        }
+        // A rapid second swipe may already have a fresh MonitorGroup running.
+        const again = Main.uiGroup.get_children().find(
+            c => c.style_class === 'workspace-animation');
+        if (again)
+            this._pinAboveAnimation(again);
+    }
+
+    _fadeForOverview(hidden) {
+        if (!this._layer)
+            return;
+        this._layer.remove_all_transitions();
+        this._layer.ease({
+            opacity: hidden ? 0 : 255,
+            duration: 250,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
     }
 
     refreshBackdrops() {
@@ -335,7 +397,12 @@ export class WidgetLayer {
             this._raiseId = 0;
         }
         Main.layoutManager.disconnectObject(this);
+        Main.uiGroup.disconnectObject(this);
+        Main.overview.disconnectObject(this);
         this._settings.disconnectObject(this);
+        this._animActor?.disconnectObject(this);
+        this._animActor = null;
+        this._animPin = null;
         for (const frame of this._frames.values())
             frame.destroy();
         this._frames.clear();
