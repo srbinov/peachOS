@@ -173,10 +173,11 @@ export class WidgetLayer {
         this._persist();
     }
 
-    // Snap a widget onto the invisible desktop grid: cells of CELL px, origin
-    // at (EDGE, TOP_MARGIN) per monitor. A square widget is 1x1 cell, a row
-    // widget 2x1. The dragged widget lands on the nearest free cell block to
-    // where it was let go; if that block is taken, the closest free one.
+    // Snap a widget onto the invisible desktop grid: CELL-px columns/rows with
+    // origin at (EDGE, TOP_MARGIN) per monitor, plus a flush-right / flush-
+    // bottom slot so the last column/row can still touch the far margin when
+    // the monitor isn't an exact multiple of CELL. The dragged widget lands on
+    // the nearest free slot to where it was released.
     snapPosition(exceptId, x, y, w, h) {
         const monitors = Main.layoutManager.monitors;
         const cx = x + w / 2;
@@ -187,69 +188,51 @@ export class WidgetLayer {
 
         const originX = m.x + EDGE;
         const originY = m.y + TOP_MARGIN;
-        const cols = Math.max(1, Math.floor((m.width - 2 * EDGE + GAP) / CELL));
-        const rows = Math.max(1, Math.floor(
-            (m.height - TOP_MARGIN - BOTTOM_MARGIN + GAP) / CELL));
+        const maxX = m.x + m.width - EDGE - w;
+        const maxY = m.y + m.height - BOTTOM_MARGIN - h;
 
-        const spanOf = px => Math.max(1, Math.round((px + GAP) / CELL));
-        const cs = Math.min(cols, spanOf(w));
-        const rs = Math.min(rows, spanOf(h));
-
-        const cellOf = (v, origin) => Math.round((v - origin) / CELL);
-        const clampCol = c => Math.max(0, Math.min(cols - cs, c));
-        const clampRow = r => Math.max(0, Math.min(rows - rs, r));
-        const wantCol = clampCol(cellOf(x, originX));
-        const wantRow = clampRow(cellOf(y, originY));
-
-        // Cells occupied by the other widgets on this monitor.
-        const taken = new Set();
-        for (const f of this._frames.values()) {
-            if (f.instance.id === exceptId)
-                continue;
-            const r = f.innerRect();
-            if (r.x + r.w / 2 < m.x || r.x + r.w / 2 >= m.x + m.width)
-                continue;
-            const oc = cellOf(r.x, originX);
-            const or = cellOf(r.y, originY);
-            const ocs = spanOf(r.w);
-            const ors = spanOf(r.h);
-            for (let i = 0; i < ocs; i++)
-                for (let j = 0; j < ors; j++)
-                    taken.add(`${oc + i},${or + j}`);
-        }
-
-        const fits = (c, r) => {
-            for (let i = 0; i < cs; i++)
-                for (let j = 0; j < rs; j++)
-                    if (taken.has(`${c + i},${r + j}`))
-                        return false;
-            return true;
+        // Candidate top-left positions on each axis: every grid line that
+        // fits, then the far margin if it isn't already covered.
+        const slots = (origin, max) => {
+            const out = [];
+            for (let v = origin; v <= max + 1; v += CELL)
+                out.push(Math.round(v));
+            if (out.length === 0 || out[out.length - 1] < max - 1)
+                out.push(Math.round(Math.max(origin, max)));
+            return out;
         };
+        const xs = slots(originX, maxX);
+        const ys = slots(originY, maxY);
 
-        let col = wantCol;
-        let row = wantRow;
-        if (!fits(col, row)) {
-            let best = null;
-            let bestD = Infinity;
-            for (let r = 0; r <= rows - rs; r++) {
-                for (let c = 0; c <= cols - cs; c++) {
-                    if (!fits(c, r))
-                        continue;
-                    const d = (c - wantCol) ** 2 + (r - wantRow) ** 2;
-                    if (d < bestD) {
-                        bestD = d;
-                        best = [c, r];
-                    }
+        const other = [...this._frames.values()]
+            .filter(f => f.instance.id !== exceptId)
+            .map(f => f.innerRect())
+            .filter(r => r.x + r.w / 2 >= m.x && r.x + r.w / 2 < m.x + m.width);
+
+        const free = (px, py) => !other.some(o =>
+            px < o.x + o.w + GAP && px + w + GAP > o.x &&
+            py < o.y + o.h + GAP && py + h + GAP > o.y);
+
+        let best = null;
+        let bestD = Infinity;
+        for (const px of xs) {
+            for (const py of ys) {
+                if (!free(px, py))
+                    continue;
+                const d = (px - x) ** 2 + (py - y) ** 2;
+                if (d < bestD) {
+                    bestD = d;
+                    best = {x: px, y: py};
                 }
             }
-            if (best)
-                [col, row] = best;
         }
-
-        return {
-            x: Math.round(originX + col * CELL),
-            y: Math.round(originY + row * CELL),
-        };
+        // Everything taken -- fall back to the nearest slot regardless.
+        if (!best) {
+            const nearest = (arr, v) =>
+                arr.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+            best = {x: nearest(xs, x), y: nearest(ys, y)};
+        }
+        return best;
     }
 
     _locate(innerX, innerY) {
