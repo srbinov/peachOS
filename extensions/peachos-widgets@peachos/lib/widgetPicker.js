@@ -1,22 +1,26 @@
 // The widget picker: a bottom-left liquid-glass panel. Left rail = the app
-// icon for each widget type (Clock / Weather / Calendar); right = a card per
-// (variant x size) that you drag onto the desktop to place.
+// icon per widget type; right = a card per variant showing a still preview
+// (previews/<type>-<variant>.png, or the app icon if absent) + an S/M/L size
+// selector. Drag a card onto the desktop to place it (as a dark widget --
+// change the look afterwards with the widget's own edit-mode toggle).
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {makeLiquidGlass, MODE_FG} from './liquidGlass.js';
-import {REGISTRY, SCALE_ORDER, variantDef} from './widgetRegistry.js';
+import {makeLiquidGlass} from './liquidGlass.js';
+import {REGISTRY, SCALE_ORDER} from './widgetRegistry.js';
 
 const INSET = 20;
 const SIZE_CHIP = {sm: 'S', md: 'M', lg: 'L'};
 const SIZE_LABEL = {sm: 'Small', md: 'Medium', lg: 'Large'};
-const MODES = [['glass', 'Glass'], ['dark', 'Dark'], ['light', 'Light']];
 const CARDS_PER_ROW = 3;
-const PREVIEW_MAX = 104;
+const PREVIEW_MAX = 108;
+const PLACE_MODE = 'dark';
 
 export const WidgetPicker = GObject.registerClass(
 class WidgetPicker extends Clutter.Actor {
@@ -26,10 +30,6 @@ class WidgetPicker extends Clutter.Actor {
         this._ctx = widgetLayer.ctx;
         this._callbacks = callbacks;
         this._selectedType = Object.keys(REGISTRY)[0];
-        this._mode = 'glass';
-        this._previews = [];
-        this._previewGlass = [];
-        this.connect('destroy', () => this._destroyPreviews());
 
         const mon = Main.layoutManager.primaryMonitor;
         this._pw = Math.round(Math.min(720, Math.max(560, mon.width * 0.38)));
@@ -45,28 +45,7 @@ class WidgetPicker extends Clutter.Actor {
         this.add_child(this._glass.widget);
 
         this._buildContents();
-        this._setMode('glass'); // also builds the card grid
-    }
-
-    _destroyPreviews() {
-        for (const p of this._previews) {
-            try {
-                p.destroy?.();
-            } catch (e) {
-                // ignore
-            }
-        }
-        this._previews = [];
-        this._previewGlass = [];
-    }
-
-    _setMode(mode) {
-        this._mode = mode;
-        for (const [id, b] of this._modeButtons)
-            b[id === mode ? 'add_style_class_name' : 'remove_style_class_name']('selected');
-        // re-render the previews in the new mode (skipped during initial build)
-        if (this._grid)
-            this._selectType(this._selectedType);
+        this._selectType(this._selectedType);
     }
 
     _buildContents() {
@@ -112,25 +91,8 @@ class WidgetPicker extends Clutter.Actor {
         });
         row.add_child(right);
 
-        const titleRow = new St.BoxLayout({x_expand: true});
-        this._title = new St.Label({style_class: 'peachos-picker-title', x_expand: true});
-        titleRow.add_child(this._title);
-
-        this._modeSeg = new St.BoxLayout({style_class: 'peachos-picker-modeseg'});
-        this._modeButtons = new Map();
-        for (const [id, label] of MODES) {
-            const b = new St.Button({
-                style_class: 'peachos-picker-modeseg-btn',
-                child: new St.Label({text: label}),
-                can_focus: true,
-            });
-            b.connect('clicked', () => this._setMode(id));
-            this._modeSeg.add_child(b);
-            this._modeButtons.set(id, b);
-        }
-        titleRow.add_child(this._modeSeg);
-        right.add_child(titleRow);
-
+        this._title = new St.Label({style_class: 'peachos-picker-title'});
+        right.add_child(this._title);
         right.add_child(new St.Label({
             text: 'Drag a widget onto the desktop',
             style_class: 'peachos-picker-hint',
@@ -158,9 +120,8 @@ class WidgetPicker extends Clutter.Actor {
         for (const [t, btn] of this._railButtons)
             btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
 
-        this._destroyPreviews();
         this._grid.destroy_all_children();
-        this._cardScale = new Map(); // variant -> selected size
+        this._cardScale = new Map();
 
         const variants = Object.entries(def.variants);
         let rowBox = null;
@@ -173,8 +134,23 @@ class WidgetPicker extends Clutter.Actor {
         });
     }
 
-    // A card = a live miniature of the widget (rendered exactly as placed) +
-    // its name + an S/M/L size selector. Dragging it places at the chosen size.
+    _previewActor(type, variant) {
+        const path = GLib.build_filenamev(
+            [this._ctx.path, 'previews', `${type}-${variant}.png`]);
+        if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+            return new St.Icon({
+                gicon: Gio.icon_new_for_string(path),
+                icon_size: PREVIEW_MAX,
+                style_class: 'peachos-picker-card-preview',
+            });
+        }
+        return new St.Icon({
+            icon_name: REGISTRY[type].appIcon,
+            icon_size: 44,
+            style_class: 'peachos-picker-card-preview',
+        });
+    }
+
     _makeCard(type, variant, vdef) {
         this._cardScale.set(variant, 'md');
 
@@ -184,34 +160,11 @@ class WidgetPicker extends Clutter.Actor {
             x_align: Clutter.ActorAlign.CENTER,
         });
 
-        // preview -----------------------------------------------------------
-        const s = PREVIEW_MAX / Math.max(vdef.base.w, vdef.base.h);
-        const pw = Math.round(vdef.base.w * s);
-        const ph = Math.round(vdef.base.h * s);
-        const radius = Math.round(Math.min(pw, ph) * vdef.radiusRatio);
-        const mode = this._mode;
-
         const previewBin = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
             width: PREVIEW_MAX, height: PREVIEW_MAX,
-            style_class: 'peachos-picker-card-preview',
         });
-        const glass = makeLiquidGlass({
-            innerW: pw, innerH: ph, x: 0, y: 0, radius, mode, noCrop: true,
-        });
-        glass.widget.x_align = Clutter.ActorAlign.CENTER;
-        glass.widget.y_align = Clutter.ActorAlign.CENTER;
-        try {
-            const inst = vdef.make(glass.content, this._ctx, {
-                w: pw, h: ph, radius, roundness: 7.5,
-                mode, fg: MODE_FG[mode], preview: true,
-            });
-            this._previews.push(inst);
-        } catch (e) {
-            logError(e, `[peachos-widgets] preview build failed for ${type}/${variant}`);
-        }
-        this._previewGlass.push(glass);
-        previewBin.add_child(glass.widget);
+        previewBin.add_child(this._previewActor(type, variant));
         box.add_child(previewBin);
 
         box.add_child(new St.Label({
@@ -220,7 +173,6 @@ class WidgetPicker extends Clutter.Actor {
             style_class: 'peachos-picker-card-label',
         }));
 
-        // size selector ---------------------------------------------------
         const seg = new St.BoxLayout({
             style_class: 'peachos-picker-sizeseg',
             x_align: Clutter.ActorAlign.CENTER,
@@ -290,7 +242,7 @@ class WidgetPicker extends Clutter.Actor {
                 const p = this._panelRect();
                 const onPanel = x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
                 if (!onPanel) {
-                    this._widgetLayer.addWidget(type, variant, x, y, scale, this._mode);
+                    this._widgetLayer.addWidget(type, variant, x, y, scale, PLACE_MODE);
                     this.get_parent()?.set_child_above_sibling(this, null);
                 }
                 return Clutter.EVENT_STOP;
