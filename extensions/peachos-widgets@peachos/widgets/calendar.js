@@ -98,6 +98,17 @@ export class CalendarWidget {
     }
 
     _render() {
+        if (this._rendering)
+            return;
+        this._rendering = true;
+        try {
+            this._renderInner();
+        } finally {
+            this._rendering = false;
+        }
+    }
+
+    _renderInner() {
         this._root.destroy_all_children();
         const today = new Date();
         const ls = Math.max(11, Math.round(this._h * 0.058));
