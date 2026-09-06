@@ -319,6 +319,10 @@ export class WidgetLayer {
         return this._layer;
     }
 
+    get ctx() {
+        return this._ctx;
+    }
+
     get count() {
         return this._frames.size;
     }

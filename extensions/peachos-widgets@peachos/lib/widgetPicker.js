@@ -23,6 +23,7 @@ class WidgetPicker extends Clutter.Actor {
     _init(widgetLayer, callbacks) {
         super._init({name: 'peachos-widget-picker', reactive: false});
         this._widgetLayer = widgetLayer;
+        this._ctx = widgetLayer.ctx;
         this._callbacks = callbacks;
         this._selectedType = Object.keys(REGISTRY)[0];
         this._mode = 'glass';
