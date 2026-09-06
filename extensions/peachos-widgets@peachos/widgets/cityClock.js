@@ -176,26 +176,32 @@ export class CityClock {
 
             if (this._layout === 'row') {
                 const cols = 4;
-                const cellW = (w - 2 * margin - (cols - 1) * gap) / cols;
-                const cellH = h - 2 * margin;
-                const infoH = cellH * 0.34;
-                const faceInset = cellW * 0.08;
-                const faceSize = Math.max(0, Math.min(cellW - faceInset, cellH - infoH));
+                const colGap = margin * 0.6;
+                const cellW = (w - 2 * margin - (cols - 1) * colGap) / cols;
+                const innerH = h - 2 * margin;
+
+                // Face fills most of the cell width but leaves room for the
+                // 3-line label block below it (name + day word + offset).
+                const base = Math.max(8, cellW * 0.14);
+                const gapFL = base * 0.55;
+                const labelH = base * 1.25 + base * 0.85 * 1.2 * 2 + base * 0.4;
+                const faceSize = Math.max(0, Math.min(cellW * 0.88, innerH - gapFL - labelH));
                 const faceR = faceSize / 2;
+
+                // vertically centre [face | gap | labels] in the card
+                const contentH = faceSize + gapFL + labelH;
+                const topY = margin + Math.max(0, (innerH - contentH) / 2);
+
                 for (let i = 0; i < 4; i++) {
                     const tz = this._clocks[i] || DEFAULT_CITY_CLOCKS[i];
                     const city = computeCity(tz, now);
-                    const cellX = margin + i * (cellW + gap);
-                    const cx = cellX + cellW / 2;
-                    const faceTop = margin;
-                    drawFace(cr, cx, faceTop + faceR, faceR, city, true);
-                    // labels below
-                    const base = Math.max(8, faceSize * 0.13);
-                    let ly = faceTop + faceSize + Math.round(faceSize * 0.06);
+                    const cx = margin + i * (cellW + colGap) + cellW / 2;
+                    drawFace(cr, cx, topY + faceR, faceR, city, true);
+                    let ly = topY + faceSize + gapFL;
                     ly += txt(cr, city.name, cx, ly, base, [fg[0], fg[1], fg[2], 1], true)
-                        + Math.round(base * 0.15);
+                        + base * 0.12;
                     ly += txt(cr, city.dayWord, cx, ly, base * 0.85, [fg[0], fg[1], fg[2], 0.6])
-                        + Math.round(base * 0.1);
+                        + base * 0.08;
                     txt(cr, city.offsetLabel, cx, ly, base * 0.85, [fg[0], fg[1], fg[2], 0.6]);
                 }
             } else {

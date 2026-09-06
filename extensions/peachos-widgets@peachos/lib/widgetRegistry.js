@@ -43,7 +43,7 @@ export const REGISTRY = {
                 make: (parent, ctx, size) => new CityClock(parent, ctx, {...size, layout: 'grid'}),
             },
             worldRow: {
-                name: 'World Row', base: {w: 540, h: 260}, radiusRatio: 0.11,
+                name: 'World Row', base: {w: 500, h: 210}, radiusRatio: 0.13,
                 configurable: true,
                 make: (parent, ctx, size) => new CityClock(parent, ctx, {...size, layout: 'row'}),
             },
