@@ -1,8 +1,8 @@
 // The widget picker: a bottom-left liquid-glass panel. Left rail = the app
 // icon per widget type; right = a card per variant showing a still preview
-// (previews/<type>-<variant>.png, or the app icon if absent) + an S/M/L size
-// selector. Drag a card onto the desktop to place it (as a dark widget --
-// change the look afterwards with the widget's own edit-mode toggle).
+// (previews/<type>-<variant>.png, or the app icon if absent). Drag a card onto
+// the desktop to place it (as a dark widget -- change the look afterwards with
+// the widget's own edit-mode toggle). Every widget is one fixed size.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -13,11 +13,9 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {makeLiquidGlass} from './liquidGlass.js';
-import {REGISTRY, SCALE_ORDER} from './widgetRegistry.js';
+import {REGISTRY} from './widgetRegistry.js';
 
 const INSET = 20;
-const SIZE_CHIP = {sm: 'S', md: 'M', lg: 'L'};
-const SIZE_LABEL = {sm: 'Small', md: 'Medium', lg: 'Large'};
 const CARDS_PER_ROW = 3;
 const PREVIEW_MAX = 108;
 const PLACE_MODE = 'dark';
@@ -121,7 +119,6 @@ class WidgetPicker extends Clutter.Actor {
             btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
 
         this._grid.destroy_all_children();
-        this._cardScale = new Map();
 
         const variants = Object.entries(def.variants);
         let rowBox = null;
@@ -162,8 +159,6 @@ class WidgetPicker extends Clutter.Actor {
     }
 
     _makeCard(type, variant, vdef) {
-        this._cardScale.set(variant, 'md');
-
         const card = new St.Button({style_class: 'peachos-picker-card', can_focus: true});
         const box = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
@@ -183,29 +178,9 @@ class WidgetPicker extends Clutter.Actor {
             style_class: 'peachos-picker-card-label',
         }));
 
-        const seg = new St.BoxLayout({
-            style_class: 'peachos-picker-sizeseg',
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-        const btns = new Map();
-        for (const sc of SCALE_ORDER) {
-            const b = new St.Button({
-                style_class: 'peachos-picker-sizeseg-btn' + (sc === 'md' ? ' selected' : ''),
-                child: new St.Label({text: SIZE_CHIP[sc]}),
-            });
-            b.connect('clicked', () => {
-                this._cardScale.set(variant, sc);
-                for (const [k, bb] of btns)
-                    bb[k === sc ? 'add_style_class_name' : 'remove_style_class_name']('selected');
-            });
-            seg.add_child(b);
-            btns.set(sc, b);
-        }
-        box.add_child(seg);
-
         card.set_child(box);
         card.connect('button-press-event', (_a, event) =>
-            this._beginDrag(type, variant, this._cardScale.get(variant), event));
+            this._beginDrag(type, variant, event));
         return card;
     }
 
@@ -213,7 +188,7 @@ class WidgetPicker extends Clutter.Actor {
         return {x: this._glass.widget.x, y: this._glass.widget.y, w: this._pw, h: this._ph};
     }
 
-    _beginDrag(type, variant, scale, event) {
+    _beginDrag(type, variant, event) {
         if (event.get_button() !== Clutter.BUTTON_PRIMARY)
             return Clutter.EVENT_PROPAGATE;
 
@@ -228,7 +203,7 @@ class WidgetPicker extends Clutter.Actor {
             x_align: Clutter.ActorAlign.CENTER,
         }));
         ghost.add_child(new St.Label({
-            text: `${def.variants[variant].name} · ${SIZE_LABEL[scale]}`,
+            text: def.variants[variant].name,
             x_align: Clutter.ActorAlign.CENTER,
             style_class: 'peachos-picker-ghost-label',
         }));
@@ -252,7 +227,7 @@ class WidgetPicker extends Clutter.Actor {
                 const p = this._panelRect();
                 const onPanel = x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
                 if (!onPanel) {
-                    this._widgetLayer.addWidget(type, variant, x, y, scale, PLACE_MODE);
+                    this._widgetLayer.addWidget(type, variant, x, y, PLACE_MODE);
                     this.get_parent()?.set_child_above_sibling(this, null);
                 }
                 return Clutter.EVENT_STOP;

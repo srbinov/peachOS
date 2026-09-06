@@ -3,18 +3,16 @@
 // type -> { name, appIcon (themed icon name, resolves in the MacTahoe theme),
 //           variants: { id -> { name, base:{w,h}, radiusRatio, make } } }
 //
-// Every placed widget also has a `scale` (sm | md | lg); the real pixel size is
-// base * SCALE[scale], and each widget's layout is derived from those pixels
-// (KDE-style), so one variant covers all three sizes.
+// Every widget renders at one fixed size -- base * SIZE_K. There is no
+// per-widget size option; the layout is derived from those pixels (KDE-style).
 
 import {DigitalClock, AnalogClock} from '../widgets/clock.js';
 import {CityClock} from '../widgets/cityClock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
 
-// 15% smaller than the original 0.78 / 1.0 / 1.32
-export const SCALES = {sm: 0.663, md: 0.85, lg: 1.122};
-export const SCALE_ORDER = ['sm', 'md', 'lg'];
+// The single size everything renders at (15% smaller than the original 1.0).
+export const SIZE_K = 0.85;
 
 export const REGISTRY = {
     clock: {
@@ -38,7 +36,8 @@ export const REGISTRY = {
                 make: (parent, ctx, size) => new AnalogClock(parent, size, 'fullface'),
             },
             world: {
-                name: 'World', base: {w: 260, h: 260}, radiusRatio: 0.19,
+                // same footprint as a normal clock (2x2 minimal faces inside).
+                name: 'World', base: {w: 200, h: 200}, radiusRatio: 0.24,
                 configurable: true,
                 make: (parent, ctx, size) => new CityClock(parent, ctx, {...size, layout: 'grid'}),
             },
@@ -85,13 +84,12 @@ export function variantDef(type, variant) {
     return REGISTRY[type]?.variants[variant] ?? null;
 }
 
-/** Real pixel geometry for a (type, variant, scale). */
-export function sizeFor(type, variant, scale) {
+/** Real pixel geometry for a (type, variant) -- one fixed size. */
+export function sizeFor(type, variant) {
     const def = variantDef(type, variant);
     if (!def)
         return null;
-    const k = SCALES[scale] ?? 1;
-    const w = Math.round(def.base.w * k);
-    const h = Math.round(def.base.h * k);
+    const w = Math.round(def.base.w * SIZE_K);
+    const h = Math.round(def.base.h * SIZE_K);
     return {w, h, radius: Math.round(Math.min(w, h) * def.radiusRatio)};
 }

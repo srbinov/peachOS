@@ -131,8 +131,7 @@ export class WidgetLayer {
             log(`[peachos-widgets] unknown widget ${inst.type}/${inst.variant}, skipping`);
             return null;
         }
-        if (!inst.scale)
-            inst.scale = 'md';
+        delete inst.scale;
         if (!inst.mode)
             inst.mode = 'glass';
         const frame = new WidgetFrame(inst, this._ctx, this._layer, {
@@ -150,7 +149,7 @@ export class WidgetLayer {
 
     _placeFrame(frame) {
         const inst = frame.instance;
-        const size = sizeFor(inst.type, inst.variant, inst.scale);
+        const size = sizeFor(inst.type, inst.variant);
         const monitors = Main.layoutManager.monitors;
         const m = monitors[inst.monitor] || Main.layoutManager.primaryMonitor;
 
@@ -288,13 +287,13 @@ export class WidgetLayer {
 
     // --- public API -----------------------------------------------------
 
-    addWidget(type, variant, stageX, stageY, scale = 'md', mode = 'glass') {
-        const size = sizeFor(type, variant, scale);
+    addWidget(type, variant, stageX, stageY, mode = 'glass') {
+        const size = sizeFor(type, variant);
         if (!size)
             return null;
         const id = `${type}-${variant}-${Date.now().toString(36)}`;
         const inst = {
-            id, type, variant, scale, mode,
+            id, type, variant, mode,
             ...this._locate(stageX - size.w / 2, stageY - size.h / 2),
         };
         const frame = this._createFrame(inst);

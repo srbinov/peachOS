@@ -1,11 +1,11 @@
 // A single placed widget: the glass card + its content, plus edit-mode chrome
-// (remove button, S/M/L size cycle) and hand-rolled drag-to-move.
+// (mode cycle, config, remove button) and hand-rolled drag-to-move.
 
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
 import {makeLiquidGlass, MODE_FG} from '../lib/liquidGlass.js';
-import {variantDef, sizeFor, SCALE_ORDER} from '../lib/widgetRegistry.js';
+import {variantDef, sizeFor} from '../lib/widgetRegistry.js';
 import {CityPicker} from '../lib/cityPicker.js';
 
 const GRID = 8;
@@ -27,7 +27,7 @@ export class WidgetFrame {
     _buildGlass() {
         const inst = this.instance;
         const mode = inst.mode || 'glass';
-        this._size = sizeFor(inst.type, inst.variant, inst.scale || 'md');
+        this._size = sizeFor(inst.type, inst.variant);
 
         this._glass = makeLiquidGlass({
             innerW: this._size.w, innerH: this._size.h, x: 0, y: 0,
@@ -69,13 +69,6 @@ export class WidgetFrame {
         });
         modeCycle.connect('clicked', () => this._cycle('mode', MODE_ORDER));
         this._chrome.add_child(modeCycle);
-
-        const sizeCycle = new St.Button({
-            style_class: 'peachos-widget-chrome-btn',
-            child: new St.Label({text: (this.instance.scale || 'md').toUpperCase()}),
-        });
-        sizeCycle.connect('clicked', () => this._cycle('scale', SCALE_ORDER));
-        this._chrome.add_child(sizeCycle);
 
         if (this._configurable) {
             const cfg = new St.Button({
