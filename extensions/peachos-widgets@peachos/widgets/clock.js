@@ -176,9 +176,10 @@ export class DigitalClock {
 }
 
 // ---------------------------------------------------------------------------
-// Analog -- 'minimal' = packages/clock-analog-2 (12 pill hour-lines, no
-// numbers). 'classic' = packages/clock-analog (60 ticks + SF Pro Rounded
-// hour numbers + white face).
+// Analog -- 'minimal' = clock-analog-2 (12 pill hour-lines). 'classic' =
+// clock-analog (60 ticks + numbers + white face). 'fullface' = clock-analog-3
+// (no plate: the whole squircle card is the face, ticks follow the perimeter,
+// only 12/3/6/9 numerals).
 // ---------------------------------------------------------------------------
 
 export class AnalogClock {
@@ -186,6 +187,9 @@ export class AnalogClock {
         this._fg = size.fg || '255,255,255';
         this._mode = size.mode || 'glass';
         this._style = style || 'minimal';
+        this._radius = size.radius || 48;
+        this._roundness = 5;
+        this._logicalW = size.w;
 
         this._root = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -209,6 +213,10 @@ export class AnalogClock {
         const [w, h] = area.get_surface_size();
         const cr = area.get_context();
         try {
+            if (this._style === 'fullface') {
+                this._drawFullface(cr, w, h);
+                return;
+            }
             const cx = w / 2;
             const cy = h / 2;
             const inset = Math.min(w, h) * 0.08;
@@ -337,6 +345,124 @@ export class AnalogClock {
         } finally {
             cr.$dispose();
         }
+    }
+
+    // clock-analog-3: the whole squircle card IS the face. No plate. 60 ticks
+    // hug the perimeter, hour ticks reach a fixed inner circle. Numerals 12/3/6/9.
+    _drawFullface(cr, w, h) {
+        const cx = w / 2;
+        const cy = h / 2;
+        const R = Math.min(w, h) / 2;
+        const scale = w / Math.max(1, this._logicalW);
+        const n = Math.max(this._roundness, 2);
+        const radius = this._radius * scale;
+        const glass = this._mode === 'glass';
+        const dial = glass ? this._rgb().slice(0, 3)
+            : (this._mode === 'light' ? [0.102, 0.106, 0.118] : [1, 1, 1]);
+        const D = (a = 1) => [dial[0], dial[1], dial[2], a];
+
+        // --- HourDial: 60 perimeter ticks ---
+        const outerInset = 0.05 * (2 * R);
+        const innerPad = (0.05 + 0.026) * (2 * R);
+        const cornerExt = 0.012 * (2 * R);
+        const circleR = 0.699 * R;
+        cr.setLineCap(Cairo.LineCap.ROUND);
+        for (let i = 0; i < 60; i++) {
+            const rad = i * 6 * Math.PI / 180;
+            const dx = Math.sin(rad);
+            const dy = -Math.cos(rad);
+            const cornerBlend = 1 - Math.abs(Math.abs(dx) - Math.abs(dy));
+            const oInset = Math.max(0, outerInset - cornerExt * cornerBlend);
+
+            const [ox, oy] = squircleRayHit(dx, dy,
+                Math.max(1, w / 2 - oInset), Math.max(1, h / 2 - oInset),
+                Math.max(0, radius - oInset), n);
+            const isHour = i % 5 === 0;
+            let ix;
+            let iy;
+            if (isHour) {
+                const circX = dx * circleR;
+                const circY = dy * circleR;
+                ix = circX + (ox - circX) * 0.10;
+                iy = circY + (oy - circY) * 0.10;
+            } else {
+                [ix, iy] = squircleRayHit(dx, dy,
+                    Math.max(1, w / 2 - innerPad), Math.max(1, h / 2 - innerPad),
+                    Math.max(0, radius - innerPad), n);
+            }
+            cr.setLineWidth((isHour ? 2.2 * 1.3225 : 2.2) * scale);
+            cr.setSourceRGBA(...D(isHour
+                ? (glass ? 0.85 : 1.0)
+                : (glass ? 0.24 : 0.30)));
+            cr.moveTo(cx + ix, cy + iy);
+            cr.lineTo(cx + ox, cy + oy);
+            cr.stroke();
+        }
+
+        // --- 12 / 3 / 6 / 9 numerals ---
+        const faceR = R - Math.min(w, h) * 0.08; // 0.84 R
+        const dist = faceR * 0.64;
+        const fs = Math.max(10, faceR * 0.238);
+        const layout = PangoCairo.create_layout(cr);
+        layout.set_font_description(fontDesc(FONT.rounded, fs));
+        for (const num of [12, 3, 6, 9]) {
+            const pos = num === 12 ? 0 : num;
+            const a = (pos / 12) * 2 * Math.PI;
+            layout.set_text(`${num}`, -1);
+            const [lw, lh] = layout.get_pixel_size();
+            cr.setSourceRGBA(...D(glass ? 0.85 : 1));
+            cr.moveTo(cx + Math.sin(a) * dist - lw / 2, cy - Math.cos(a) * dist - lh / 2);
+            PangoCairo.show_layout(cr, layout);
+        }
+
+        // --- hands (r rebased to face radius) ---
+        const r = R * 0.84;
+        const tickW = r * 0.020;
+        const outerR = r - tickW * 2;
+        const innerR = outerR - r * 0.09;
+        const minuteLen = ((outerR + innerR) / 2) * 1.15;
+        const hourLen = minuteLen * 0.65;
+
+        const now = GLib.DateTime.new_now_local();
+        const sec = now.get_second();
+        const min = now.get_minute() + sec / 60;
+        const hr = (now.get_hour() % 12) + min / 60;
+        const hand = D(glass ? 0.92 : 1.0);
+
+        const drawHand = (turns, totalLen) => {
+            cr.save();
+            cr.translate(cx, cy);
+            cr.rotate(turns * 2 * Math.PI);
+            cr.setSourceRGBA(...hand);
+            cr.rectangle(-(r * 0.0336) / 2, -(r * 0.15), r * 0.0336, r * 0.15);
+            cr.fill();
+            cr.setLineCap(Cairo.LineCap.ROUND);
+            cr.setLineWidth(r * 0.065);
+            cr.moveTo(0, -(r * 0.15));
+            cr.lineTo(0, -totalLen);
+            cr.stroke();
+            cr.restore();
+        };
+        drawHand(hr / 12, hourLen);
+        drawHand(min / 60, minuteLen);
+
+        cr.setSourceRGBA(...hand);
+        cr.arc(cx, cy, r * 0.05, 0, 2 * Math.PI);
+        cr.fill();
+
+        // second hand: tip at R * 0.90
+        cr.save();
+        cr.translate(cx, cy);
+        cr.rotate((sec / 60) * 2 * Math.PI);
+        cr.setSourceRGBA(...SECOND_ORANGE, 1);
+        const shw = R * 0.007 * 1.3 * 0.84;
+        cr.rectangle(-shw, -(R * 0.9), shw * 2, R * 0.9 + R * 0.15 * 0.84);
+        cr.fill();
+        cr.restore();
+
+        cr.setSourceRGBA(...SECOND_ORANGE, 1);
+        cr.arc(cx, cy, R * 0.035, 0, 2 * Math.PI);
+        cr.fill();
     }
 
     destroy() {

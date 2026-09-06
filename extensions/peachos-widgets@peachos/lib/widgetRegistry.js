@@ -31,6 +31,10 @@ export const REGISTRY = {
                 name: 'Classic', base: {w: 200, h: 200}, radiusRatio: 0.24,
                 make: (parent, ctx, size) => new AnalogClock(parent, size, 'classic'),
             },
+            dial: {
+                name: 'Dial', base: {w: 200, h: 200}, radiusRatio: 0.24,
+                make: (parent, ctx, size) => new AnalogClock(parent, size, 'fullface'),
+            },
         },
     },
     weather: {
