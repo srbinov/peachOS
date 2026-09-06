@@ -52,7 +52,7 @@ export class WidgetLayer {
         // the first; fade with the second.
         Main.uiGroup.connectObject('child-added', (_g, child) => {
             if (child.style_class === 'workspace-animation')
-                this._pinAboveAnimation(child);
+                this._onAnimationActor(child);
         }, this);
         Main.overview.connectObject(
             'showing', () => this._fadeForOverview(true),
@@ -81,41 +81,56 @@ export class WidgetLayer {
     }
 
     raise() {
+        this._syncAnimationPin();
         this._raise();
     }
 
     // --- surviving shell transitions --------------------------------------
 
-    _pinAboveAnimation(animActor) {
-        if (this._animPin || !this._layer)
-            return;
-        const parent = this._layer.get_parent();
-        this._animPin = {parent};
-        this._animActor = animActor;
-        parent?.remove_child(this._layer);
-        Main.uiGroup.add_child(this._layer);
-        Main.uiGroup.set_child_above_sibling(this._layer, animActor);
-        animActor.connectObject('destroy', () => this._unpinAnimation(), this);
+    // Track the live workspace-switch MonitorGroup actors. While at least one
+    // exists the layer is lifted just above it (so the opaque animation group
+    // doesn't cover the widgets); when the last one dies it goes back home,
+    // below the windows.
+    _onAnimationActor(animActor) {
+        this._animActors ??= new Set();
+        this._animActors.add(animActor);
+        animActor.connectObject('destroy', () => {
+            this._animActors?.delete(animActor);
+            this._syncAnimationPin();
+        }, this);
+        this._syncAnimationPin();
     }
 
-    _unpinAnimation() {
-        if (!this._animPin || !this._layer)
+    _syncAnimationPin() {
+        if (!this._layer)
             return;
-        const {parent} = this._animPin;
-        this._animActor?.disconnectObject(this);
-        this._animActor = null;
-        this._animPin = null;
-        if (this._layer.get_parent() === Main.uiGroup)
-            Main.uiGroup.remove_child(this._layer);
-        if (parent) {
-            parent.add_child(this._layer);
-            parent.set_child_above_sibling(this._layer, null);
+        const live = [...(this._animActors ?? [])].filter(
+            a => !a.is_finalized?.() && a.get_parent() === Main.uiGroup);
+        this._animActors = new Set(live);
+        const home = Main.layoutManager._backgroundGroup;
+
+        if (live.length) {
+            if (!this._animHome) {
+                this._animHome = this._layer.get_parent() ?? home;
+                this._animHome.remove_child(this._layer);
+                Main.uiGroup.add_child(this._layer);
+            }
+            Main.uiGroup.set_child_above_sibling(this._layer, live[live.length - 1]);
+        } else {
+            // no live animation -- the layer belongs below the windows
+            const dest = this._animHome ?? home;
+            this._animHome = null;
+            if (this._layer.get_parent() === Main.uiGroup) {
+                Main.uiGroup.remove_child(this._layer);
+                dest.add_child(this._layer);
+            }
+            if (this._layer.get_parent())
+                this._layer.get_parent().set_child_above_sibling(this._layer, null);
         }
-        // A rapid second swipe may already have a fresh MonitorGroup running.
-        const again = Main.uiGroup.get_children().find(
-            c => c.style_class === 'workspace-animation');
-        if (again)
-            this._pinAboveAnimation(again);
+    }
+
+    get _animPin() {
+        return !!this._animHome;
     }
 
     _fadeForOverview(hidden) {
@@ -400,9 +415,10 @@ export class WidgetLayer {
         Main.uiGroup.disconnectObject(this);
         Main.overview.disconnectObject(this);
         this._settings.disconnectObject(this);
-        this._animActor?.disconnectObject(this);
-        this._animActor = null;
-        this._animPin = null;
+        for (const a of this._animActors ?? [])
+            a.disconnectObject(this);
+        this._animActors = null;
+        this._animHome = null;
         for (const frame of this._frames.values())
             frame.destroy();
         this._frames.clear();
