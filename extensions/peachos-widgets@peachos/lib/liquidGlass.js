@@ -109,7 +109,7 @@ export function makeLiquidGlass(opts) {
     widget.add_child(card);
 
     const applyCrop = () => {
-        if (mode === 'glass') {
+        if (mode === 'glass' && !opts.noCrop) {
             const p = buildBlurredCropFile(
                 {x: widget.x, y: widget.y, w: innerW, h: innerH}, `${cropId}-${cropN++}`);
             if (p) {

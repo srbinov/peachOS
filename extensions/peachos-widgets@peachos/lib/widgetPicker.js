@@ -8,13 +8,14 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {makeLiquidGlass} from './liquidGlass.js';
-import {REGISTRY, SCALE_ORDER} from './widgetRegistry.js';
+import {makeLiquidGlass, MODE_FG} from './liquidGlass.js';
+import {REGISTRY, SCALE_ORDER, variantDef} from './widgetRegistry.js';
 
 const INSET = 20;
-const SIZE_LABEL = {sm: 'Small', md: 'Medium', lg: 'Large'};
+const SIZE_CHIP = {sm: 'S', md: 'M', lg: 'L'};
 const MODES = [['glass', 'Glass'], ['dark', 'Dark'], ['light', 'Light']];
 const CARDS_PER_ROW = 3;
+const PREVIEW_MAX = 104;
 
 export const WidgetPicker = GObject.registerClass(
 class WidgetPicker extends Clutter.Actor {
@@ -24,6 +25,9 @@ class WidgetPicker extends Clutter.Actor {
         this._callbacks = callbacks;
         this._selectedType = Object.keys(REGISTRY)[0];
         this._mode = 'glass';
+        this._previews = [];
+        this._previewGlass = [];
+        this.connect('destroy', () => this._destroyPreviews());
 
         const mon = Main.layoutManager.primaryMonitor;
         this._pw = Math.round(mon.width / 3);
@@ -39,14 +43,28 @@ class WidgetPicker extends Clutter.Actor {
         this.add_child(this._glass.widget);
 
         this._buildContents();
-        this._setMode('glass');
-        this._selectType(this._selectedType);
+        this._setMode('glass'); // also builds the card grid
+    }
+
+    _destroyPreviews() {
+        for (const p of this._previews) {
+            try {
+                p.destroy?.();
+            } catch (e) {
+                // ignore
+            }
+        }
+        this._previews = [];
+        this._previewGlass = [];
     }
 
     _setMode(mode) {
         this._mode = mode;
         for (const [id, b] of this._modeButtons)
             b[id === mode ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+        // re-render the previews in the new mode (skipped during initial build)
+        if (this._grid)
+            this._selectType(this._selectedType);
     }
 
     _buildContents() {
@@ -138,49 +156,89 @@ class WidgetPicker extends Clutter.Actor {
         for (const [t, btn] of this._railButtons)
             btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
 
+        this._destroyPreviews();
         this._grid.destroy_all_children();
+        this._cardScale = new Map(); // variant -> selected size
 
-        const cards = [];
-        for (const [variant, vdef] of Object.entries(def.variants)) {
-            for (const scale of SCALE_ORDER)
-                cards.push({type, variant, vdef, scale});
-        }
-
+        const variants = Object.entries(def.variants);
         let rowBox = null;
-        cards.forEach((c, i) => {
+        variants.forEach(([variant, vdef], i) => {
             if (i % CARDS_PER_ROW === 0) {
                 rowBox = new St.BoxLayout({style_class: 'peachos-picker-grid-row'});
                 this._grid.add_child(rowBox);
             }
-            rowBox.add_child(this._makeCard(c));
+            rowBox.add_child(this._makeCard(type, variant, vdef));
         });
     }
 
-    _makeCard({type, variant, vdef, scale}) {
-        const def = REGISTRY[type];
+    // A card = a live miniature of the widget (rendered exactly as placed) +
+    // its name + an S/M/L size selector. Dragging it places at the chosen size.
+    _makeCard(type, variant, vdef) {
+        this._cardScale.set(variant, 'md');
+
         const card = new St.Button({style_class: 'peachos-picker-card', can_focus: true});
         const box = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             x_align: Clutter.ActorAlign.CENTER,
         });
-        box.add_child(new St.Icon({
-            icon_name: def.appIcon, icon_size: 34,
-            x_align: Clutter.ActorAlign.CENTER,
-            style_class: 'peachos-picker-card-icon',
-        }));
+
+        // preview -----------------------------------------------------------
+        const s = PREVIEW_MAX / Math.max(vdef.base.w, vdef.base.h);
+        const pw = Math.round(vdef.base.w * s);
+        const ph = Math.round(vdef.base.h * s);
+        const radius = Math.round(Math.min(pw, ph) * vdef.radiusRatio);
+        const mode = this._mode;
+
+        const previewBin = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            width: PREVIEW_MAX, height: PREVIEW_MAX,
+            style_class: 'peachos-picker-card-preview',
+        });
+        const glass = makeLiquidGlass({
+            innerW: pw, innerH: ph, x: 0, y: 0, radius, mode, noCrop: true,
+        });
+        glass.widget.x_align = Clutter.ActorAlign.CENTER;
+        glass.widget.y_align = Clutter.ActorAlign.CENTER;
+        try {
+            const inst = vdef.make(glass.content, this._ctx, {
+                w: pw, h: ph, radius, roundness: 7.5,
+                mode, fg: MODE_FG[mode], preview: true,
+            });
+            this._previews.push(inst);
+        } catch (e) {
+            logError(e, `[peachos-widgets] preview build failed for ${type}/${variant}`);
+        }
+        this._previewGlass.push(glass);
+        previewBin.add_child(glass.widget);
+        box.add_child(previewBin);
+
         box.add_child(new St.Label({
             text: vdef.name,
             x_align: Clutter.ActorAlign.CENTER,
             style_class: 'peachos-picker-card-label',
         }));
-        box.add_child(new St.Label({
-            text: SIZE_LABEL[scale],
-            x_align: Clutter.ActorAlign.CENTER,
-            style_class: 'peachos-picker-card-dim',
-        }));
+
+        // size selector ---------------------------------------------------
+        const seg = new St.BoxLayout({style_class: 'peachos-picker-sizeseg'});
+        const btns = new Map();
+        for (const sc of SCALE_ORDER) {
+            const b = new St.Button({
+                style_class: 'peachos-picker-sizeseg-btn' + (sc === 'md' ? ' selected' : ''),
+                child: new St.Label({text: SIZE_CHIP[sc]}),
+            });
+            b.connect('clicked', () => {
+                this._cardScale.set(variant, sc);
+                for (const [k, bb] of btns)
+                    bb[k === sc ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+            });
+            seg.add_child(b);
+            btns.set(sc, b);
+        }
+        box.add_child(seg);
+
         card.set_child(box);
         card.connect('button-press-event', (_a, event) =>
-            this._beginDrag(type, variant, scale, event));
+            this._beginDrag(type, variant, this._cardScale.get(variant), event));
         return card;
     }
 

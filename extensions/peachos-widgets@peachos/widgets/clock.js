@@ -78,9 +78,15 @@ export class DigitalClock {
         this._row.add_child(this._min);
         this._root.add_child(this._row);
 
-        this._minuteTick = new Ticker(1000, () => this._updateTime());
-        // fast enough for a visibly moving comet trail on the tick ring
-        this._ringTick = new Ticker(90, () => this._ring.queue_repaint());
+        this._updateTime();
+        if (size.preview) {
+            this._minuteTick = {destroy() {}};
+            this._ringTick = {destroy() {}};
+        } else {
+            this._minuteTick = new Ticker(1000, () => this._updateTime());
+            // fast enough for a visibly moving comet trail on the tick ring
+            this._ringTick = new Ticker(90, () => this._ring.queue_repaint());
+        }
     }
 
     _updateTime() {
@@ -217,7 +223,9 @@ export class AnalogClock {
         this._face.connect('repaint', a => this._draw(a));
         this._root.add_child(this._face);
 
-        this._tick = new Ticker(1000, () => this._face.queue_repaint());
+        this._tick = size.preview
+            ? {destroy() {}}
+            : new Ticker(1000, () => this._face.queue_repaint());
     }
 
     _rgb(a = 1) {

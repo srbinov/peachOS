@@ -132,30 +132,51 @@
 }
 
 .peachos-picker-card {
-    width: 128px;
-    height: 116px;
+    width: 138px;
+    height: 178px;
     border-radius: 16px;
     background-color: rgba(255, 255, 255, 0.09);
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: #ffffff;
+    padding: 10px 4px 8px 4px;
 }
 
 .peachos-picker-card:hover {
     background-color: rgba(255, 255, 255, 0.2);
 }
 
-.peachos-picker-card-icon {
-    padding-bottom: 8px;
+.peachos-picker-card-preview {
+    margin-bottom: 8px;
 }
 
 .peachos-picker-card-label {
     font-size: 12px;
     font-weight: 600;
+    padding-bottom: 6px;
 }
 
-.peachos-picker-card-dim {
+.peachos-picker-sizeseg {
+    spacing: 2px;
+    background-color: rgba(0, 0, 0, 0.22);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.peachos-picker-sizeseg-btn {
+    padding: 2px 9px;
+    border-radius: 6px;
     font-size: 10px;
-    opacity: 0.6;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.peachos-picker-sizeseg-btn:hover {
+    color: #ffffff;
+}
+
+.peachos-picker-sizeseg-btn.selected {
+    background-color: rgba(255, 255, 255, 0.24);
+    color: #ffffff;
 }
 
 .peachos-picker-ghost {
