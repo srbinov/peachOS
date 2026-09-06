@@ -1,25 +1,23 @@
-// A blurred St.ImageContent of the wallpaper region behind a screen rect --
-// the frosted backdrop for a glass widget. Shell.BlurEffect (BACKGROUND mode)
-// does not reliably capture anything for an actor down in _backgroundGroup, so
-// the frost is baked here instead: crop the wallpaper, downscale hard and
-// upscale back (a cheap box blur), hand it over as actor content. Static;
-// recomputed on move / wallpaper change.
-//
-// The crop/fit mapping matches macos-top-panel/lib/panelBackground.js.
+// Writes a blurred PNG of the wallpaper region behind a widget rect and
+// returns its path, for use as a CSS `background-image` (St clips those to
+// border-radius; a Clutter content is not clipped). Shell.BlurEffect
+// (BACKGROUND) captures nothing useful for an actor down in _backgroundGroup,
+// so the frost is baked here: crop, downscale-hard/upscale-back (cheap box
+// blur), save. Recomputed on move / resize / wallpaper change.
 
-import Cogl from 'gi://Cogl';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
-import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BG_SCHEMA = 'org.gnome.desktop.background';
 const INTERFACE_SCHEMA = 'org.gnome.desktop.interface';
 
-let _cachedPath = null;
-let _cachedPixbuf = null;
+const CACHE_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'peachos-widgets']);
+
+let _srcPath = null;
+let _srcPixbuf = null;
 
 function currentWallpaper() {
     const bg = new Gio.Settings({schema_id: BG_SCHEMA});
@@ -36,23 +34,23 @@ function currentWallpaper() {
     return {path: path || null, options: bg.get_string('picture-options') || 'zoom'};
 }
 
-function loadWallpaper(path) {
-    if (path === _cachedPath && _cachedPixbuf)
-        return _cachedPixbuf;
+function loadSource(path) {
+    if (path === _srcPath && _srcPixbuf)
+        return _srcPixbuf;
     try {
-        _cachedPixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
-        _cachedPath = path;
+        _srcPixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
+        _srcPath = path;
     } catch (e) {
         logError(e, '[peachos-widgets] wallpaper load failed');
-        _cachedPixbuf = null;
-        _cachedPath = null;
+        _srcPixbuf = null;
+        _srcPath = null;
     }
-    return _cachedPixbuf;
+    return _srcPixbuf;
 }
 
 export function invalidateWallpaper() {
-    _cachedPath = null;
-    _cachedPixbuf = null;
+    _srcPath = null;
+    _srcPixbuf = null;
 }
 
 function monitorToImage(mx, my, mw, mh, iw, ih, options) {
@@ -67,14 +65,15 @@ function monitorToImage(mx, my, mw, mh, iw, ih, options) {
 }
 
 /**
- * @param {{x,y,w,h}} rect  glass rect in stage coords
- * @returns {St.ImageContent|null}
+ * @param {{x,y,w,h}} rect  glass rect in stage (logical) coords
+ * @param {string} id       widget id (for the cache filename)
+ * @returns {string|null}   path to the blurred PNG, or null
  */
-export function buildBlurredCrop(rect) {
+export function buildBlurredCropFile(rect, id) {
     const {path, options} = currentWallpaper();
     if (!path)
         return null;
-    const src = loadWallpaper(path);
+    const src = loadSource(path);
     if (!src)
         return null;
 
@@ -97,19 +96,17 @@ export function buildBlurredCrop(rect) {
     const sw = Math.max(2, Math.min(iw - sx, Math.round(ix1 - ix0)));
     const sh = Math.max(2, Math.min(ih - sy, Math.round(iy1 - iy0)));
 
-    // Downscale hard, upscale back == a cheap blur (~ box blur of the
-    // downscale factor). Two passes for a softer, more Kawase-like result.
-    const DOWN = 9;
+    const DOWN = 10;
     let pb;
     try {
         const crop = src.new_subpixbuf(sx, sy, sw, sh);
         const lowW = Math.max(2, Math.round(sw / DOWN));
         const lowH = Math.max(2, Math.round(sh / DOWN));
+        // hard down, half-down again, then back up = a soft two-pass blur
         pb = crop
             .scale_simple(lowW, lowH, GdkPixbuf.InterpType.BILINEAR)
-            .scale_simple(Math.max(2, Math.round(lowW / 2)), Math.max(2, Math.round(lowH / 2)),
-                GdkPixbuf.InterpType.BILINEAR)
-            .scale_simple(Math.round(rect.w), Math.round(rect.h), GdkPixbuf.InterpType.BILINEAR);
+            .scale_simple(Math.max(2, lowW >> 1), Math.max(2, lowH >> 1), GdkPixbuf.InterpType.BILINEAR)
+            .scale_simple(360, Math.max(2, Math.round(360 * sh / sw)), GdkPixbuf.InterpType.BILINEAR);
     } catch (e) {
         logError(e, '[peachos-widgets] wallpaper crop/blur failed');
         return null;
@@ -117,12 +114,26 @@ export function buildBlurredCrop(rect) {
     if (!pb)
         return null;
 
-    const coglContext = global.stage.context.get_backend().get_cogl_context();
-    const content = St.ImageContent.new_with_preferred_size(pb.get_width(), pb.get_height());
-    content.set_bytes(
-        coglContext,
-        pb.read_pixel_bytes(),
-        pb.get_has_alpha() ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
-        pb.get_width(), pb.get_height(), pb.get_rowstride());
-    return content;
+    try {
+        if (!GLib.file_test(CACHE_DIR, GLib.FileTest.IS_DIR))
+            Gio.File.new_for_path(CACHE_DIR).make_directory_with_parents(null);
+        const out = GLib.build_filenamev([CACHE_DIR, `w-${id}.png`]);
+        pb.savev(out, 'png', [], []);
+        return out;
+    } catch (e) {
+        logError(e, '[peachos-widgets] could not write blur cache');
+        return null;
+    }
+}
+
+export function clearCropCache() {
+    try {
+        const dir = Gio.File.new_for_path(CACHE_DIR);
+        const en = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        let info;
+        while ((info = en.next_file(null)) !== null)
+            dir.get_child(info.get_name()).delete(null);
+    } catch (e) {
+        // nothing to clear
+    }
 }

@@ -15,7 +15,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {WidgetLayer} from './lib/widgetLayer.js';
 import {EditMode} from './lib/editMode.js';
-import {invalidateWallpaper} from './lib/wallpaperCrop.js';
+import {invalidateWallpaper, clearCropCache} from './lib/wallpaperCrop.js';
 import {WeatherProvider} from './lib/providers/weather.js';
 import {CalendarSource} from './lib/providers/calendar.js';
 
@@ -93,6 +93,7 @@ export default class PeachosWidgetsExtension extends Extension {
         this._layer?.destroy();
         this._weather?.destroy();
         this._calendar?.destroy();
+        clearCropCache();
 
         this._editMode = null;
         this._layer = null;
