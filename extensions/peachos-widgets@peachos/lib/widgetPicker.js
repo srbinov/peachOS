@@ -13,6 +13,7 @@ import {REGISTRY, SCALE_ORDER, variantDef} from './widgetRegistry.js';
 
 const INSET = 20;
 const SIZE_CHIP = {sm: 'S', md: 'M', lg: 'L'};
+const SIZE_LABEL = {sm: 'Small', md: 'Medium', lg: 'Large'};
 const MODES = [['glass', 'Glass'], ['dark', 'Dark'], ['light', 'Light']];
 const CARDS_PER_ROW = 3;
 const PREVIEW_MAX = 104;
