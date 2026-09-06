@@ -20,11 +20,11 @@ export const REGISTRY = {
         appIcon: 'org.gnome.Clocks',
         variants: {
             digital: {
-                name: 'Digital', base: {w: 200, h: 200}, radiusRatio: 0.46,
+                name: 'Digital', base: {w: 200, h: 200}, radiusRatio: 0.24,
                 make: (parent, ctx, size) => new DigitalClock(parent, size),
             },
             analog: {
-                name: 'Analog', base: {w: 200, h: 200}, radiusRatio: 0.46,
+                name: 'Analog', base: {w: 200, h: 200}, radiusRatio: 0.24,
                 make: (parent, ctx, size) => new AnalogClock(parent, size),
             },
         },
