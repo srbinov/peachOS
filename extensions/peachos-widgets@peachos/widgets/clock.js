@@ -317,7 +317,11 @@ export class AnalogClock {
             const min = now.get_minute() + sec / 60;
             const hr = (now.get_hour() % 12) + min / 60;
 
-            const hand = D(this._mode === 'glass' ? 0.92 : 1.0);
+            const isGlass = this._mode === 'glass';
+            const hand = D(isGlass ? 0.92 : 1.0);
+            // second hand + hinge: orange in solid modes, translucent white
+            // ("liquid glass") in glass mode
+            const second = isGlass ? D(0.9) : [...SECOND_ORANGE, 1];
 
             // pill hand: thin stem (rect) + capsule (thick round-capped stroke)
             const drawHand = (turns, totalLen) => {
@@ -344,18 +348,18 @@ export class AnalogClock {
             cr.arc(cx, cy, r * 0.05, 0, 2 * Math.PI);
             cr.fill();
 
-            // second hand (orange, with counterweight tail)
+            // second hand (with counterweight tail)
             cr.save();
             cr.translate(cx, cy);
             cr.rotate((sec / 60) * 2 * Math.PI);
-            cr.setSourceRGBA(...SECOND_ORANGE, 1);
+            cr.setSourceRGBA(...second);
             const shw = r * 0.007 * 1.3;
             cr.rectangle(-shw, -outerR, shw * 2, outerR + r * 0.15);
             cr.fill();
             cr.restore();
 
-            // hinge dot (orange, on top)
-            cr.setSourceRGBA(...SECOND_ORANGE, 1);
+            // hinge dot (on top)
+            cr.setSourceRGBA(...second);
             cr.arc(cx, cy, r * 0.035, 0, 2 * Math.PI);
             cr.fill();
         } finally {
@@ -444,6 +448,7 @@ export class AnalogClock {
         const min = now.get_minute() + sec / 60;
         const hr = (now.get_hour() % 12) + min / 60;
         const hand = D(glass ? 0.92 : 1.0);
+        const second = glass ? D(0.9) : [...SECOND_ORANGE, 1];
 
         const drawHand = (turns, totalLen) => {
             cr.save();
@@ -470,13 +475,13 @@ export class AnalogClock {
         cr.save();
         cr.translate(cx, cy);
         cr.rotate((sec / 60) * 2 * Math.PI);
-        cr.setSourceRGBA(...SECOND_ORANGE, 1);
+        cr.setSourceRGBA(...second);
         const shw = R * 0.007 * 1.3 * 0.84;
         cr.rectangle(-shw, -(R * 0.9), shw * 2, R * 0.9 + R * 0.15 * 0.84);
         cr.fill();
         cr.restore();
 
-        cr.setSourceRGBA(...SECOND_ORANGE, 1);
+        cr.setSourceRGBA(...second);
         cr.arc(cx, cy, R * 0.035, 0, 2 * Math.PI);
         cr.fill();
     }
