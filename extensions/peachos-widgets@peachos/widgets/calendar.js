@@ -124,7 +124,8 @@ export class CalendarWidget {
             text: MONTHS[today.getMonth()],
             style: fontStyle(FONT.display, ls, 1, this._accentRgb),
         });
-        this._add(header, x0, y);
+        // left edge aligned with the "S" of the Sunday column
+        this._add(header, x0 + colW / 2 - ls * 0.32, y);
         y += Math.round(ls * 1.6);
 
         // Weekday row
