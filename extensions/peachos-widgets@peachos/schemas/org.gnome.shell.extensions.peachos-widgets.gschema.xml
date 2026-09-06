@@ -23,6 +23,15 @@
       </description>
     </key>
 
+    <key name="weather-auto-location" type="b">
+      <default>true</default>
+      <summary>Detect the weather location from the public IP address</summary>
+      <description>
+        When true the weather widgets geolocate by IP and ignore the manual
+        latitude/longitude/name keys below.
+      </description>
+    </key>
+
     <key name="weather-latitude" type="d">
       <default>37.3230</default>
       <summary>Weather latitude</summary>

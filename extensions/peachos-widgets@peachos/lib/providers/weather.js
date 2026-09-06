@@ -7,7 +7,14 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
-const REFRESH_SECONDS = 900; // 15 min
+const REFRESH_SECONDS = 900;       // weather, 15 min
+const RELOCATE_SECONDS = 6 * 3600; // re-check IP geolocation, 6 h
+
+// Free, key-less, HTTPS IP-geolocation endpoints, tried in order.
+const GEOIP_URLS = [
+    'https://ipapi.co/json/',
+    'https://get.geojs.io/v1/ip/geo.json',
+];
 
 function windCompass(deg) {
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -44,6 +51,47 @@ export function wmoIconName(code, isDay = true) {
     return night ? 'clearnight' : 'sunny';
 }
 
+// Card colour for the weather widget's "light" mode: the sky. Vertical
+// gradient top->bottom, plus `dark` = true when the sky is dark enough that
+// the widget should switch to white text.
+export function skyGradient(code, isDay) {
+    const hex = h => [
+        parseInt(h.slice(0, 2), 16) / 255,
+        parseInt(h.slice(2, 4), 16) / 255,
+        parseInt(h.slice(4, 6), 16) / 255,
+    ];
+    const G = (t, b, dark) => ({top: hex(t), bottom: hex(b), dark});
+
+    if (!isDay) {
+        if (code <= 1)
+            return G('0a1626', '20364f', true);   // clear night -- dusky blue-black
+        if (code === 2)
+            return G('101d2c', '2b3d51', true);
+        if (code === 3 || code === 45 || code === 48)
+            return G('1a222c', '333d47', true);   // overcast night
+        if (code >= 95)
+            return G('141a24', '2a3340', true);
+        if (code >= 51)
+            return G('141c26', '2b3742', true);   // rain/snow night
+        return G('0d1a2b', '243b54', true);
+    }
+    if (code <= 1)
+        return G('3d84c6', '9ac6ec', false);      // clear day -- blue
+    if (code === 2)
+        return G('5391c9', 'a9cbe6', false);      // partly cloudy
+    if (code === 3)
+        return G('8a97a3', 'b9c2cb', false);      // overcast -- grey
+    if (code === 45 || code === 48)
+        return G('9aa1a8', 'c6cace', false);      // fog
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86)
+        return G('93aac2', 'cdd9e6', false);      // snow
+    if (code >= 95)
+        return G('3a4653', '5b6675', true);       // thunderstorm
+    if (code >= 51)
+        return G('5c6b7a', '8894a1', true);       // rain / drizzle
+    return G('3d84c6', '9ac6ec', false);
+}
+
 // WMO code -> human condition label (ported from WeatherData.qml).
 export function wmoCondition(code) {
     const map = {
@@ -68,19 +116,90 @@ export class WeatherProvider {
         this._listeners = new Set();
         this._data = null;
         this._error = null;
+        this._auto = settings.get_boolean('weather-auto-location');
+        this._loc = null; // {lat, lon, name} once IP geolocation resolves
 
         this._settings.connectObject(
-            'changed::weather-latitude', () => this.refresh(),
-            'changed::weather-longitude', () => this.refresh(),
+            'changed::weather-auto-location', () => {
+                this._auto = this._settings.get_boolean('weather-auto-location');
+                this._loc = null;
+                this._resolveLocation();
+            },
+            'changed::weather-latitude', () => {
+                if (!this._auto)
+                    this.refresh();
+            },
+            'changed::weather-longitude', () => {
+                if (!this._auto)
+                    this.refresh();
+            },
             'changed::weather-unit', () => this.refresh(),
-            'changed::weather-location-name', () => this._reemit(),
+            'changed::weather-location-name', () => {
+                if (!this._auto)
+                    this._reemit();
+            },
             this);
 
-        this.refresh();
+        this._resolveLocation();
         this._periodicId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_SECONDS, () => {
             this.refresh();
             return GLib.SOURCE_CONTINUE;
         });
+        this._relocateId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, RELOCATE_SECONDS, () => {
+            this._resolveLocation();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _fetchJSON(url, cb) {
+        const msg = Soup.Message.new('GET', url);
+        msg.request_headers.append('User-Agent', 'peachOS-widgets/1');
+        this._session.send_and_read_async(
+            msg, GLib.PRIORITY_DEFAULT, null, (src, res) => {
+                try {
+                    const bytes = src.send_and_read_finish(res);
+                    if (msg.get_status() !== Soup.Status.OK) {
+                        cb(null);
+                        return;
+                    }
+                    cb(JSON.parse(new TextDecoder().decode(bytes.get_data())));
+                } catch (e) {
+                    cb(null);
+                }
+            });
+    }
+
+    // Geolocate by IP (when weather-auto-location is on), then fetch weather.
+    _resolveLocation() {
+        if (!this._auto) {
+            this._loc = null;
+            this.refresh();
+            return;
+        }
+        const tryNext = i => {
+            if (i >= GEOIP_URLS.length) {
+                this.refresh(); // fall back to whatever coords settings hold
+                return;
+            }
+            this._fetchJSON(GEOIP_URLS[i], j => {
+                const lat = j && parseFloat(j.latitude);
+                const lon = j && parseFloat(j.longitude);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    this._loc = {
+                        lat, lon,
+                        name: j.city || j.region || 'Current Location',
+                    };
+                    this.refresh();
+                } else {
+                    tryNext(i + 1);
+                }
+            });
+        };
+        tryNext(0);
+    }
+
+    _locName() {
+        return this._loc?.name || this._settings.get_string('weather-location-name');
     }
 
     get data() {
@@ -104,13 +223,13 @@ export class WeatherProvider {
 
     _reemit() {
         if (this._data)
-            this._data.name = this._settings.get_string('weather-location-name');
+            this._data.name = this._locName();
         this._emit();
     }
 
     refresh() {
-        const lat = this._settings.get_double('weather-latitude');
-        const lon = this._settings.get_double('weather-longitude');
+        const lat = this._loc?.lat ?? this._settings.get_double('weather-latitude');
+        const lon = this._loc?.lon ?? this._settings.get_double('weather-longitude');
         const unit = this._settings.get_string('weather-unit');
 
         const windUnit = unit === 'celsius' ? 'kmh' : 'mph';
@@ -181,7 +300,7 @@ export class WeatherProvider {
             (precipProb != null && precipProb >= 30) || (cur.precipitation ?? 0) > 0;
 
         return {
-            name: this._settings.get_string('weather-location-name'),
+            name: this._locName(),
             temp: Math.round(cur.temperature_2m ?? 0),
             feels: Math.round(cur.apparent_temperature ?? 0),
             code: cur.weather_code ?? 0,
@@ -206,6 +325,9 @@ export class WeatherProvider {
         if (this._periodicId)
             GLib.source_remove(this._periodicId);
         this._periodicId = 0;
+        if (this._relocateId)
+            GLib.source_remove(this._relocateId);
+        this._relocateId = 0;
         this._settings.disconnectObject(this);
         this._session.abort();
         this._listeners.clear();

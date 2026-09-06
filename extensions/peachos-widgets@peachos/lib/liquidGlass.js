@@ -28,7 +28,7 @@ function traceSquircle(cr, w, h, r) {
     squirclePath(cr, w / 2, h / 2, w / 2 - 1, h / 2 - 1, Math.max(1, r - 1), SQUIRCLE_N, 28);
 }
 
-function paintCard(cr, w, h, radiusPx, mode, cropPath) {
+function paintCard(cr, w, h, radiusPx, mode, cropPath, tint) {
     cr.save();
     traceSquircle(cr, w, h, radiusPx);
     cr.clip();
@@ -59,7 +59,14 @@ function paintCard(cr, w, h, radiusPx, mode, cropPath) {
         cr.setSourceRGBA(1, 1, 1, 0.08);
         cr.paint();
     } else if (mode === 'light') {
-        cr.setSourceRGBA(1, 1, 1, 1);
+        if (tint) {
+            const g = new Cairo.LinearGradient(0, 0, 0, h);
+            g.addColorStopRGBA(0, tint.top[0], tint.top[1], tint.top[2], 1);
+            g.addColorStopRGBA(1, tint.bottom[0], tint.bottom[1], tint.bottom[2], 1);
+            cr.setSource(g);
+        } else {
+            cr.setSourceRGBA(1, 1, 1, 1);
+        }
         cr.paint();
     } else {
         cr.setSourceRGBA(0.109, 0.109, 0.118, 1); // #1c1c1e
@@ -70,7 +77,9 @@ function paintCard(cr, w, h, radiusPx, mode, cropPath) {
     // rim
     traceSquircle(cr, w, h, radiusPx);
     cr.setLineWidth(mode === 'glass' ? 1.3 : 1.0);
-    if (mode === 'light')
+    if (mode === 'light' && tint)
+        cr.setSourceRGBA(1, 1, 1, tint.dark ? 0.12 : 0.35);
+    else if (mode === 'light')
         cr.setSourceRGBA(0, 0, 0, 0.1);
     else if (mode === 'dark')
         cr.setSourceRGBA(1, 1, 1, 0.12);
@@ -94,6 +103,7 @@ export function makeLiquidGlass(opts) {
     let cropPath = null;
     let prevPath = null;
     let cropN = 0;
+    let tint = null; // light mode only: {top:[r,g,b], bottom:[r,g,b], dark:bool}
 
     const card = new St.DrawingArea({x_expand: true, y_expand: true});
     card.connect('repaint', area => {
@@ -101,7 +111,7 @@ export function makeLiquidGlass(opts) {
         const cr = area.get_context();
         try {
             const scale = w / Math.max(1, innerW);
-            paintCard(cr, w, h, radius * scale, mode, cropPath);
+            paintCard(cr, w, h, radius * scale, mode, cropPath, tint);
         } finally {
             cr.$dispose();
         }
@@ -144,6 +154,12 @@ export function makeLiquidGlass(opts) {
         },
         refresh() {
             applyCrop();
+        },
+        // light mode: paint the card as a sky gradient instead of flat white.
+        // Pass null to go back to white.
+        setTint(t) {
+            tint = t;
+            card.queue_repaint();
         },
     };
 }

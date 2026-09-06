@@ -9,7 +9,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
-import {wmoCondition, wmoIconName} from '../lib/providers/weather.js';
+import {wmoCondition, wmoIconName, skyGradient} from '../lib/providers/weather.js';
 import {FONT, fontStyle, Pango} from '../lib/fonts.js';
 
 export class WeatherWidget {
@@ -18,14 +18,32 @@ export class WeatherWidget {
         this._mode = mode;
         this._w = size.w;
         this._h = size.h;
-        this._fg = size.fg || '255,255,255';
-        // light-mode wants coloured icons; glass/dark want the mono set
-        this._iconSet = this._fg.startsWith('26,') ? 'weather-color' : 'weather-mono';
+        this._cardMode = size.mode || 'glass';
+        this._baseFg = size.fg || '255,255,255';
+        this._setTint = size.setTint;
+        this._fg = this._baseFg;
+        this._iconSet = 'weather-mono';
 
         this._root = new Clutter.Actor({width: size.w, height: size.h});
         parent.add_child(this._root);
 
         this._unsub = ctx.weather.subscribe((data, err) => this._render(data, err));
+    }
+
+    // In "light" mode the card is painted as the sky: blue for clear, grey for
+    // cloud, dusky blue-black at night. Text + icons flip to suit its
+    // brightness. Glass/dark modes keep the plain foreground.
+    _applySky(d) {
+        if (this._cardMode !== 'light' || !d) {
+            this._fg = this._baseFg;
+            this._iconSet = this._baseFg.startsWith('26,') ? 'weather-color' : 'weather-mono';
+            this._setTint?.(null);
+            return;
+        }
+        const sky = skyGradient(d.code, d.isDay);
+        this._setTint?.(sky);
+        this._fg = sky.dark ? '255,255,255' : '26,27,30';
+        this._iconSet = sky.dark ? 'weather-mono' : 'weather-color';
     }
 
     _icon(name, size) {
@@ -42,6 +60,7 @@ export class WeatherWidget {
 
     _render(data, err) {
         this._root.destroy_all_children();
+        this._applySky(data);
         if (!data) {
             this._add(this._txt(err ? 'Weather unavailable' : 'Loading…', FONT.display, 13, 0.8),
                 this._w * 0.1, this._h / 2 - 10);

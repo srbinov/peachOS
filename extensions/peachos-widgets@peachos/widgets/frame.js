@@ -43,6 +43,7 @@ export class WidgetFrame {
                 radius: this._size.radius, roundness: 7.5,
                 mode, fg: MODE_FG[mode],
                 clocks: inst.clocks,
+                setTint: t => this._glass.setTint(t),
             });
         } catch (e) {
             logError(e, `[peachos-widgets] failed to build ${inst.type}/${inst.variant}`);
