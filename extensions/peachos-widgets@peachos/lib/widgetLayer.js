@@ -12,7 +12,11 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {WidgetFrame} from '../widgets/frame.js';
 import {variantDef, sizeFor} from './widgetRegistry.js';
 
-const EDIT_DIM = 40; // scrim opacity (0-255) in edit mode
+const EDIT_DIM = 40;    // scrim opacity (0-255) in edit mode
+const GAP = 20;         // consistent gap between adjacent widget edges
+const SNAP = 13;        // distance within which a drag snaps to that gap / an edge
+const TOP_MARGIN = 46;  // highest a widget can sit (clears the top bar)
+const EDGE = 8;         // margin from the screen edges
 
 export class WidgetLayer {
     constructor(settings, ctx) {
@@ -133,6 +137,7 @@ export class WidgetLayer {
             onMoved: f => this._onFrameMoved(f),
             onRemove: f => this.removeWidget(f),
             onResized: f => this._onFrameResized(f),
+            snap: (id, x, y, w, hh) => this.snapPosition(id, x, y, w, hh),
         });
         this._frames.set(inst.id, frame);
         this._placeFrame(frame);
@@ -148,8 +153,8 @@ export class WidgetLayer {
 
         let x = m.x + inst.xRel * m.width;
         let y = m.y + inst.yRel * m.height;
-        x = Math.max(m.x + 8, Math.min(m.x + m.width - size.w - 8, x));
-        y = Math.max(m.y + 8, Math.min(m.y + m.height - size.h - 8, y));
+        x = Math.max(m.x + EDGE, Math.min(m.x + m.width - size.w - EDGE, x));
+        y = Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - size.h - EDGE, y));
         frame.setInnerPos(Math.round(x), Math.round(y));
         frame.refreshBackdrop();
     }
@@ -157,6 +162,60 @@ export class WidgetLayer {
     _onFrameResized(frame) {
         this._placeFrame(frame);
         this._onFrameMoved(frame);
+    }
+
+    // Clamp to the work area (never above TOP_MARGIN) and snap a dragged
+    // widget so it keeps a consistent GAP to -- or aligns an edge with -- any
+    // other widget it overlaps on the perpendicular axis.
+    snapPosition(exceptId, x, y, w, h) {
+        const monitors = Main.layoutManager.monitors;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const m = monitors.find(mm =>
+            cx >= mm.x && cx < mm.x + mm.width && cy >= mm.y && cy < mm.y + mm.height)
+            || Main.layoutManager.primaryMonitor;
+
+        const clampX = v => Math.max(m.x + EDGE, Math.min(m.x + m.width - w - EDGE, v));
+        const clampY = v => Math.max(m.y + TOP_MARGIN, Math.min(m.y + m.height - h - EDGE, v));
+        x = clampX(x);
+        y = clampY(y);
+
+        const others = [...this._frames.values()]
+            .filter(f => f.instance.id !== exceptId)
+            .map(f => f.innerRect());
+
+        let bestDX = SNAP + 1;
+        let bestDY = SNAP + 1;
+        let snapX = x;
+        let snapY = y;
+        for (const o of others) {
+            const overlapY = y < o.y + o.h + GAP && y + h + GAP > o.y;
+            const overlapX = x < o.x + o.w + GAP && x + w + GAP > o.x;
+            if (overlapY) {
+                for (const c of [o.x + o.w + GAP, o.x - GAP - w, o.x, o.x + o.w - w]) {
+                    const d = Math.abs(c - x);
+                    if (d < bestDX) {
+                        bestDX = d;
+                        snapX = c;
+                    }
+                }
+            }
+            if (overlapX) {
+                for (const c of [o.y + o.h + GAP, o.y - GAP - h, o.y, o.y + o.h - h]) {
+                    const d = Math.abs(c - y);
+                    if (d < bestDY) {
+                        bestDY = d;
+                        snapY = c;
+                    }
+                }
+            }
+        }
+        if (bestDX <= SNAP)
+            x = snapX;
+        if (bestDY <= SNAP)
+            y = snapY;
+
+        return {x: Math.round(clampX(x)), y: Math.round(clampY(y))};
     }
 
     _locate(innerX, innerY) {
@@ -199,8 +258,14 @@ export class WidgetLayer {
             ...this._locate(stageX - size.w / 2, stageY - size.h / 2),
         };
         const frame = this._createFrame(inst);
-        if (frame)
+        if (frame) {
+            const r = frame.innerRect();
+            const sn = this.snapPosition(inst.id, r.x, r.y, r.w, r.h);
+            frame.setInnerPos(sn.x, sn.y);
+            frame.refreshBackdrop();
+            Object.assign(inst, this._locate(sn.x, sn.y));
             this._persist();
+        }
         return frame;
     }
 

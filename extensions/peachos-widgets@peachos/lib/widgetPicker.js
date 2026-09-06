@@ -219,7 +219,10 @@ class WidgetPicker extends Clutter.Actor {
         }));
 
         // size selector ---------------------------------------------------
-        const seg = new St.BoxLayout({style_class: 'peachos-picker-sizeseg'});
+        const seg = new St.BoxLayout({
+            style_class: 'peachos-picker-sizeseg',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
         const btns = new Map();
         for (const sc of SCALE_ORDER) {
             const b = new St.Button({

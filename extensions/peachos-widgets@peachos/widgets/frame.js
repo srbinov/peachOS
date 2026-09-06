@@ -145,13 +145,15 @@ export class WidgetFrame {
         const t = ev.type();
         if (t === Clutter.EventType.MOTION) {
             const [x, y] = ev.get_coords();
-            this.setInnerPos(this._drag.ax + (x - this._drag.px), this._drag.ay + (y - this._drag.py));
+            const rawX = this._drag.ax + (x - this._drag.px);
+            const rawY = this._drag.ay + (y - this._drag.py);
+            const sn = this._callbacks.snap(
+                this.instance.id, rawX, rawY, this._size.w, this._size.h);
+            this.setInnerPos(sn.x, sn.y);
             return Clutter.EVENT_STOP;
         }
         if (t === Clutter.EventType.BUTTON_RELEASE) {
             this._endDrag();
-            const r = this.innerRect();
-            this.setInnerPos(Math.round(r.x / GRID) * GRID, Math.round(r.y / GRID) * GRID);
             this.refreshBackdrop();
             this._callbacks.onMoved(this);
             return Clutter.EVENT_STOP;
