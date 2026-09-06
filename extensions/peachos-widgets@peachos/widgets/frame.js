@@ -6,6 +6,7 @@ import St from 'gi://St';
 
 import {makeLiquidGlass, MODE_FG} from '../lib/liquidGlass.js';
 import {variantDef, sizeFor, SCALE_ORDER} from '../lib/widgetRegistry.js';
+import {CityPicker} from '../lib/cityPicker.js';
 
 const GRID = 8;
 const MODE_ORDER = ['glass', 'dark', 'light'];
@@ -35,11 +36,13 @@ export class WidgetFrame {
         this._layer.add_child(this._glass.widget);
 
         const def = variantDef(inst.type, inst.variant);
+        this._configurable = !!def.configurable;
         try {
             this._content = def.make(this._glass.content, this._ctx, {
                 w: this._size.w, h: this._size.h,
                 radius: this._size.radius, roundness: 7.5,
                 mode, fg: MODE_FG[mode],
+                clocks: inst.clocks,
             });
         } catch (e) {
             logError(e, `[peachos-widgets] failed to build ${inst.type}/${inst.variant}`);
@@ -74,6 +77,15 @@ export class WidgetFrame {
         sizeCycle.connect('clicked', () => this._cycle('scale', SCALE_ORDER));
         this._chrome.add_child(sizeCycle);
 
+        if (this._configurable) {
+            const cfg = new St.Button({
+                style_class: 'peachos-widget-chrome-btn',
+                child: new St.Icon({icon_name: 'document-edit-symbolic', icon_size: 13}),
+            });
+            cfg.connect('clicked', () => this._openConfig());
+            this._chrome.add_child(cfg);
+        }
+
         const removeBtn = new St.Button({
             style_class: 'peachos-widget-chrome-btn peachos-widget-chrome-remove',
             child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 13}),
@@ -87,7 +99,9 @@ export class WidgetFrame {
 
     _syncChrome() {
         const r = this.innerRect();
-        this._chrome.set_position(Math.round(r.x + r.w - 76), Math.round(r.y - 12));
+        const [, cw] = this._chrome.get_preferred_width(-1);
+        this._chrome.set_position(
+            Math.round(r.x + r.w - Math.max(cw, 34) + 6), Math.round(r.y - 12));
         this._layer.set_child_above_sibling(this._chrome, null);
     }
 
@@ -108,10 +122,32 @@ export class WidgetFrame {
         this._editing = editing;
         this._glass.widget.reactive = editing;
         this._chrome.visible = editing;
+        if (!editing && this._cityPicker) {
+            this._cityPicker.destroy();
+            this._cityPicker = null;
+        }
         if (editing)
             this._glass.widget.add_style_class_name('peachos-widget--editing');
         else
             this._glass.widget.remove_style_class_name('peachos-widget--editing');
+    }
+
+    _openConfig() {
+        if (this._cityPicker)
+            return;
+        this._cityPicker = new CityPicker(this.instance.clocks || [], {
+            onChange: clocks => {
+                this.instance.clocks = clocks;
+                this._content?.setClocks?.(clocks);
+                this._callbacks.onConfigured?.(this);
+            },
+            onDone: () => {
+                this._cityPicker?.destroy();
+                this._cityPicker = null;
+            },
+        });
+        this._layer.add_child(this._cityPicker);
+        this._layer.set_child_above_sibling(this._cityPicker, null);
     }
 
     _cycle(key, order) {
@@ -181,6 +217,8 @@ export class WidgetFrame {
     destroy() {
         this._endDrag();
         this._pressId = 0;
+        this._cityPicker?.destroy();
+        this._cityPicker = null;
         this._teardownContent();
         this._chrome?.destroy();
         this._chrome = null;

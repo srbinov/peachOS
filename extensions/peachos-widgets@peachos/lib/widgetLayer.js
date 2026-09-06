@@ -139,6 +139,7 @@ export class WidgetLayer {
             onMoved: f => this._onFrameMoved(f),
             onRemove: f => this.removeWidget(f),
             onResized: f => this._onFrameResized(f),
+            onConfigured: () => this._persist(),
             snap: (id, x, y, w, hh) => this.snapPosition(id, x, y, w, hh),
         });
         this._frames.set(inst.id, frame);

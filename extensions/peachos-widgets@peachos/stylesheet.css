@@ -192,3 +192,81 @@
     font-size: 11px;
     font-weight: 600;
 }
+
+/* ---- world-clock city picker ------------------------------------- */
+
+.peachos-cities {
+    padding: 20px 22px;
+    spacing: 14px;
+    color: #ffffff;
+    font-family: "PeachDisplay", sans-serif;
+}
+
+.peachos-cities-header { spacing: 10px; }
+
+.peachos-cities-title {
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.peachos-cities-done {
+    background-color: rgba(60, 175, 95, 0.55);
+    border-radius: 9px;
+    padding: 5px 16px;
+    font-weight: 600;
+    color: #ffffff;
+}
+.peachos-cities-done:hover { background-color: rgba(60, 195, 105, 0.8); }
+
+.peachos-cities-slots { spacing: 6px; }
+
+.peachos-cities-slot {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+.peachos-cities-slot:hover { background-color: rgba(255, 255, 255, 0.12); }
+.peachos-cities-slot.target {
+    border-color: rgba(120, 170, 255, 0.9);
+    background-color: rgba(120, 170, 255, 0.14);
+}
+
+.peachos-cities-slot-row { spacing: 10px; }
+.peachos-cities-slot-num { font-size: 12px; opacity: 0.4; min-width: 12px; }
+.peachos-cities-slot-code {
+    font-family: "PeachRounded", sans-serif;
+    font-size: 13px; font-weight: 700; min-width: 42px;
+}
+.peachos-cities-slot-name { font-size: 13px; }
+.peachos-cities-slot-time { font-size: 12px; opacity: 0.6; }
+.peachos-cities-slot-empty { font-size: 12px; opacity: 0.45; }
+.peachos-cities-slot-clear {
+    color: rgba(255,255,255,0.7);
+    border-radius: 8px; padding: 2px;
+}
+.peachos-cities-slot-clear:hover { background-color: rgba(220,60,55,0.9); color: #fff; }
+
+.peachos-cities-search {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9px;
+    padding: 7px 12px;
+    color: #ffffff;
+    font-size: 13px;
+}
+
+.peachos-cities-scroll { }
+.peachos-cities-list { spacing: 1px; }
+
+.peachos-cities-item {
+    border-radius: 7px;
+    padding: 7px 10px;
+}
+.peachos-cities-item:hover { background-color: rgba(255, 255, 255, 0.12); }
+.peachos-cities-item.chosen { opacity: 0.4; }
+.peachos-cities-item-code {
+    font-family: "PeachRounded", sans-serif;
+    font-size: 12px; font-weight: 700; min-width: 42px; opacity: 0.8;
+}
+.peachos-cities-item-name { font-size: 13px; }

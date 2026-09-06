@@ -8,6 +8,7 @@
 // (KDE-style), so one variant covers all three sizes.
 
 import {DigitalClock, AnalogClock} from '../widgets/clock.js';
+import {CityClock} from '../widgets/cityClock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
 
@@ -35,6 +36,11 @@ export const REGISTRY = {
             dial: {
                 name: 'Dial', base: {w: 200, h: 200}, radiusRatio: 0.24,
                 make: (parent, ctx, size) => new AnalogClock(parent, size, 'fullface'),
+            },
+            world: {
+                name: 'World', base: {w: 260, h: 260}, radiusRatio: 0.19,
+                configurable: true,
+                make: (parent, ctx, size) => new CityClock(parent, ctx, size),
             },
         },
     },
