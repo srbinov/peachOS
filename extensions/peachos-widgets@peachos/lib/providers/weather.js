@@ -113,13 +113,14 @@ export class WeatherProvider {
         const lon = this._settings.get_double('weather-longitude');
         const unit = this._settings.get_string('weather-unit');
 
+        const windUnit = unit === 'celsius' ? 'kmh' : 'mph';
         const url = 'https://api.open-meteo.com/v1/forecast'
             + `?latitude=${lat}&longitude=${lon}`
             + '&current=temperature_2m,apparent_temperature,weather_code,is_day,'
             + 'precipitation,wind_speed_10m,wind_direction_10m'
             + '&hourly=temperature_2m,weather_code'
             + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max'
-            + `&temperature_unit=${unit}&wind_speed_unit=mph&timezone=auto&forecast_days=5`;
+            + `&temperature_unit=${unit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=5`;
 
         const msg = Soup.Message.new('GET', url);
         this._session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null, (source, result) => {
@@ -143,7 +144,9 @@ export class WeatherProvider {
     }
 
     _parse(j) {
-        const unitLetter = this._settings.get_string('weather-unit') === 'celsius' ? 'C' : 'F';
+        const metric = this._settings.get_string('weather-unit') === 'celsius';
+        const unitLetter = metric ? 'C' : 'F';
+        const windUnit = metric ? 'km/h' : 'mph';
         const cur = j.current ?? {};
         const daily = j.daily ?? {};
         const hourly = j.hourly ?? {};
@@ -173,6 +176,10 @@ export class WeatherProvider {
             });
         }
 
+        const precipProb = days[0]?.precipProb ?? null;
+        const precipExpected =
+            (precipProb != null && precipProb >= 30) || (cur.precipitation ?? 0) > 0;
+
         return {
             name: this._settings.get_string('weather-location-name'),
             temp: Math.round(cur.temperature_2m ?? 0),
@@ -181,9 +188,13 @@ export class WeatherProvider {
             isDay: cur.is_day !== 0,
             unit: unitLetter,
             wind: Math.round(cur.wind_speed_10m ?? 0),
+            windUnit,
             windDir: windCompass(cur.wind_direction_10m ?? 0),
             precip: cur.precipitation ?? 0,
-            precipProb: days[0]?.precipProb ?? null,
+            precipProb,
+            precipText: precipExpected
+                ? 'Precipitation expected today'
+                : 'No precipitation expected today',
             hi: days[0]?.hi ?? 0,
             lo: days[0]?.lo ?? 0,
             days,

@@ -10,7 +10,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {wmoCondition, wmoIconName} from '../lib/providers/weather.js';
-import {FONT, fontStyle} from '../lib/fonts.js';
+import {FONT, fontStyle, Pango} from '../lib/fonts.js';
 
 export class WeatherWidget {
     constructor(parent, ctx, size, mode) {
@@ -62,42 +62,64 @@ export class WeatherWidget {
     _renderSmall(d) {
         const w = this._w;
         const h = this._h;
-        const m = Math.round(h * 0.09);
-        const ls = Math.max(11, Math.round(Math.min(h, 350) * 0.068));
+        const m = Math.round(h * 0.10);
+        const ls = Math.max(11, Math.round(h * 0.072));
 
-        this._add(this._txt(d.name, FONT.display, ls * 1.15), m, m);
-        this._add(this._txt(`${d.temp}°`, FONT.displayThin, ls * 4),
-            m - Math.round(ls * 0.06), m + Math.round(ls * 1.25));
+        // Header: city name (ellipsised) + the current-location arrow.
+        const arrowW = Math.round(ls * 1.3);
+        const name = this._txt(d.name, FONT.display, ls * 1.12);
+        name.width = w - 2 * m - arrowW;
+        name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._add(name, m, m);
+        const arrow = this._txt('➤', FONT.display, ls * 0.66, 0.9);
+        arrow.set_pivot_point(0.5, 0.5);
+        arrow.rotation_angle_z = -45;
+        this._add(arrow, m + (w - 2 * m - arrowW) + Math.round(ls * 0.2),
+            m + Math.round(ls * 0.24));
 
-        const iconSize = Math.round(ls * 3);
+        // Condition icon, top-right, roughly header-aligned.
+        const iconSize = Math.round(ls * 2.85);
         this._add(this._icon(wmoIconName(d.code, d.isDay), iconSize),
             w - m - iconSize, m - Math.round(ls * 0.35));
 
+        // Big temperature.
+        this._add(this._txt(`${d.temp}°`, FONT.displayThin, ls * 3.6),
+            m - Math.round(ls * 0.05), m + Math.round(ls * 1.05));
+
+        // High / low, stacked under the icon.
         const hl = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            style: `spacing: ${Math.round(ls * 0.18)}px;`,
+            style: `spacing: ${Math.round(ls * 0.12)}px;`,
         });
-        const mkRow = (arrow, val, op) => {
-            const r = new St.BoxLayout({style: `spacing: ${Math.round(ls * 0.12)}px;`});
-            r.add_child(this._txt(arrow, FONT.display, ls, op));
-            r.add_child(this._txt(val, FONT.display, ls, op));
+        const mkRow = (glyph, val, op) => {
+            const r = new St.BoxLayout({style: `spacing: ${Math.round(ls * 0.14)}px;`});
+            r.add_child(this._txt(glyph, FONT.display, ls * 0.86, op));
+            r.add_child(this._txt(val, FONT.display, ls * 1.0, op));
             return r;
         };
-        hl.add_child(mkRow('↑', `${d.hi}°`, 1));
-        hl.add_child(mkRow('↓', `${d.lo}°`, 0.7));
-        this._add(hl, w - m - Math.round(ls * 3.2), m + iconSize + Math.round(ls * 0.05));
+        hl.add_child(mkRow('↑', `${d.hi}°`, 0.95));
+        hl.add_child(mkRow('↓', `${d.lo}°`, 0.6));
+        this._add(hl, w - m - Math.round(ls * 3.0),
+            m + iconSize + Math.round(ls * 0.05));
 
-        const info = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
+        // Precipitation / Wind block.
+        const info = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            width: w - 2 * m,
+        });
         const is = Math.round(ls * 0.9);
+        const sub = text => {
+            const l = this._txt(text, FONT.display, is, 0.55);
+            l.clutter_text.line_wrap = true;
+            l.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            return l;
+        };
         info.add_child(this._txt('Precipitation', FONT.display, is));
-        info.add_child(this._txt(
-            d.precipProb != null ? `${d.precipProb}% chance` : `${d.precip}"`,
-            FONT.display, is, 0.6));
-        info.add_child(new St.Widget({height: Math.round(ls * 0.35), width: 1}));
+        info.add_child(sub(d.precipText));
+        info.add_child(new St.Widget({height: Math.round(ls * 0.3), width: 1}));
         info.add_child(this._txt('Wind', FONT.display, is));
-        info.add_child(this._txt(`${d.wind} mph ${d.windDir}`, FONT.display, is, 0.6));
-        const infoH = Math.round(is * 4.5 + ls * 0.35);
-        this._add(info, m, h - m - infoH);
+        info.add_child(sub(`${d.wind} ${d.windUnit} ${d.windDir}`));
+        this._add(info, m, Math.round(h * 0.55));
     }
 
     _renderBig(d) {
