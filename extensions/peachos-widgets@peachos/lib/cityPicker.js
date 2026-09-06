@@ -157,7 +157,7 @@ class CityPicker extends Clutter.Actor {
                 row.add_child(clear);
             } else {
                 row.add_child(new St.Label({
-                    text: 'Empty — pick a city below', x_expand: true,
+                    text: 'Empty', x_expand: true,
                     style_class: 'peachos-cities-slot-empty',
                     y_align: Clutter.ActorAlign.CENTER,
                 }));

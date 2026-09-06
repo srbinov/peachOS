@@ -31,10 +31,12 @@ export function fontStyle(family, px, opacity = 1, rgb = '255,255,255') {
         + `color: rgba(${rgb},${opacity});${shadow}`;
 }
 
-/** Pango.FontDescription for PangoCairo text (calendar today badge). */
-export function fontDesc(family, px) {
+/** Pango.FontDescription for PangoCairo text. */
+export function fontDesc(family, px, bold = false) {
     const d = Pango.FontDescription.from_string(family);
     d.set_absolute_size(Math.max(1, Math.round(px)) * Pango.SCALE);
+    if (bold)
+        d.set_weight(Pango.Weight.SEMIBOLD);
     return d;
 }
 
