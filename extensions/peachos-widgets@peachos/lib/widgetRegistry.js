@@ -11,7 +11,8 @@ import {DigitalClock, AnalogClock} from '../widgets/clock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
 
-export const SCALES = {sm: 0.78, md: 1.0, lg: 1.32};
+// 15% smaller than the original 0.78 / 1.0 / 1.32
+export const SCALES = {sm: 0.663, md: 0.85, lg: 1.122};
 export const SCALE_ORDER = ['sm', 'md', 'lg'];
 
 export const REGISTRY = {

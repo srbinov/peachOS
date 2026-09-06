@@ -13,7 +13,7 @@ import {WidgetFrame} from '../widgets/frame.js';
 import {variantDef, sizeFor} from './widgetRegistry.js';
 
 const EDIT_DIM = 40;      // scrim opacity (0-255) in edit mode
-const GAP = 20;          // consistent gap between adjacent widget edges
+const GAP = 8;           // hard minimum gap between any two widgets
 const SNAP = 13;         // distance within which a drag snaps to that gap / an edge
 // Placeable area, from the two reference widgets the user positioned:
 const TOP_MARGIN = 48;   // highest a widget can sit (clears the top bar)
@@ -216,6 +216,36 @@ export class WidgetLayer {
             x = snapX;
         if (bestDY <= SNAP)
             y = snapY;
+
+        // Hard collision resolution: no two widgets may be closer than GAP.
+        // Push the dragged widget out along its axis of least penetration.
+        for (let iter = 0; iter < 12; iter++) {
+            let moved = false;
+            for (const o of others) {
+                const ox1 = o.x - GAP;
+                const oy1 = o.y - GAP;
+                const ox2 = o.x + o.w + GAP;
+                const oy2 = o.y + o.h + GAP;
+                if (x < ox2 && x + w > ox1 && y < oy2 && y + h > oy1) {
+                    const pushL = x + w - ox1;
+                    const pushR = ox2 - x;
+                    const pushU = y + h - oy1;
+                    const pushD = oy2 - y;
+                    const min = Math.min(pushL, pushR, pushU, pushD);
+                    if (min === pushL)
+                        x = clampX(x - pushL);
+                    else if (min === pushR)
+                        x = clampX(x + pushR);
+                    else if (min === pushU)
+                        y = clampY(y - pushU);
+                    else
+                        y = clampY(y + pushD);
+                    moved = true;
+                }
+            }
+            if (!moved)
+                break;
+        }
 
         return {x: Math.round(clampX(x)), y: Math.round(clampY(y))};
     }
