@@ -70,7 +70,7 @@ export const REGISTRY = {
         appIcon: 'org.gnome.Calendar',
         variants: {
             month: {
-                name: 'Month', base: {w: 280, h: 280}, radiusRatio: 0.16,
+                name: 'Month', base: {w: 280, h: 280}, radiusRatio: 0.22,
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'month'),
             },
             agenda: {

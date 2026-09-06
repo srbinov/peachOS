@@ -27,14 +27,16 @@ function sameDay(a, b) {
         a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-// Today marker: a filled circle. Glass mode punches the day number out
-// (Cairo DEST_OUT) so the backdrop shows through; solid modes draw it normally.
+// Today marker: a filled circle in the accent colour. Glass mode punches the
+// day number out (Cairo DEST_OUT) so the backdrop shows through; solid modes
+// draw a white number over the accent fill.
 class TodayBadge {
-    constructor(diameter, dayNumber, fontPx, mode) {
+    constructor(diameter, dayNumber, fontPx, cardMode, accent) {
         this.actor = new St.DrawingArea({width: diameter, height: diameter});
         this._day = dayNumber;
         this._fs = fontPx;
-        this._mode = mode;
+        this._punch = cardMode === 'glass';
+        this._accent = accent; // [r,g,b]
         this.actor.connect('repaint', a => this._draw(a));
     }
 
@@ -42,24 +44,19 @@ class TodayBadge {
         const [w, h] = area.get_surface_size();
         const cr = area.get_context();
         try {
-            // circle: white in glass/dark, red in light (KDE accentRed)
-            if (this._mode === 'light')
-                cr.setSourceRGBA(0.84, 0, 0.08, 1);
-            else
-                cr.setSourceRGBA(1, 1, 1, 1);
+            cr.setSourceRGBA(this._accent[0], this._accent[1], this._accent[2], 1);
             cr.arc(w / 2, h / 2, Math.min(w, h) / 2, 0, 2 * Math.PI);
             cr.fill();
 
             const layout = PangoCairo.create_layout(cr);
-            layout.set_font_description(fontDesc(FONT.display, this._fs));
+            layout.set_font_description(fontDesc(FONT.display, this._fs, true));
             layout.set_text(`${this._day}`, -1);
             const [lw, lh] = layout.get_pixel_size();
-            if (this._mode === 'glass') {
+            if (this._punch) {
                 cr.setOperator(Cairo.Operator.DEST_OUT);
             } else {
                 cr.setOperator(Cairo.Operator.OVER);
-                cr.setSourceRGBA(this._mode === 'light' ? 1 : 0.1, this._mode === 'light' ? 1 : 0.1,
-                    this._mode === 'light' ? 1 : 0.11, 1);
+                cr.setSourceRGBA(1, 1, 1, 1);
             }
             cr.moveTo((w - lw) / 2, (h - lh) / 2);
             PangoCairo.show_layout(cr, layout);
@@ -71,12 +68,18 @@ class TodayBadge {
 }
 
 export class CalendarWidget {
-    constructor(parent, ctx, size, mode) {
+    constructor(parent, ctx, size, variant) {
         this._ctx = ctx;
-        this._mode = mode;
+        this._variant = variant;                 // 'month' | 'agenda'
+        this._cardMode = size.mode || 'glass';   // 'glass' | 'dark' | 'light'
         this._w = size.w;
         this._h = size.h;
         this._fg = size.fg || '255,255,255';
+        // KDE: month header + today badge use the accent -- white in glass,
+        // red in solid (#FF3B30 dark / #D70015 light).
+        this._accent = this._cardMode === 'glass' ? [1, 1, 1]
+            : (this._cardMode === 'light' ? [0.843, 0, 0.082] : [1, 0.231, 0.188]);
+        this._accentRgb = this._accent.map(v => Math.round(v * 255)).join(',');
 
         this._root = new Clutter.Actor({width: size.w, height: size.h});
         parent.add_child(this._root);
@@ -99,11 +102,11 @@ export class CalendarWidget {
         const today = new Date();
         const ls = Math.max(11, Math.round(this._h * 0.058));
 
-        const gridW = this._mode === 'agenda' ? Math.round(this._w * 0.5) : this._w;
-        const gridX = this._mode === 'agenda' ? this._w - gridW : 0;
+        const gridW = this._variant === 'agenda' ? Math.round(this._w * 0.5) : this._w;
+        const gridX = this._variant === 'agenda' ? this._w - gridW : 0;
         this._renderGrid(gridX, gridW, ls, today);
 
-        if (this._mode === 'agenda')
+        if (this._variant === 'agenda')
             this._renderAgenda(0, this._w - gridW, ls, today);
     }
 
@@ -111,15 +114,15 @@ export class CalendarWidget {
         const padX = Math.round(this._w * 0.05);
         const padTop = Math.round(this._h * 0.11);
         const padBottom = Math.round(this._h * 0.07);
-        const x0 = originX + (this._mode === 'agenda' ? Math.round(areaW * 0.04) : padX);
-        const innerW = areaW - 2 * (this._mode === 'agenda' ? Math.round(areaW * 0.04) : padX);
+        const x0 = originX + (this._variant === 'agenda' ? Math.round(areaW * 0.04) : padX);
+        const innerW = areaW - 2 * (this._variant === 'agenda' ? Math.round(areaW * 0.04) : padX);
         const colW = innerW / 7;
         let y = padTop;
 
         // Month header, left-edge roughly over the first weekday column.
         const header = new St.Label({
             text: MONTHS[today.getMonth()],
-            style: fontStyle(FONT.display, ls, 0.95, this._fg),
+            style: fontStyle(FONT.display, ls, 1, this._accentRgb),
         });
         this._add(header, x0, y);
         y += Math.round(ls * 1.6);
@@ -162,7 +165,7 @@ export class CalendarWidget {
 
             if (isToday) {
                 const dia = Math.round(Math.min(colW, rowH) * 0.95);
-                const badge = new TodayBadge(dia, day, ls, this._mode);
+                const badge = new TodayBadge(dia, day, ls, this._cardMode, this._accent);
                 this._add(badge.actor, cx - dia / 2, cy - dia / 2);
             } else {
                 const dl = new St.Label({
