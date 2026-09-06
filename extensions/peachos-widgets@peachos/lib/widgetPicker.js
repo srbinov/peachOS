@@ -134,14 +134,24 @@ class WidgetPicker extends Clutter.Actor {
         });
     }
 
-    _previewActor(type, variant) {
+    _previewActor(type, variant, vdef) {
         const path = GLib.build_filenamev(
             [this._ctx.path, 'previews', `${type}-${variant}.png`]);
         if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
-            return new St.Icon({
-                gicon: Gio.icon_new_for_string(path),
-                icon_size: PREVIEW_MAX,
+            const aspect = vdef.base.w / vdef.base.h;
+            let bw;
+            let bh;
+            if (aspect >= 1) {
+                bw = Math.min(132, Math.round(PREVIEW_MAX * aspect));
+                bh = Math.round(bw / aspect);
+            } else {
+                bh = PREVIEW_MAX;
+                bw = Math.round(PREVIEW_MAX * aspect);
+            }
+            return new St.Widget({
+                width: bw, height: bh,
                 style_class: 'peachos-picker-card-preview',
+                style: `background-image: url("file://${path}"); background-size: contain;`,
             });
         }
         return new St.Icon({
@@ -162,9 +172,9 @@ class WidgetPicker extends Clutter.Actor {
 
         const previewBin = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
-            width: PREVIEW_MAX, height: PREVIEW_MAX,
+            width: 132, height: PREVIEW_MAX,
         });
-        previewBin.add_child(this._previewActor(type, variant));
+        previewBin.add_child(this._previewActor(type, variant, vdef));
         box.add_child(previewBin);
 
         box.add_child(new St.Label({
