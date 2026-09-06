@@ -44,11 +44,12 @@ export class DigitalClock {
         this._w = size.w;
         this._h = size.h;
         this._radius = size.radius;
-        this._roundness = size.roundness ?? 7.5;
+        this._roundness = 5;
         this._fg = size.fg || '255,255,255';
+        const glass = (size.mode || 'glass') === 'glass';
         // glass keeps the readout translucent; solid modes want it opaque
-        this._digitOpacity = this._fg.startsWith('255') ? 0.55 : 0.9;
-        this._ringBase = this._fg.startsWith('255') ? 0.20 : 0.35;
+        this._digitOpacity = glass ? 0.55 : 1.0;
+        this._ringBase = glass ? 0.18 : 0.30;
 
         this._root = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -77,10 +78,9 @@ export class DigitalClock {
         this._row.add_child(this._min);
         this._root.add_child(this._row);
 
-        this._tick = new Ticker(1000, () => {
-            this._updateTime();
-            this._ring.queue_repaint();
-        });
+        this._minuteTick = new Ticker(1000, () => this._updateTime());
+        // fast enough for a visibly moving comet trail on the tick ring
+        this._ringTick = new Ticker(90, () => this._ring.queue_repaint());
     }
 
     _updateTime() {
@@ -113,8 +113,9 @@ export class DigitalClock {
         });
     }
 
-    // Ported from TickRing.qml _rebuild(): two inset squircle frames, corner
-    // ticks pulled slightly outward.
+    // Ported from TickRing.qml: 60 ticks between two inset squircle frames,
+    // corner ticks pulled out, plus the comet-trail second indicator -- a
+    // bright head at the current second with a 270deg fade behind it.
     _drawRing(area) {
         const [w, h] = area.get_surface_size();
         const cr = area.get_context();
@@ -123,15 +124,25 @@ export class DigitalClock {
             const cy = h / 2;
             const minSide = Math.min(w, h);
             const n = Math.max(this._roundness, 2.0);
+            const scale = w / Math.max(1, this._w);
+            const radius = this._radius * scale;
+            const base = this._ringBase;
+            const [cr0, cg0, cb0] = this._rgb();
 
             const outerInsetPx = 0.05 * minSide;
             const innerPad = (0.05 + 0.026) * minSide;
             const cornerExtPx = 0.012 * minSide;
+            const trailDeg = 270;
 
-            const secAngle = (Date.now() % 60000) / 60000 * 360;
+            // continuous second position 0..60
+            const pos = (Date.now() % 60000) / 1000;
+            const curIdx = Math.floor(pos) % 60;
+            const prevIdx = (curIdx - 1 + 60) % 60;
+            const fadeT = pos - Math.floor(pos);
+            const sHead = fadeT * fadeT * (3 - 2 * fadeT);
 
             cr.setLineCap(Cairo.LineCap.ROUND);
-            cr.setLineWidth(2.2);
+            cr.setLineWidth(2.2 * scale);
 
             for (let i = 0; i < 60; i++) {
                 const rad = i * 6 * Math.PI / 180;
@@ -143,19 +154,23 @@ export class DigitalClock {
                 const [ox, oy] = squircleRayHit(dx, dy,
                     Math.max(1, w / 2 - tickOuterInset),
                     Math.max(1, h / 2 - tickOuterInset),
-                    Math.max(0, this._radius - tickOuterInset), n);
+                    Math.max(0, radius - tickOuterInset), n);
                 const [ix, iy] = squircleRayHit(dx, dy,
                     Math.max(1, w / 2 - innerPad),
                     Math.max(1, h / 2 - innerPad),
-                    Math.max(0, this._radius - innerPad), n);
+                    Math.max(0, radius - innerPad), n);
 
-                let off = (secAngle - i * 6 + 360) % 360;
-                if (off > 180)
-                    off -= 360;
-                const near = Math.max(0, 1 - Math.abs(off) / 46);
-                const op = this._ringBase + (1 - this._ringBase) * near * near * 0.4;
+                let s = 0;
+                if (i === curIdx) {
+                    s = sHead;
+                } else {
+                    const off = ((prevIdx * 6) - (i * 6) + 360) % 360;
+                    if (off <= trailDeg)
+                        s = Math.pow(1 - off / trailDeg, 0.6);
+                }
+                const op = base + (1 - base) * s;
 
-                cr.setSourceRGBA(...this._rgb(), op);
+                cr.setSourceRGBA(cr0, cg0, cb0, op);
                 cr.moveTo(cx + ix, cy + iy);
                 cr.lineTo(cx + ox, cy + oy);
                 cr.stroke();
@@ -170,7 +185,8 @@ export class DigitalClock {
     }
 
     destroy() {
-        this._tick.destroy();
+        this._minuteTick.destroy();
+        this._ringTick.destroy();
         this._root.destroy();
     }
 }
