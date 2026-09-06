@@ -46,13 +46,15 @@ export class WidgetLayer {
             'monitors-changed', () => this._onMonitorsChanged(), this);
 
         // The layer lives at the bottom of global.window_group (inside the
-        // shell's own background group). Two shell transitions would otherwise
-        // hide it: a workspace-switch drops an opaque MonitorGroup above
-        // window_group, and the overview covers the desktop entirely. Follow
-        // the first; fade with the second.
+        // shell's own background group), so it is always below every window.
+        // Two shell transitions would otherwise hide it: a workspace switch
+        // covers window_group with an opaque MonitorGroup, and the overview
+        // covers the desktop entirely. For the switch we mirror the layer into
+        // each sliding workspace (below that workspace's window clones -- never
+        // above a window); for the overview we fade it out.
         Main.uiGroup.connectObject('child-added', (_g, child) => {
             if (child.style_class === 'workspace-animation')
-                this._onAnimationActor(child);
+                this._mirrorIntoAnimation(child);
         }, this);
         Main.overview.connectObject(
             'showing', () => this._fadeForOverview(true),
@@ -73,64 +75,43 @@ export class WidgetLayer {
     // --- stacking -----------------------------------------------------------
 
     _raise() {
-        if (this._animPin)
-            return; // pinned above a workspace-switch animation; leave it there
         const parent = this._layer.get_parent();
         if (parent)
             parent.set_child_above_sibling(this._layer, null);
     }
 
     raise() {
-        this._syncAnimationPin();
         this._raise();
     }
 
     // --- surviving shell transitions --------------------------------------
 
-    // Track the live workspace-switch MonitorGroup actors. While at least one
-    // exists the layer is lifted just above it (so the opaque animation group
-    // doesn't cover the widgets); when the last one dies it goes back home,
-    // below the windows.
-    _onAnimationActor(animActor) {
-        this._animActors ??= new Set();
-        this._animActors.add(animActor);
-        animActor.connectObject('destroy', () => {
-            this._animActors?.delete(animActor);
-            this._syncAnimationPin();
-        }, this);
-        this._syncAnimationPin();
-    }
-
-    _syncAnimationPin() {
+    // A workspace switch builds a MonitorGroup of per-workspace groups, each
+    // holding an opaque WorkspaceBackground plus that workspace's window
+    // clones, sliding across the screen. Drop a Clone of our layer into every
+    // WorkspaceBackground: it slides with the wallpaper and, because the
+    // background sits under all of that group's window clones, it can never
+    // appear above a window. The clones die with the MonitorGroup.
+    _mirrorIntoAnimation(monitorGroup) {
         if (!this._layer)
             return;
-        const live = [...(this._animActors ?? [])].filter(
-            a => !a.is_finalized?.() && a.get_parent() === Main.uiGroup);
-        this._animActors = new Set(live);
-        const home = Main.layoutManager._backgroundGroup;
-
-        if (live.length) {
-            if (!this._animHome) {
-                this._animHome = this._layer.get_parent() ?? home;
-                this._animHome.remove_child(this._layer);
-                Main.uiGroup.add_child(this._layer);
-            }
-            Main.uiGroup.set_child_above_sibling(this._layer, live[live.length - 1]);
-        } else {
-            // no live animation -- the layer belongs below the windows
-            const dest = this._animHome ?? home;
-            this._animHome = null;
-            if (this._layer.get_parent() === Main.uiGroup) {
-                Main.uiGroup.remove_child(this._layer);
-                dest.add_child(this._layer);
-            }
-            if (this._layer.get_parent())
-                this._layer.get_parent().set_child_above_sibling(this._layer, null);
+        const mon = monitorGroup._monitor;
+        const groups = monitorGroup._workspaceGroups;
+        if (!mon || !groups)
+            return;
+        for (const g of groups) {
+            const bg = g._background;
+            if (!bg || bg._peachosMirror)
+                continue;
+            const clone = new Clutter.Clone({
+                source: this._layer,
+                x: -mon.x,
+                y: -mon.y,
+                reactive: false,
+            });
+            bg._peachosMirror = clone;
+            bg.add_child(clone);
         }
-    }
-
-    get _animPin() {
-        return !!this._animHome;
     }
 
     _fadeForOverview(hidden) {
@@ -415,10 +396,6 @@ export class WidgetLayer {
         Main.uiGroup.disconnectObject(this);
         Main.overview.disconnectObject(this);
         this._settings.disconnectObject(this);
-        for (const a of this._animActors ?? [])
-            a.disconnectObject(this);
-        this._animActors = null;
-        this._animHome = null;
         for (const frame of this._frames.values())
             frame.destroy();
         this._frames.clear();
