@@ -1,9 +1,55 @@
-// Superellipse ("squircle") maths, ported verbatim from the KDE repo's
-// TickRing.qml. Used to lay the digital clock's tick ring between two inset
-// squircle frames that match the glass silhouette.
+// Quintic-superellipse ("squircle", n = 5 -- the Apple app-icon curve) helpers.
+//
+// squirclePath() traces a rounded rectangle whose corner arcs are Lamé
+// quarter-curves: 4 straight edges + 4 corner arcs, each corner sampled
+// densely so large near-rectangular shapes don't facet.
 
-// Signed level-set of a centred squircle: half-extents (hw, hh), corner radius
-// r, exponent n. Negative inside, positive outside.
+// Lamé-curve parametrisation of the unit superellipse quadrant:
+//   x = sign(cos t) * |cos t|^(2/n),  y = sign(sin t) * |sin t|^(2/n)
+function lame(t, n) {
+    const k = 2 / n;
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    return [
+        Math.sign(c) * Math.pow(Math.abs(c), k),
+        Math.sign(s) * Math.pow(Math.abs(s), k),
+    ];
+}
+
+/**
+ * Trace a filled squircle centred at (cx, cy) with half-extents (hw, hh),
+ * corner radius r and exponent n into a Cairo context. `steps` is the number
+ * of segments per corner arc.
+ */
+export function squirclePath(cr, cx, cy, hw, hh, r, n = 5, steps = 24) {
+    r = Math.max(0, Math.min(r, hw, hh));
+    const ix = hw - r; // corner-centre x offset
+    const iy = hh - r;
+
+    // corner: centre (ox,oy), sweep angle a0..a0+PI/2
+    const corner = (ox, oy, a0) => {
+        for (let i = 0; i <= steps; i++) {
+            const t = a0 + (i / steps) * (Math.PI / 2);
+            const [lx, ly] = lame(t, n);
+            cr.lineTo(cx + ox + lx * r, cy + oy + ly * r);
+        }
+    };
+
+    cr.moveTo(cx - ix, cy - hh);          // top edge, left end
+    cr.lineTo(cx + ix, cy - hh);          // -> top edge, right end
+    corner(ix, -iy, -Math.PI / 2);        // top-right corner (up -> right)
+    cr.lineTo(cx + hw, cy + iy);          // right edge
+    corner(ix, iy, 0);                    // bottom-right (right -> down)
+    cr.lineTo(cx - ix, cy + hh);          // bottom edge
+    corner(-ix, iy, Math.PI / 2);         // bottom-left (down -> left)
+    cr.lineTo(cx - hw, cy - iy);          // left edge
+    corner(-ix, -iy, Math.PI);            // top-left (left -> up)
+    cr.closePath();
+}
+
+// --- legacy ray-hit (still used by the digital clock tick ring, which needs
+// a point on the squircle boundary along an arbitrary radial direction) ----
+
 export function squircleLevel(x, y, hw, hh, r, n) {
     const ax = Math.abs(x);
     const ay = Math.abs(y);
@@ -17,8 +63,6 @@ export function squircleLevel(x, y, hw, hh, r, n) {
     return Math.min(Math.max(qx, qy), 0) + arc - r;
 }
 
-// Point where the ray from the origin in direction (dx, dy) crosses the
-// squircle boundary. Bisection from an AABB bracket.
 export function squircleRayHit(dx, dy, hw, hh, r, n) {
     const tX = Math.abs(dx) > 1e-9 ? hw / Math.abs(dx) : Infinity;
     const tY = Math.abs(dy) > 1e-9 ? hh / Math.abs(dy) : Infinity;
@@ -33,20 +77,4 @@ export function squircleRayHit(dx, dy, hw, hh, r, n) {
     }
     const t = 0.5 * (tLo + tHi);
     return [t * dx, t * dy];
-}
-
-// Trace a filled squircle path (centred at cx, cy) into a Cairo context.
-export function squirclePath(cr, cx, cy, hw, hh, r, n, steps = 96) {
-    r = Math.min(r, hw, hh);
-    for (let i = 0; i <= steps; i++) {
-        const a = (i / steps) * 2 * Math.PI;
-        const dx = Math.cos(a);
-        const dy = Math.sin(a);
-        const [px, py] = squircleRayHit(dx, dy, hw, hh, r, n);
-        if (i === 0)
-            cr.moveTo(cx + px, cy + py);
-        else
-            cr.lineTo(cx + px, cy + py);
-    }
-    cr.closePath();
 }

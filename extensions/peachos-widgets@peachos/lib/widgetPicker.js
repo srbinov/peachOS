@@ -30,14 +30,14 @@ class WidgetPicker extends Clutter.Actor {
         this.connect('destroy', () => this._destroyPreviews());
 
         const mon = Main.layoutManager.primaryMonitor;
-        this._pw = Math.round(mon.width / 3);
-        this._ph = Math.round(mon.height * 0.4);
+        this._pw = Math.round(Math.min(720, Math.max(560, mon.width * 0.38)));
+        this._ph = Math.round(Math.min(560, Math.max(420, mon.height * 0.46)));
         this._px = mon.x + INSET;
         this._py = mon.y + mon.height - this._ph - INSET;
 
         this._glass = makeLiquidGlass({
             innerW: this._pw, innerH: this._ph,
-            x: this._px, y: this._py, radius: 34,
+            x: this._px, y: this._py, radius: 46,
         });
         this._glass.widget.reactive = true;
         this.add_child(this._glass.widget);

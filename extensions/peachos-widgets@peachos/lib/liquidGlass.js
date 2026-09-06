@@ -25,7 +25,7 @@ let _cropSeq = 0;
 
 function traceSquircle(cr, w, h, r) {
     // centred, inset 1px so a 1px stroke sits inside the bounds
-    squirclePath(cr, w / 2, h / 2, w / 2 - 1, h / 2 - 1, Math.max(1, r - 1), SQUIRCLE_N, 128);
+    squirclePath(cr, w / 2, h / 2, w / 2 - 1, h / 2 - 1, Math.max(1, r - 1), SQUIRCLE_N, 28);
 }
 
 function paintCard(cr, w, h, radiusPx, mode, cropPath) {
