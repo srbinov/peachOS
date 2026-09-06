@@ -25,7 +25,11 @@ export const REGISTRY = {
             },
             analog: {
                 name: 'Analog', base: {w: 200, h: 200}, radiusRatio: 0.24,
-                make: (parent, ctx, size) => new AnalogClock(parent, size),
+                make: (parent, ctx, size) => new AnalogClock(parent, size, 'minimal'),
+            },
+            classic: {
+                name: 'Classic', base: {w: 200, h: 200}, radiusRatio: 0.24,
+                make: (parent, ctx, size) => new AnalogClock(parent, size, 'classic'),
             },
         },
     },

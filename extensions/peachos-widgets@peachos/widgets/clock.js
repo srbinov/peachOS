@@ -9,10 +9,11 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 
 import {squircleRayHit} from '../lib/squircle.js';
-import {FONT, fontStyle} from '../lib/fonts.js';
+import {FONT, fontStyle, fontDesc} from '../lib/fonts.js';
 
 const {cairo: Cairo} = imports;
 
@@ -175,14 +176,16 @@ export class DigitalClock {
 }
 
 // ---------------------------------------------------------------------------
-// Analog -- ported from packages/clock-analog-2 (the minimal one: 12 pill
-// hour-lines, no numbers, no minute ring).
+// Analog -- 'minimal' = packages/clock-analog-2 (12 pill hour-lines, no
+// numbers). 'classic' = packages/clock-analog (60 ticks + SF Pro Rounded
+// hour numbers + white face).
 // ---------------------------------------------------------------------------
 
 export class AnalogClock {
-    constructor(parent, size) {
+    constructor(parent, size, style) {
         this._fg = size.fg || '255,255,255';
         this._mode = size.mode || 'glass';
+        this._style = style || 'minimal';
 
         this._root = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -208,17 +211,31 @@ export class AnalogClock {
         try {
             const cx = w / 2;
             const cy = h / 2;
-            // face inset from the card edge, then r = radius of that face
             const inset = Math.min(w, h) * 0.08;
             const r = Math.min(w, h) / 2 - inset;
 
+            // 'classic' forces a white face + black dial (KDE _realLight look);
+            // 'minimal' follows the card mode.
+            const classic = this._style === 'classic';
+            const whiteFace = classic ? this._mode !== 'glass' : this._mode === 'light';
+            // dial (ticks / numbers / hands) colour, as [r,g,b]
+            const dial = whiteFace ? [0, 0, 0]
+                : (classic && this._mode === 'glass' ? [1, 1, 1] : this._rgb().slice(0, 3));
+            const D = (a = 1) => [dial[0], dial[1], dial[2], a];
+
             // --- clock plate (circle) ---
-            if (this._mode === 'glass')
+            if (classic) {
+                if (this._mode === 'glass')
+                    cr.setSourceRGBA(1, 1, 1, 0.20);
+                else
+                    cr.setSourceRGBA(1, 1, 1, 1); // white face
+            } else if (this._mode === 'glass') {
                 cr.setSourceRGBA(...this._rgb(0.20));
-            else if (this._mode === 'light')
+            } else if (this._mode === 'light') {
                 cr.setSourceRGBA(1, 1, 1, 1);
-            else
+            } else {
                 cr.setSourceRGBA(0.204, 0.204, 0.212, 1); // #343436
+            }
             cr.arc(cx, cy, r, 0, 2 * Math.PI);
             cr.fill();
 
@@ -228,19 +245,47 @@ export class AnalogClock {
             const minuteLen = (outerR + innerR) / 2;   // 0.915 r
             const hourLen = minuteLen * 0.65;          // 0.595 r
 
-            // --- 12 pill-shaped hour lines ---
-            const lineW = r * 0.0336 * 0.9 * 1.15 * 1.35;
-            const lineLen = hourLen * 0.40 * 0.90 * 1.10;
-            cr.setLineCap(Cairo.LineCap.ROUND);
-            cr.setLineWidth(lineW);
-            cr.setSourceRGBA(...this._rgb(0.75));
-            for (let i = 0; i < 12; i++) {
-                const a = i * 30 * Math.PI / 180;
-                const s = Math.sin(a);
-                const c = -Math.cos(a);
-                cr.moveTo(cx + s * outerR, cy + c * outerR);
-                cr.lineTo(cx + s * (outerR - lineLen), cy + c * (outerR - lineLen));
-                cr.stroke();
+            if (classic) {
+                // 60 pill ticks, alpha 0.75 major / 0.30 minor
+                cr.setLineCap(Cairo.LineCap.ROUND);
+                cr.setLineWidth(tickW);
+                for (let i = 0; i < 60; i++) {
+                    cr.setSourceRGBA(...D(i % 5 === 0 ? 0.75 : 0.30));
+                    const a = i * 6 * Math.PI / 180;
+                    const s = Math.sin(a);
+                    const c = -Math.cos(a);
+                    cr.moveTo(cx + s * innerR, cy + c * innerR);
+                    cr.lineTo(cx + s * outerR, cy + c * outerR);
+                    cr.stroke();
+                }
+                // 12 hour numbers, SF Pro Rounded
+                const dist = r * 0.72;
+                const fs = Math.max(8, r * 0.17);
+                const layout = PangoCairo.create_layout(cr);
+                layout.set_font_description(fontDesc(FONT.rounded, fs));
+                for (let n = 1; n <= 12; n++) {
+                    const a = (n / 12) * 2 * Math.PI;
+                    layout.set_text(`${n}`, -1);
+                    const [lw, lh] = layout.get_pixel_size();
+                    cr.setSourceRGBA(...D(this._mode === 'glass' ? 0.85 : 1));
+                    cr.moveTo(cx + Math.sin(a) * dist - lw / 2, cy - Math.cos(a) * dist - lh / 2);
+                    PangoCairo.show_layout(cr, layout);
+                }
+            } else {
+                // 12 pill hour lines
+                const lineW = r * 0.0336 * 0.9 * 1.15 * 1.35;
+                const lineLen = hourLen * 0.40 * 0.90 * 1.10;
+                cr.setLineCap(Cairo.LineCap.ROUND);
+                cr.setLineWidth(lineW);
+                cr.setSourceRGBA(...D(0.75));
+                for (let i = 0; i < 12; i++) {
+                    const a = i * 30 * Math.PI / 180;
+                    const s = Math.sin(a);
+                    const c = -Math.cos(a);
+                    cr.moveTo(cx + s * outerR, cy + c * outerR);
+                    cr.lineTo(cx + s * (outerR - lineLen), cy + c * (outerR - lineLen));
+                    cr.stroke();
+                }
             }
 
             const now = GLib.DateTime.new_now_local();
@@ -248,7 +293,7 @@ export class AnalogClock {
             const min = now.get_minute() + sec / 60;
             const hr = (now.get_hour() % 12) + min / 60;
 
-            const hand = this._rgb(this._mode === 'glass' ? 0.92 : 1.0);
+            const hand = D(this._mode === 'glass' ? 0.92 : 1.0);
 
             // pill hand: thin stem (rect) + capsule (thick round-capped stroke)
             const drawHand = (turns, totalLen) => {
