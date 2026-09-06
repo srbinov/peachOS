@@ -135,16 +135,9 @@ class WidgetPicker extends Clutter.Actor {
         const path = GLib.build_filenamev(
             [this._ctx.path, 'previews', `${type}-${variant}.png`]);
         if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
-            const aspect = vdef.base.w / vdef.base.h;
-            let bw;
-            let bh;
-            if (aspect >= 1) {
-                bw = Math.min(132, Math.round(PREVIEW_MAX * aspect));
-                bh = Math.round(bw / aspect);
-            } else {
-                bh = PREVIEW_MAX;
-                bw = Math.round(PREVIEW_MAX * aspect);
-            }
+            const row = vdef.shape === 'row';
+            const bw = row ? 132 : PREVIEW_MAX;
+            const bh = row ? 66 : PREVIEW_MAX;
             return new St.Widget({
                 width: bw, height: bh,
                 style_class: 'peachos-picker-card-preview',
