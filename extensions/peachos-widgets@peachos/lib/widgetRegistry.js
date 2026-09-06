@@ -74,7 +74,7 @@ export const REGISTRY = {
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'month'),
             },
             agenda: {
-                name: 'Agenda', base: {w: 520, h: 280}, radiusRatio: 0.16,
+                name: 'Agenda', base: {w: 540, h: 270}, radiusRatio: 0.2,
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'agenda'),
             },
         },

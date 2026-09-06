@@ -102,7 +102,7 @@ export class CalendarWidget {
         const today = new Date();
         const ls = Math.max(11, Math.round(this._h * 0.058));
 
-        const gridW = this._variant === 'agenda' ? Math.round(this._w * 0.5) : this._w;
+        const gridW = this._variant === 'agenda' ? Math.round(this._w * 0.46) : this._w;
         const gridX = this._variant === 'agenda' ? this._w - gridW : 0;
         this._renderGrid(gridX, gridW, ls, today);
 
@@ -201,17 +201,8 @@ export class CalendarWidget {
         end.setDate(end.getDate() + 30);
 
         const events = this._ctx.calendar.getEvents(now, end);
-        if (!events.length) {
-            const l = new St.Label({
-                text: this._ctx.calendar.available ? 'No upcoming events' : 'No calendar connected',
-                style: fontStyle(FONT.display, ls, 0.45, this._fg),
-            });
-            list.add_child(l);
-            return;
-        }
-
         const buckets = {today: [], week: [], later: []};
-        for (const ev of events.slice(0, 10)) {
+        for (const ev of events.slice(0, 12)) {
             if (sameDay(ev.date, now))
                 buckets.today.push(ev);
             else if (ev.date < weekEnd)
@@ -220,19 +211,40 @@ export class CalendarWidget {
                 buckets.later.push(ev);
         }
 
+        const heading = text => {
+            list.add_child(new St.Label({
+                text,
+                style: fontStyle(FONT.display, ls, 0.55, this._fg) + ' padding-top: 4px;',
+            }));
+        };
+        const emptyLine = text => {
+            list.add_child(new St.Label({
+                text,
+                style: fontStyle(FONT.display, Math.round(ls * 0.9), 0.4, this._fg),
+            }));
+        };
+
+        // Nothing anywhere -> a single line.
+        if (!events.length) {
+            emptyLine('No events today');
+            return;
+        }
+
         const section = (title, evs, fmt) => {
             if (!evs.length)
                 return;
-            const hl = new St.Label({
-                text: title,
-                style: fontStyle(FONT.display, ls, 0.55, this._fg) + ' padding-top: 4px;',
-            });
-            list.add_child(hl);
+            heading(title);
             for (const ev of evs)
                 list.add_child(this._eventCard(ev, fmt(ev), ls));
         };
 
-        section('Events today', buckets.today, ev => formatEventTime(ev));
+        heading('Events today');
+        if (buckets.today.length) {
+            for (const ev of buckets.today)
+                list.add_child(this._eventCard(ev, formatEventTime(ev), ls));
+        } else {
+            emptyLine('No events today');
+        }
         section('This week', buckets.week,
             ev => ev.date.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric'}));
         section('Upcoming', buckets.later,
