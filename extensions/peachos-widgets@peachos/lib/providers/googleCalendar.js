@@ -46,6 +46,33 @@ export class GoogleCalendarSource {
             this._detect();
             return GLib.SOURCE_CONTINUE;
         });
+        // pull fresh CalDAV data more often than EDS's own ~30-min cadence
+        this._syncTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5 * 60, () => {
+            this._refreshCalDav();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    // Ask EDS to fetch each Google calendar from the server now.
+    _refreshCalDav() {
+        for (const uid of this._googleUids ?? []) {
+            Gio.DBus.session.call(
+                'org.gnome.evolution.dataserver.Calendar8',
+                '/org/gnome/evolution/dataserver/CalendarFactory',
+                'org.gnome.evolution.dataserver.CalendarFactory', 'OpenCalendar',
+                new GLib.Variant('(s)', [uid]), null,
+                Gio.DBusCallFlags.NONE, 15000, null,
+                (bus, res) => {
+                    try {
+                        const [path, name] = bus.call_finish(res).deepUnpack();
+                        bus.call(name, path,
+                            'org.gnome.evolution.dataserver.Calendar', 'Refresh',
+                            null, null, Gio.DBusCallFlags.NONE, 15000, null, null);
+                    } catch (e) {
+                        // backend busy / offline -- next tick
+                    }
+                });
+        }
     }
 
     get connected() {
@@ -107,8 +134,12 @@ export class GoogleCalendarSource {
             logError(e, '[peachos-widgets] EDS source enumeration failed');
         }
 
+        const before = this._googleUids ? [...this._googleUids].sort().join() : '';
         this._googleUids = uids && uids.size ? uids : null;
         this._connected = (this._googleUids !== null) || googleAccountIds.size > 0;
+        const after = this._googleUids ? [...this._googleUids].sort().join() : '';
+        if (this._googleUids && after !== before)
+            this._refreshCalDav();          // new/changed account -> fetch now
         this._scheduleEmit();
     }
 
@@ -229,7 +260,7 @@ export class GoogleCalendarSource {
 
     destroy() {
         this._listeners.clear();
-        for (const t of ['_emitId', '_rangeTimer', '_detectTimer']) {
+        for (const t of ['_emitId', '_rangeTimer', '_detectTimer', '_syncTimer']) {
             if (this[t]) {
                 GLib.source_remove(this[t]);
                 this[t] = 0;
