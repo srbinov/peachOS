@@ -62,8 +62,15 @@ export class WeatherWidget {
         this._root.destroy_all_children();
         this._applySky(data);
         if (!data) {
-            this._add(this._txt(err ? 'Weather unavailable' : 'Loading…', FONT.display, 13, 0.8),
-                this._w * 0.1, this._h / 2 - 10);
+            if (err) {
+                const l = this._txt('Weather unavailable', FONT.display,
+                    Math.max(11, Math.round(this._h * 0.05)), 0.7);
+                l.x_align = Clutter.ActorAlign.CENTER;
+                l.width = this._w;
+                this._add(l, 0, this._h / 2 - 10);
+            } else {
+                this._renderSkeleton();
+            }
             return;
         }
         if (this._mode === 'full')
@@ -72,6 +79,61 @@ export class WeatherWidget {
             this._renderBig(data);
         else
             this._renderSmall(data);
+    }
+
+    // Pulsing skeleton shown while the first fetch is in flight.
+    _renderSkeleton() {
+        const w = this._w;
+        const h = this._h;
+        const m = Math.round(h * 0.11);
+        const sk = new St.Widget({width: w, height: h});
+        const B = (x, y, bw, bh, r) => sk.add_child(new St.Widget({
+            x: Math.round(x), y: Math.round(y),
+            width: Math.max(2, Math.round(bw)), height: Math.max(2, Math.round(bh)),
+            style: `background-color: rgba(${this._fg},0.14); `
+                + `border-radius: ${r ?? Math.round(bh / 2)}px;`,
+        }));
+
+        // header: name / temp / icon
+        B(m, m, w * 0.34, h * 0.055);
+        B(m, m + h * 0.10, w * 0.30, h * 0.15, 12);
+        B(w - m - h * 0.15, m, h * 0.15, h * 0.15);
+
+        if (this._mode === 'small') {
+            B(m, h * 0.60, w * 0.30, h * 0.05);
+            B(m, h * 0.70, w * 0.52, h * 0.042);
+            B(m, h * 0.81, w * 0.24, h * 0.05);
+            B(m, h * 0.90, w * 0.44, h * 0.042);
+        } else {
+            const cols = 6;
+            const gap = (w - 2 * m) * 0.028;
+            const cw = ((w - 2 * m) - gap * (cols - 1)) / cols;
+            const sy = this._mode === 'full' ? h * 0.40 : h * 0.44;
+            for (let i = 0; i < cols; i++) {
+                const cx = m + i * (cw + gap);
+                B(cx + cw * 0.22, sy, cw * 0.56, h * 0.035);
+                B(cx + cw * 0.12, sy + h * 0.06, cw * 0.76, cw * 0.76, 999);
+                B(cx + cw * 0.28, sy + h * 0.06 + cw * 0.76 + h * 0.02, cw * 0.44, h * 0.035);
+            }
+            if (this._mode === 'full') {
+                for (let i = 0; i < 5; i++) {
+                    const ry = h * 0.63 + i * h * 0.072;
+                    B(m, ry, w * 0.11, h * 0.035);
+                    B(m + w * 0.19, ry - h * 0.004, h * 0.05, h * 0.05, 999);
+                    B(m + w * 0.36, ry, w * 0.42, h * 0.028);
+                }
+            }
+        }
+
+        this._root.add_child(sk);
+        sk.opacity = 90;
+        sk.ease({
+            opacity: 220,
+            duration: 850,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+            autoReverse: true,
+            repeatCount: -1,
+        });
     }
 
     _add(actor, x, y) {

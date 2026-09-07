@@ -227,6 +227,11 @@ prompt-change-blur=false
 cupertino-lockscreen-message-enable=false
 cupertino-lockscreen-message-text=''
 
+[org/gnome/shell/extensions/peachos-widgets]
+# Weather geolocates by public IP out of the box; the user can switch to a
+# manual city in the widget picker.
+weather-auto-location=true
+
 [org/gnome/shell/extensions/rounded-windows]
 keep-rounded-maximized=true
 

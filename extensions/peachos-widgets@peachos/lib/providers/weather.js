@@ -212,11 +212,19 @@ export class WeatherProvider {
         return this._locName();
     }
 
+    // Drop widgets to their loading state until the next payload lands.
+    _clearForReload() {
+        this._data = null;
+        this._error = null;
+        this._emit();
+    }
+
     /** Toggle IP auto-location on/off (persisted); refetches immediately. */
     setAutoLocation(on) {
         this._auto = !!on;
         this._loc = null;
         this._settings.set_boolean('weather-auto-location', this._auto);
+        this._clearForReload();
         if (this._auto)
             this._resolveLocation();
         else
@@ -231,6 +239,7 @@ export class WeatherProvider {
         this._settings.set_double('weather-latitude', lat);
         this._settings.set_double('weather-longitude', lon);
         this._settings.set_string('weather-location-name', name);
+        this._clearForReload();
         this.refresh();
     }
 
