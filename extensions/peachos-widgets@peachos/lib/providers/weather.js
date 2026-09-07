@@ -10,10 +10,32 @@ import Soup from 'gi://Soup?version=3.0';
 const REFRESH_SECONDS = 900;       // weather, 15 min
 const RELOCATE_SECONDS = 6 * 3600; // re-check IP geolocation, 6 h
 
-// Free, key-less, HTTPS IP-geolocation endpoints, tried in order.
-const GEOIP_URLS = [
-    'https://ipapi.co/json/',
-    'https://get.geojs.io/v1/ip/geo.json',
+// Free, key-less, HTTPS IP-geolocation endpoints, tried in order until one
+// returns a usable fix. ipinfo.io and geojs.io resolve to the actual city on
+// most US ISPs; ipapi.co is last -- it has been seen returning the upstream
+// carrier hub instead (e.g. Minneapolis for eastern Iowa).
+const GEOIP_SOURCES = [
+    {
+        url: 'https://ipinfo.io/json',
+        parse: j => {
+            const [la, lo] = String(j.loc || '').split(',');
+            return {lat: parseFloat(la), lon: parseFloat(lo), name: j.city, region: j.region};
+        },
+    },
+    {
+        url: 'https://get.geojs.io/v1/ip/geo.json',
+        parse: j => ({
+            lat: parseFloat(j.latitude), lon: parseFloat(j.longitude),
+            name: j.city, region: j.region,
+        }),
+    },
+    {
+        url: 'https://ipapi.co/json/',
+        parse: j => ({
+            lat: parseFloat(j.latitude), lon: parseFloat(j.longitude),
+            name: j.city, region: j.region,
+        }),
+    },
 ];
 
 function windCompass(deg) {
@@ -179,17 +201,18 @@ export class WeatherProvider {
             return;
         }
         const tryNext = i => {
-            if (i >= GEOIP_URLS.length) {
+            if (i >= GEOIP_SOURCES.length) {
                 this.refresh(); // fall back to whatever coords settings hold
                 return;
             }
-            this._fetchJSON(GEOIP_URLS[i], j => {
-                const lat = j && parseFloat(j.latitude);
-                const lon = j && parseFloat(j.longitude);
-                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            const src = GEOIP_SOURCES[i];
+            this._fetchJSON(src.url, j => {
+                const r = j ? src.parse(j) : {};
+                if (Number.isFinite(r.lat) && Number.isFinite(r.lon) &&
+                    (r.lat !== 0 || r.lon !== 0)) {
                     this._loc = {
-                        lat, lon,
-                        name: j.city || j.region || 'Current Location',
+                        lat: r.lat, lon: r.lon,
+                        name: r.name || r.region || 'Current Location',
                     };
                     this.refresh();
                 } else {
