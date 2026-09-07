@@ -40,15 +40,17 @@ class WidgetPicker extends Clutter.Actor {
         this._selectedType = null;   // null == "All Widgets"
         this._query = '';
 
-        // A drawer hinged to the bottom edge: centred, and bled past the
-        // bottom of the screen so its lower corners are off-screen and it
-        // reads as "coming out of" the desktop.
+        // A drawer hinged to the bottom edge: centred, with a fixed amount of
+        // panel ON screen (visibleH) and a small bleed past the bottom so the
+        // lower corners sit off-screen and it reads as "coming out of" the
+        // desktop.
         const mon = Main.layoutManager.primaryMonitor;
-        const BLEED = 46;
+        const BLEED = 44;
+        const visibleH = Math.round(Math.min(640, Math.max(460, mon.height * 0.5)));
         this._pw = Math.round(Math.min(1180, Math.max(820, mon.width * 0.66)));
-        this._ph = Math.round(Math.min(470, Math.max(320, mon.height * 0.44)));
+        this._ph = visibleH + BLEED;
         this._px = mon.x + Math.round((mon.width - this._pw) / 2);
-        this._py = mon.y + mon.height - this._ph + BLEED;
+        this._py = mon.y + mon.height - visibleH;
 
         this._glass = makeLiquidGlass({
             innerW: this._pw, innerH: this._ph,
