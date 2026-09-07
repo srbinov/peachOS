@@ -328,16 +328,13 @@ export class WidgetLayer {
         if (!size)
             return null;
         const id = `${type}-${variant}-${Date.now().toString(36)}`;
-        const inst = {
-            id, type, variant, mode,
-            ...this._locate(stageX - size.w / 2, stageY - size.h / 2),
-        };
+        const dropX = stageX - size.w / 2;
+        const dropY = stageY - size.h / 2;
+        const inst = {id, type, variant, mode, ...this._locate(dropX, dropY)};
         const frame = this._createFrame(inst);
         if (frame) {
-            const r = frame.innerRect();
-            const sn = this.snapPosition(inst.id, r.x, r.y, r.w, r.h);
-            frame.setInnerPos(sn.x, sn.y);
-            frame.refreshBackdrop();
+            const sn = this.snapPosition(inst.id, dropX, dropY, size.w, size.h);
+            frame.settleInto(dropX, dropY, sn.x, sn.y);
             Object.assign(inst, this._locate(sn.x, sn.y));
             this._persist();
         }

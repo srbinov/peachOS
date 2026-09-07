@@ -174,21 +174,51 @@ export class WidgetFrame {
     _onDragEvent(ev) {
         const t = ev.type();
         if (t === Clutter.EventType.MOTION) {
+            // free follow -- no grid snapping mid-drag
             const [x, y] = ev.get_coords();
-            const rawX = this._drag.ax + (x - this._drag.px);
-            const rawY = this._drag.ay + (y - this._drag.py);
-            const sn = this._callbacks.snap(
-                this.instance.id, rawX, rawY, this._size.w, this._size.h);
-            this.setInnerPos(sn.x, sn.y);
+            this.setInnerPos(
+                Math.round(this._drag.ax + (x - this._drag.px)),
+                Math.round(this._drag.ay + (y - this._drag.py)));
             return Clutter.EVENT_STOP;
         }
         if (t === Clutter.EventType.BUTTON_RELEASE) {
             this._endDrag();
-            this.refreshBackdrop();
+            const r = this.innerRect();
+            const sn = this._callbacks.snap(
+                this.instance.id, r.x, r.y, this._size.w, this._size.h);
+            this._snapInto(sn.x, sn.y);
             this._callbacks.onMoved(this);
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    // Place at (fromX, fromY) then slide to the grid slot -- used when a widget
+    // is dropped out of the picker.
+    settleInto(fromX, fromY, toX, toY) {
+        this.setInnerPos(Math.round(fromX), Math.round(fromY));
+        this._snapInto(toX, toY);
+    }
+
+    // Settle onto the grid slot with a short slide (the drag itself is free).
+    _snapInto(tx, ty) {
+        const g = this._glass.widget;
+        const dx = g.x - tx;
+        const dy = g.y - ty;
+        this.setInnerPos(tx, ty);          // logical position + chrome are final now
+        this.refreshBackdrop();
+        if (dx === 0 && dy === 0)
+            return;
+        for (const a of [g, this._chrome]) {
+            a.remove_all_transitions();
+            a.translation_x = dx;
+            a.translation_y = dy;
+            a.ease({
+                translation_x: 0, translation_y: 0,
+                duration: 180,
+                mode: Clutter.AnimationMode.EASE_OUT_BACK,
+            });
+        }
     }
 
     _endDrag() {
