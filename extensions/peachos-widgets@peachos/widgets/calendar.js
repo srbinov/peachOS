@@ -14,7 +14,14 @@ import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 
 import {formatEventTime} from '../lib/providers/calendar.js';
+import {openAccountSettings} from '../lib/providers/googleCalendar.js';
 import {FONT, fontStyle, fontDesc, Pango} from '../lib/fonts.js';
+
+// accent per brand: [glass, dark, light] rgb triplets (0-1)
+const ACCENTS = {
+    apple: [[1, 1, 1], [1, 0.231, 0.188], [0.843, 0, 0.082]],
+    google: [[1, 1, 1], [0.259, 0.522, 0.957], [0.102, 0.451, 0.910]],
+};
 
 const {cairo: Cairo} = imports;
 
@@ -68,23 +75,26 @@ class TodayBadge {
 }
 
 export class CalendarWidget {
-    constructor(parent, ctx, size, variant) {
+    constructor(parent, ctx, size, variant, opts = {}) {
         this._ctx = ctx;
         this._variant = variant;                 // 'month' | 'agenda'
+        this._brand = opts.brand || 'apple';     // 'apple' | 'google'
+        this._source = this._brand === 'google' ? ctx.gcal : ctx.calendar;
         this._cardMode = size.mode || 'glass';   // 'glass' | 'dark' | 'light'
         this._w = size.w;
         this._h = size.h;
         this._fg = size.fg || '255,255,255';
-        // KDE: month header + today badge use the accent -- white in glass,
-        // red in solid (#FF3B30 dark / #D70015 light).
-        this._accent = this._cardMode === 'glass' ? [1, 1, 1]
-            : (this._cardMode === 'light' ? [0.843, 0, 0.082] : [1, 0.231, 0.188]);
+        // header + today badge use the accent -- white in glass, the brand
+        // colour in solid modes (Apple red / Google blue).
+        const [g, dk, lt] = ACCENTS[this._brand] || ACCENTS.apple;
+        this._accent = this._cardMode === 'glass' ? g
+            : (this._cardMode === 'light' ? lt : dk);
         this._accentRgb = this._accent.map(v => Math.round(v * 255)).join(',');
 
         this._root = new Clutter.Actor({width: size.w, height: size.h});
         parent.add_child(this._root);
 
-        this._unsub = ctx.calendar.subscribe(() => this._render());
+        this._unsub = this._source.subscribe(() => this._render());
         this._midnight = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 1800, () => {
             this._render();
             return GLib.SOURCE_CONTINUE;
@@ -110,6 +120,12 @@ export class CalendarWidget {
 
     _renderInner() {
         this._root.destroy_all_children();
+
+        if (this._brand === 'google' && this._source && !this._source.connected) {
+            this._renderConnect();
+            return;
+        }
+
         const today = new Date();
         const ls = Math.max(11, Math.round(this._h * 0.058));
 
@@ -119,6 +135,44 @@ export class CalendarWidget {
 
         if (this._variant === 'agenda')
             this._renderAgenda(0, this._w - gridW, ls, today);
+    }
+
+    // Shown until a Google account with a calendar is connected. The whole
+    // card is the button (it stays clickable outside edit mode).
+    _renderConnect() {
+        const fs = Math.max(11, Math.round(this._h * 0.06));
+        const box = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            x_align: Clutter.ActorAlign.CENTER,
+            style: `spacing: ${Math.round(fs * 0.42)}px;`,
+        });
+        box.add_child(new St.Icon({
+            icon_name: 'goa-account-google-symbolic',
+            icon_size: Math.round(fs * 2),
+            x_align: Clutter.ActorAlign.CENTER,
+            style: `color: rgba(${this._accentRgb},1);`,
+        }));
+        box.add_child(new St.Label({
+            text: 'Connect Google Calendar',
+            x_align: Clutter.ActorAlign.CENTER,
+            style: fontStyle(FONT.display, fs, 1, this._fg),
+        }));
+        const sub = new St.Label({
+            text: 'Tap to add your Google account',
+            x_align: Clutter.ActorAlign.CENTER,
+            style: fontStyle(FONT.display, Math.round(fs * 0.82), 0.55, this._fg),
+        });
+        sub.clutter_text.line_wrap = true;
+        box.add_child(sub);
+
+        const card = new St.Button({
+            width: this._w, height: this._h,
+            reactive: true, can_focus: true,
+            style_class: 'peachos-gcal-connect',
+        });
+        card.set_child(box);
+        card.connect('clicked', () => openAccountSettings());
+        this._root.add_child(card);
     }
 
     _renderGrid(originX, areaW, ls, today) {
@@ -159,7 +213,7 @@ export class CalendarWidget {
         const numRows = Math.ceil((offset + daysInMonth) / 7);
         const rowH = gridH / numRows;
 
-        const monthEvents = this._ctx.calendar.getEvents(
+        const monthEvents = this._source.getEvents(
             new Date(today.getFullYear(), today.getMonth(), 1),
             new Date(today.getFullYear(), today.getMonth() + 1, 1));
         const hasEvent = day => monthEvents.some(ev =>
@@ -211,7 +265,7 @@ export class CalendarWidget {
         const end = new Date(start);
         end.setDate(end.getDate() + 30);
 
-        const events = this._ctx.calendar.getEvents(now, end);
+        const events = this._source.getEvents(now, end);
         const buckets = {today: [], week: [], later: []};
         for (const ev of events.slice(0, 12)) {
             if (sameDay(ev.date, now))

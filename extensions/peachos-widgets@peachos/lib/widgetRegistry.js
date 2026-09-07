@@ -91,6 +91,22 @@ export const REGISTRY = {
             },
         },
     },
+    gcalendar: {
+        name: 'Google Calendar',
+        appIcon: 'goa-account-google-symbolic',
+        variants: {
+            month: {
+                name: 'Month', shape: 'square',
+                make: (parent, ctx, size) =>
+                    new CalendarWidget(parent, ctx, size, 'month', {brand: 'google'}),
+            },
+            agenda: {
+                name: 'Agenda', shape: 'row',
+                make: (parent, ctx, size) =>
+                    new CalendarWidget(parent, ctx, size, 'agenda', {brand: 'google'}),
+            },
+        },
+    },
 };
 
 export function variantDef(type, variant) {

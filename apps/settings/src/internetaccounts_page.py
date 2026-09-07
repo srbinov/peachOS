@@ -9,17 +9,29 @@ from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
-# Providers whose sign-in genuinely can't be done natively yet: their real OAuth2 client
-# credentials are compiled into GNOME's own control-center/libgoa-backend, not reachable
-# through GOA's public D-Bus API (AddAccount's generic details map only covers providers
-# that take server settings directly, like imap_smtp below) -- listed honestly rather than
-# silently omitted or routed through the old settings app.
-UNAVAILABLE_PROVIDERS = [
+# Providers whose sign-in needs an OAuth2 browser flow (Google) or realm/server
+# details GOA's public AddAccount D-Bus call doesn't cover. Their real client
+# credentials live inside gnome-control-center / libgoa-backend, so the actual
+# sign-in dialog is delegated to `gnome-control-center online-accounts` -- once
+# the account is added there it shows up in the list below and works everywhere.
+SYSTEM_ACCOUNT_PROVIDERS = [
     ('Google', 'goa-account-google-symbolic'),
+    ('Microsoft 365', 'goa-account-ms-graph-symbolic'),
     ('Microsoft Exchange', 'goa-account-exchange-symbolic'),
     ('Nextcloud', 'goa-account-owncloud-symbolic'),
     ('Kerberos', 'goa-account-kerberos-symbolic'),
 ]
+
+
+def _open_system_accounts() -> None:
+    """Launch GNOME's Online Accounts panel for the OAuth2 sign-in step."""
+    try:
+        Gio.Subprocess.new(
+            ['gnome-control-center', 'online-accounts'],
+            Gio.SubprocessFlags.NONE,
+        )
+    except GLib.Error:
+        pass
 
 
 def _account_icon(account: Goa.Account) -> Gtk.Image:
@@ -189,27 +201,35 @@ class _AddAccountDialog(Gtk.Window):
         mail_row.connect('clicked', self._on_mail_clicked)
         box.append(mail_row)
 
-        for provider_name, icon_name in UNAVAILABLE_PROVIDERS:
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            row.set_margin_start(8)
-            row.set_margin_end(8)
-            row.set_margin_top(8)
-            row.set_margin_bottom(8)
+        for provider_name, icon_name in SYSTEM_ACCOUNT_PROVIDERS:
+            prov_row = Gtk.Button(css_classes=['flat'])
+            content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            content.set_margin_start(8)
+            content.set_margin_end(8)
+            content.set_margin_top(8)
+            content.set_margin_bottom(8)
             icon = Gtk.Image.new_from_icon_name(icon_name)
             icon.set_pixel_size(28)
-            icon.set_opacity(0.4)
-            row.append(icon)
+            content.append(icon)
             text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
-            text_box.append(Gtk.Label(label=provider_name, xalign=0, css_classes=['dim-label']))
+            text_box.append(Gtk.Label(label=provider_name, xalign=0))
             text_box.append(Gtk.Label(
-                label='Sign-in not available in peachOS yet', xalign=0, css_classes=['caption', 'dim-label']))
-            row.append(text_box)
-            box.append(row)
+                label='Opens System Accounts to sign in', xalign=0,
+                css_classes=['caption', 'dim-label']))
+            content.append(text_box)
+            content.append(Gtk.Image.new_from_icon_name('external-link-symbolic'))
+            prov_row.set_child(content)
+            prov_row.connect('clicked', self._on_system_clicked)
+            box.append(prov_row)
 
     def _on_mail_clicked(self, _btn):
         self.close()
         dialog = _AddMailAccountDialog(self._parent, on_added=self._on_added)
         dialog.present()
+
+    def _on_system_clicked(self, _btn):
+        self.close()
+        _open_system_accounts()
 
 
 def _account_row(account: Goa.Account, on_removed) -> Gtk.Widget:
@@ -284,6 +304,10 @@ class InternetAccountsPage(Gtk.Box):
             self._empty_label.set_label('Could not connect to the account service.')
             self._empty_label.set_visible(True)
             return
+        # Refresh when an account is added elsewhere (e.g. the user just added
+        # Google in the System Accounts panel and came back).
+        for signal in ('account-added', 'account-removed', 'account-changed'):
+            self._client.connect(signal, lambda *_a: self._reload())
         self._reload()
 
     def _reload(self):
