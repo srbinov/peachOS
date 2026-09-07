@@ -169,11 +169,15 @@
 
 .peachos-picker-scroll {
     padding-right: 4px;
+    -st-vfade-offset: 28px;
 }
 
 .peachos-picker-grid {
     spacing: 0;
     padding-top: 4px;
+    /* the panel is bled ~46px past the screen edge -- keep the last row of
+       previews clear of the cut when scrolled to the end */
+    padding-bottom: 64px;
 }
 
 .peachos-picker-grid-row {
