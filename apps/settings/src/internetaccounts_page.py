@@ -172,6 +172,107 @@ class _AddMailAccountDialog(Gtk.Window):
         self.close()
 
 
+class _AddICloudDialog(Gtk.Window):
+    """iCloud via GOA's generic WebDAV provider: CalDAV at caldav.icloud.com +
+    CardDAV at contacts.icloud.com, Basic auth with an Apple ID and a 16-char
+    app-specific password (Apple blocks the main password for third parties)."""
+
+    HELP_URL = 'https://account.apple.com/account/manage'
+
+    def __init__(self, parent, on_added):
+        super().__init__(title='Add iCloud Account', transient_for=parent,
+                         modal=True, default_width=420, resizable=False)
+        self._on_added = on_added
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        for m in ('start', 'end', 'top', 'bottom'):
+            getattr(box, f'set_margin_{m}')(20)
+        self.set_child(box)
+
+        box.append(Gtk.Label(label='Apple ID', xalign=0))
+        self._id_entry = Gtk.Entry(placeholder_text='you@icloud.com',
+                                   input_purpose=Gtk.InputPurpose.EMAIL)
+        box.append(self._id_entry)
+
+        box.append(Gtk.Label(label='App-Specific Password', xalign=0))
+        self._pw_entry = Gtk.PasswordEntry(placeholder_text='xxxx-xxxx-xxxx-xxxx',
+                                           show_peek_icon=True)
+        box.append(self._pw_entry)
+
+        help_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        help_row.append(Gtk.Label(
+            label='Apple requires an app-specific password.', xalign=0,
+            hexpand=True, css_classes=['caption', 'dim-label']))
+        help_link = Gtk.LinkButton(uri=self.HELP_URL, label='Generate one',
+                                   css_classes=['caption'])
+        help_row.append(help_link)
+        box.append(help_row)
+
+        box.append(Gtk.Label(
+            label='Syncs Calendar, Reminders and Contacts. Photos and Mail are '
+                  'not available over this connection.',
+            xalign=0, wrap=True, css_classes=['caption', 'dim-label']))
+
+        self._error_label = Gtk.Label(wrap=True, xalign=0, css_classes=['error'],
+                                      visible=False)
+        box.append(self._error_label)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+                      halign=Gtk.Align.END)
+        cancel = Gtk.Button(label='Cancel')
+        cancel.connect('clicked', lambda *_a: self.close())
+        row.append(cancel)
+        self._add_btn = Gtk.Button(label='Add Account',
+                                   css_classes=['suggested-action'])
+        self._add_btn.connect('clicked', self._on_add)
+        row.append(self._add_btn)
+        box.append(row)
+
+    def _on_add(self, _btn):
+        apple_id = self._id_entry.get_text().strip()
+        password = self._pw_entry.get_text().replace(' ', '')
+        if not apple_id or not password:
+            self._error_label.set_label('Enter your Apple ID and an app-specific password.')
+            self._error_label.set_visible(True)
+            return
+
+        credentials = {'password': GLib.Variant('s', password)}
+        details = {
+            'Enabled': 'true',
+            'CalendarEnabled': 'true',
+            'ContactsEnabled': 'true',
+            'FilesEnabled': 'false',
+            'CalDavUri': 'https://caldav.icloud.com',
+            'CardDavUri': 'https://contacts.icloud.com',
+            'Uri': 'https://caldav.icloud.com',
+            'username': apple_id,
+            'AcceptSslErrors': 'false',
+        }
+
+        self._add_btn.set_sensitive(False)
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        try:
+            bus.call_sync(
+                'org.gnome.OnlineAccounts', '/org/gnome/OnlineAccounts/Manager',
+                'org.gnome.OnlineAccounts.Manager', 'AddAccount',
+                GLib.Variant('(sssa{sv}a{ss})',
+                             ('webdav', apple_id, apple_id, credentials, details)),
+                GLib.VariantType('(o)'), Gio.DBusCallFlags.NONE, 60000, None,
+            )
+        except GLib.Error as e:
+            self._add_btn.set_sensitive(True)
+            msg = e.message
+            if 'auth' in msg.lower() or '401' in msg:
+                msg = ('Sign-in failed. Check the Apple ID and that the '
+                       'app-specific password is current.')
+            self._error_label.set_label(msg)
+            self._error_label.set_visible(True)
+            return
+
+        self._on_added()
+        self.close()
+
+
 class _AddAccountDialog(Gtk.Window):
     def __init__(self, parent, on_added):
         super().__init__(
@@ -206,6 +307,22 @@ class _AddAccountDialog(Gtk.Window):
         mail_row.connect('clicked', self._on_mail_clicked)
         box.append(mail_row)
 
+        icloud_row = Gtk.Button(css_classes=['flat'])
+        ic_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        for m in ('start', 'end', 'top', 'bottom'):
+            getattr(ic_content, f'set_margin_{m}')(8)
+        ic_icon = Gtk.Image.new_from_icon_name('applications-internet')
+        ic_icon.set_pixel_size(28)
+        ic_content.append(ic_icon)
+        ic_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+        ic_text.append(Gtk.Label(label='iCloud', xalign=0))
+        ic_text.append(Gtk.Label(label='Calendar, Reminders, Contacts', xalign=0,
+                                 css_classes=['caption', 'dim-label']))
+        ic_content.append(ic_text)
+        icloud_row.set_child(ic_content)
+        icloud_row.connect('clicked', self._on_icloud_clicked)
+        box.append(icloud_row)
+
         native_google = google_signin.goa_google_creds() is not None
         for provider_name, icon_name in SYSTEM_ACCOUNT_PROVIDERS:
             is_google = provider_name == 'Google'
@@ -237,6 +354,10 @@ class _AddAccountDialog(Gtk.Window):
         self.close()
         dialog = _AddMailAccountDialog(self._parent, on_added=self._on_added)
         dialog.present()
+
+    def _on_icloud_clicked(self, _btn):
+        self.close()
+        _AddICloudDialog(self._parent, on_added=self._on_added).present()
 
     def _on_system_clicked(self, _btn):
         self.close()
