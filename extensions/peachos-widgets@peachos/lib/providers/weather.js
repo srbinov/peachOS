@@ -204,6 +204,54 @@ export class WeatherProvider {
         return this._loc?.name || this._settings.get_string('weather-location-name');
     }
 
+    get autoLocation() {
+        return this._auto;
+    }
+
+    get locationName() {
+        return this._locName();
+    }
+
+    /** Toggle IP auto-location on/off (persisted); refetches immediately. */
+    setAutoLocation(on) {
+        this._auto = !!on;
+        this._loc = null;
+        this._settings.set_boolean('weather-auto-location', this._auto);
+        if (this._auto)
+            this._resolveLocation();
+        else
+            this.refresh();
+    }
+
+    /** Pin a manually chosen place (turns auto-location off). */
+    setManualLocation(lat, lon, name) {
+        this._auto = false;
+        this._loc = null;
+        this._settings.set_boolean('weather-auto-location', false);
+        this._settings.set_double('weather-latitude', lat);
+        this._settings.set_double('weather-longitude', lon);
+        this._settings.set_string('weather-location-name', name);
+        this.refresh();
+    }
+
+    /** Open-Meteo geocoding search -> cb([{lat, lon, name, label}]). */
+    geocode(query, cb) {
+        const q = encodeURIComponent((query || '').trim());
+        if (!q) {
+            cb([]);
+            return;
+        }
+        this._fetchJSON(
+            'https://geocoding-api.open-meteo.com/v1/search'
+            + `?name=${q}&count=6&language=en&format=json`,
+            j => cb((j && Array.isArray(j.results) ? j.results : []).map(r => ({
+                lat: r.latitude,
+                lon: r.longitude,
+                name: r.name,
+                label: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+            }))));
+    }
+
     get data() {
         return this._data;
     }

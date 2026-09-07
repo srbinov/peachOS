@@ -44,6 +44,9 @@ class WidgetPicker extends Clutter.Actor {
 
         this._buildContents();
         this._selectType(this._selectedType);
+
+        this._wxUnsub = this._ctx.weather?.subscribe(() => this._syncWeatherLoc());
+        this.connect('destroy', () => this._wxUnsub?.());
     }
 
     _buildContents() {
@@ -96,6 +99,9 @@ class WidgetPicker extends Clutter.Actor {
             style_class: 'peachos-picker-hint',
         }));
 
+        this._weatherLoc = this._buildWeatherLoc();
+        right.add_child(this._weatherLoc);
+
         this._scroll = new St.ScrollView({
             x_expand: true, y_expand: true,
             style_class: 'peachos-picker-scroll',
@@ -110,6 +116,105 @@ class WidgetPicker extends Clutter.Actor {
         right.add_child(this._scroll);
     }
 
+    // ---- weather location (Auto / Manual) -------------------------------
+
+    _buildWeatherLoc() {
+        const box = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'peachos-picker-weatherloc',
+            visible: false,
+        });
+
+        const head = new St.BoxLayout({style_class: 'peachos-picker-weatherloc-head'});
+        head.add_child(new St.Label({
+            text: 'Location', x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'peachos-picker-weatherloc-label',
+        }));
+        const seg = new St.BoxLayout({style_class: 'peachos-picker-modeseg'});
+        this._wxSeg = new Map();
+        for (const [key, label] of [['auto', 'Auto'], ['manual', 'Manual']]) {
+            const b = new St.Button({
+                style_class: 'peachos-picker-modeseg-btn',
+                child: new St.Label({text: label}),
+            });
+            b.connect('clicked', () => {
+                this._ctx.weather?.setAutoLocation(key === 'auto');
+                if (key === 'manual')
+                    this._wxEntry.grab_key_focus();
+                this._syncWeatherLoc();
+            });
+            seg.add_child(b);
+            this._wxSeg.set(key, b);
+        }
+        head.add_child(seg);
+        box.add_child(head);
+
+        this._wxManual = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'peachos-picker-wx-manual',
+            visible: false,
+        });
+        this._wxEntry = new St.Entry({
+            hint_text: 'Search for a city…',
+            style_class: 'peachos-picker-wx-entry',
+            x_expand: true, can_focus: true,
+        });
+        this._wxEntry.clutter_text.connect('activate', () => {
+            const q = this._wxEntry.get_text();
+            this._ctx.weather?.geocode(q, results => this._showWxResults(results));
+        });
+        this._wxManual.add_child(this._wxEntry);
+        this._wxResults = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'peachos-picker-wx-results',
+        });
+        this._wxManual.add_child(this._wxResults);
+        box.add_child(this._wxManual);
+
+        this._wxCurrent = new St.Label({style_class: 'peachos-picker-wx-current'});
+        box.add_child(this._wxCurrent);
+
+        return box;
+    }
+
+    _showWxResults(results) {
+        this._wxResults.destroy_all_children();
+        if (!results.length) {
+            this._wxResults.add_child(new St.Label({
+                text: 'No matches', style_class: 'peachos-picker-wx-result',
+            }));
+            return;
+        }
+        for (const r of results) {
+            const b = new St.Button({
+                style_class: 'peachos-picker-wx-result',
+                child: new St.Label({text: r.label}),
+                x_expand: true,
+            });
+            b.connect('clicked', () => {
+                this._ctx.weather?.setManualLocation(r.lat, r.lon, r.label);
+                this._wxEntry.set_text('');
+                this._wxResults.destroy_all_children();
+                this._syncWeatherLoc();
+            });
+            this._wxResults.add_child(b);
+        }
+    }
+
+    _syncWeatherLoc() {
+        if (!this._weatherLoc)
+            return;
+        const wx = this._ctx.weather;
+        const auto = wx ? wx.autoLocation : true;
+        for (const [k, b] of this._wxSeg)
+            b[(k === 'auto') === auto ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+        this._wxManual.visible = !auto;
+        this._wxCurrent.text = wx
+            ? (auto ? `Using your location · ${wx.locationName}` : `Showing · ${wx.locationName}`)
+            : '';
+    }
+
     _selectType(type) {
         this._selectedType = type;
         const def = REGISTRY[type];
@@ -117,6 +222,10 @@ class WidgetPicker extends Clutter.Actor {
 
         for (const [t, btn] of this._railButtons)
             btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+
+        this._weatherLoc.visible = type === 'weather';
+        if (type === 'weather')
+            this._syncWeatherLoc();
 
         this._grid.destroy_all_children();
 
