@@ -13,6 +13,7 @@ import {DigitalClock, AnalogClock} from '../widgets/clock.js';
 import {CityClock} from '../widgets/cityClock.js';
 import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
+import {RemindersWidget} from '../widgets/reminders.js';
 
 export const UNIT = 170;          // square widget side, px
 export const ROW_GAP = 8;         // gap a row spans (matches widgetLayer GAP)
@@ -88,6 +89,20 @@ export const REGISTRY = {
             agenda: {
                 name: 'Agenda', shape: 'row',
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'agenda'),
+            },
+        },
+    },
+    reminders: {
+        name: 'Reminders',
+        appIcon: 'org.gnome.Todo',
+        variants: {
+            list: {
+                name: 'List', shape: 'square',
+                make: (parent, ctx, size) => new RemindersWidget(parent, ctx, size, 'list'),
+            },
+            wide: {
+                name: 'Wide', shape: 'row',
+                make: (parent, ctx, size) => new RemindersWidget(parent, ctx, size, 'wide'),
             },
         },
     },

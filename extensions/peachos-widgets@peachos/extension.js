@@ -19,6 +19,7 @@ import {invalidateWallpaper, clearCropCache} from './lib/wallpaperCrop.js';
 import {WeatherProvider} from './lib/providers/weather.js';
 import {CalendarSource} from './lib/providers/calendar.js';
 import {GoogleCalendarSource} from './lib/providers/googleCalendar.js';
+import {RemindersSource} from './lib/providers/reminders.js';
 
 export default class PeachosWidgetsExtension extends Extension {
     enable() {
@@ -42,12 +43,14 @@ export default class PeachosWidgetsExtension extends Extension {
             this._weather = new WeatherProvider(this._settings);
             this._calendar = new CalendarSource();
             this._gcal = new GoogleCalendarSource();
+            this._reminders = new RemindersSource();
 
             const ctx = {
                 settings: this._settings,
                 weather: this._weather,
                 calendar: this._calendar,
                 gcal: this._gcal,
+                reminders: this._reminders,
                 path: this.path,
             };
 
@@ -97,6 +100,7 @@ export default class PeachosWidgetsExtension extends Extension {
         this._weather?.destroy();
         this._calendar?.destroy();
         this._gcal?.destroy();
+        this._reminders?.destroy();
         clearCropCache();
 
         this._editMode = null;
@@ -104,6 +108,7 @@ export default class PeachosWidgetsExtension extends Extension {
         this._weather = null;
         this._calendar = null;
         this._gcal = null;
+        this._reminders = null;
         this._settings = null;
         this._bgSettings = null;
         this._ifaceSettings = null;
