@@ -105,6 +105,7 @@ class GoogleSignIn:
     def __init__(self, on_done):
         self._on_done = on_done
         self._cancelled = False
+        self._done = False
         self._httpd = None
         self._creds = goa_google_creds()
 
@@ -114,9 +115,10 @@ class GoogleSignIn:
 
     def cancel(self):
         self._cancelled = True
+        # close the listening socket so the worker's blocking accept() unblocks
         if self._httpd:
             try:
-                self._httpd.shutdown()
+                self._httpd.socket.close()
             except Exception:
                 pass
 
@@ -144,13 +146,30 @@ class GoogleSignIn:
             'prompt': 'consent',
         })
 
-        threading.Thread(target=self._run, args=(url,), daemon=True).start()
+        # Open the browser once, here on the main thread. (Doing this from an
+        # idle callback that returns a truthy value re-fires every loop and
+        # spawns a browser tab each time -- do not.)
+        self._open_browser(url)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _open_browser(self, url):
+        if getattr(self, '_browser_opened', False):
+            return
+        self._browser_opened = True
+        try:
+            Gio.AppInfo.launch_default_for_uri(url, None)
+            return
+        except GLib.Error:
+            pass
+        try:
+            Gio.Subprocess.new(['xdg-open', url], Gio.SubprocessFlags.NONE)
+        except GLib.Error:
+            pass
 
     # --- worker thread ------------------------------------------------
 
-    def _run(self, url):
+    def _run(self):
         try:
-            GLib.idle_add(lambda: Gio.AppInfo.launch_default_for_uri(url, None))
             self._httpd.handle_request()  # blocks until the redirect (or timeout)
             if self._cancelled:
                 return
@@ -228,4 +247,12 @@ class GoogleSignIn:
         )
 
     def _finish(self, ok, detail):
-        GLib.idle_add(self._on_done, ok, detail)
+        if self._done or self._cancelled:
+            return
+        self._done = True
+
+        def deliver():
+            self._on_done(ok, detail)
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(deliver)
