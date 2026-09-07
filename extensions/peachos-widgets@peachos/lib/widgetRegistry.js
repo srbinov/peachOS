@@ -3,9 +3,10 @@
 // type -> { name, appIcon (themed icon name, resolves in the MacTahoe theme),
 //           variants: { id -> { name, shape, configurable?, make } } }
 //
-// There are exactly two footprints and one fixed size:
+// There are three footprints and one fixed size:
 //   'square' -- UNIT x UNIT
-//   'row'    -- (UNIT*2 + GAP) x UNIT   (double width, same height, same corner)
+//   'row'    -- (UNIT*2 + GAP) x UNIT              (double width, same height)
+//   'grid'   -- (UNIT*2 + GAP) x (UNIT*2 + GAP)    (2x2)
 // Every widget's layout is derived from those pixels (KDE-style).
 
 import {DigitalClock, AnalogClock} from '../widgets/clock.js';
@@ -18,8 +19,13 @@ export const ROW_GAP = 8;         // gap a row spans (matches widgetLayer GAP)
 const RADIUS = Math.round(UNIT * 0.24);
 
 function shapeSize(shape) {
-    const w = shape === 'row' ? UNIT * 2 + ROW_GAP : UNIT;
-    return {w, h: UNIT, radius: RADIUS};
+    const wide = shape === 'row' || shape === 'grid';
+    const tall = shape === 'grid';
+    return {
+        w: wide ? UNIT * 2 + ROW_GAP : UNIT,
+        h: tall ? UNIT * 2 + ROW_GAP : UNIT,
+        radius: RADIUS,
+    };
 }
 
 export const REGISTRY = {
@@ -62,8 +68,12 @@ export const REGISTRY = {
                 make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'small'),
             },
             forecast: {
-                name: 'Forecast', shape: 'row',
+                name: 'Hourly', shape: 'row',
                 make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'big'),
+            },
+            week: {
+                name: 'Forecast', shape: 'grid',
+                make: (parent, ctx, size) => new WeatherWidget(parent, ctx, size, 'full'),
             },
         },
     },

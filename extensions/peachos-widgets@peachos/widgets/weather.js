@@ -66,7 +66,9 @@ export class WeatherWidget {
                 this._w * 0.1, this._h / 2 - 10);
             return;
         }
-        if (this._mode === 'big')
+        if (this._mode === 'full')
+            this._renderFull(data);
+        else if (this._mode === 'big')
             this._renderBig(data);
         else
             this._renderSmall(data);
@@ -141,37 +143,32 @@ export class WeatherWidget {
         this._add(info, m, Math.round(h * 0.55));
     }
 
-    // Row shape (two squares wide): header block + an hourly strip, like the
-    // Apple Weather medium widget.
-    _renderBig(d) {
-        const w = this._w;
-        const h = this._h;
-        const m = Math.round(h * 0.12);
-        const ls = Math.max(11, Math.round(h * 0.076));
-
-        // Header left: city + big temperature.
+    // Shared header: city + big temperature (left), icon / condition / H:L
+    // (right, right-aligned in a box `rw` wide anchored to the right margin).
+    _header(d, ls, m, rw) {
         this._add(this._txt(d.name, FONT.display, ls * 1.05), m, m);
         this._add(this._txt(`${d.temp}°`, FONT.displayThin, ls * 3.3),
             m - Math.round(ls * 0.05), m + Math.round(ls * 1.0));
 
-        // Header right: icon, condition, H/L -- right-aligned.
-        const iconSize = Math.round(ls * 2.5);
         const right = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            width: Math.round(ls * 8.5),
+            width: rw,
             style: `spacing: ${Math.round(ls * 0.14)}px;`,
         });
         const rAlign = a => {
             a.x_align = Clutter.ActorAlign.END;
             return a;
         };
-        right.add_child(rAlign(this._icon(wmoIconName(d.code, d.isDay), iconSize)));
+        right.add_child(rAlign(this._icon(wmoIconName(d.code, d.isDay), Math.round(ls * 2.5))));
         right.add_child(rAlign(this._txt(wmoCondition(d.code), FONT.display, ls)));
-        right.add_child(rAlign(this._txt(`H:${d.hi}°  L:${d.lo}°`, FONT.display, ls * 0.95, 0.7)));
-        this._add(right, w - m - Math.round(ls * 8.5), m - Math.round(ls * 0.2));
+        right.add_child(rAlign(this._txt(
+            `H:${d.hi}°  L:${d.lo}°`, FONT.display, ls * 0.95, 0.7)));
+        this._add(right, this._w - m - rw, m - Math.round(ls * 0.2));
+    }
 
-        // Hourly strip along the bottom, with any sunrise/sunset slotted in.
-        const strip = new St.BoxLayout({width: w - 2 * m});
+    // Shared hourly strip (with any sunrise/sunset slotted in), `width` wide.
+    _hourlyStrip(d, ls, width) {
+        const strip = new St.BoxLayout({width});
         const slots = (d.strip && d.strip.length ? d.strip : d.hours).slice(0, 6);
         for (const slot of slots) {
             const col = new St.BoxLayout({
@@ -198,7 +195,81 @@ export class WeatherWidget {
             }
             strip.add_child(col);
         }
-        this._add(strip, m, h - m - Math.round(ls * 4.3));
+        return strip;
+    }
+
+    _sep(width) {
+        return new St.Widget({
+            width, height: 1,
+            style: `background-color: rgba(${this._fg},0.16);`,
+        });
+    }
+
+    // Row shape (two squares wide): header block + an hourly strip.
+    _renderBig(d) {
+        const h = this._h;
+        const m = Math.round(h * 0.12);
+        const ls = Math.max(11, Math.round(h * 0.076));
+        this._header(d, ls, m, Math.round(ls * 8.5));
+        this._add(this._hourlyStrip(d, ls, this._w - 2 * m),
+            m, h - m - Math.round(ls * 4.3));
+    }
+
+    // Grid shape (2x2): header + hourly strip + a 5-day forecast with range
+    // bars, like the Apple Weather large widget.
+    _renderFull(d) {
+        const w = this._w;
+        const h = this._h;
+        const m = Math.round(h * 0.062);
+        const ls = Math.max(11, Math.round(h * 0.041));
+
+        this._header(d, ls, m, Math.round(ls * 9));
+
+        this._add(this._sep(w - 2 * m), m, Math.round(h * 0.35));
+        this._add(this._hourlyStrip(d, ls, w - 2 * m), m, Math.round(h * 0.38));
+        this._add(this._sep(w - 2 * m), m, Math.round(h * 0.57));
+
+        // Next five days (skip today, weekday labels), range bars scaled to the
+        // week's own min/max.
+        const week = (d.days ?? []).slice(1, 6);
+        if (!week.length)
+            return;
+        const wkLo = Math.min(...week.map(x => x.lo));
+        const wkHi = Math.max(...week.map(x => x.hi));
+        const span = Math.max(1, wkHi - wkLo);
+        const y = Math.round(h * 0.60);
+        const rowStep = Math.round((h - m - y) / week.length);
+        const barX = m + Math.round(ls * 6.4);
+        const barRight = w - m - Math.round(ls * 3.2);
+        const barW = Math.max(20, barRight - barX);
+        const barH = Math.round(ls * 0.34);
+
+        week.forEach((day, i) => {
+            const ry = y + i * rowStep + Math.round((rowStep - ls * 1.4) / 2);
+            this._add(this._txt(day.label, FONT.display, ls), m, ry);
+            this._add(this._icon(wmoIconName(day.code, true), Math.round(ls * 1.5)),
+                m + Math.round(ls * 2.3), ry - Math.round(ls * 0.25));
+            this._add(this._txt(`${day.lo}°`, FONT.display, ls, 0.6),
+                m + Math.round(ls * 4.2), ry);
+
+            const track = new St.Widget({
+                layout_manager: new Clutter.BinLayout(),
+                width: barW, height: barH,
+                style: `background-color: rgba(${this._fg},0.14); border-radius: ${barH}px;`,
+            });
+            const fx = Math.round(((day.lo - wkLo) / span) * barW);
+            const fw = Math.max(barH, Math.round(((day.hi - day.lo) / span) * barW));
+            track.add_child(new St.Widget({
+                width: fw, height: barH,
+                x_align: Clutter.ActorAlign.START,
+                style: `margin-left: ${Math.min(fx, barW - fw)}px; `
+                    + `background-color: rgba(${this._fg},0.55); border-radius: ${barH}px;`,
+            }));
+            this._add(track, barX, ry + Math.round(ls * 0.28));
+
+            this._add(this._txt(`${day.hi}°`, FONT.display, ls),
+                barRight + Math.round(ls * 0.5), ry);
+        });
     }
 
     destroy() {

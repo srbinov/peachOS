@@ -242,7 +242,7 @@ export class WeatherProvider {
             + '&hourly=temperature_2m,weather_code'
             + '&daily=weather_code,temperature_2m_max,temperature_2m_min,'
             + 'precipitation_probability_max,sunrise,sunset'
-            + `&temperature_unit=${unit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=5`;
+            + `&temperature_unit=${unit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=8`;
 
         const msg = Soup.Message.new('GET', url);
         this._session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null, (source, result) => {
