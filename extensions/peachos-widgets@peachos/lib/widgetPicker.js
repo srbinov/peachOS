@@ -40,11 +40,15 @@ class WidgetPicker extends Clutter.Actor {
         this._selectedType = null;   // null == "All Widgets"
         this._query = '';
 
+        // A drawer hinged to the bottom edge: centred, and bled past the
+        // bottom of the screen so its lower corners are off-screen and it
+        // reads as "coming out of" the desktop.
         const mon = Main.layoutManager.primaryMonitor;
-        this._pw = Math.round(Math.min(1120, Math.max(760, mon.width * 0.64)));
-        this._ph = Math.round(Math.min(720, Math.max(460, mon.height * 0.64)));
+        const BLEED = 46;
+        this._pw = Math.round(Math.min(1180, Math.max(820, mon.width * 0.66)));
+        this._ph = Math.round(Math.min(840, Math.max(520, mon.height * 0.82)));
         this._px = mon.x + Math.round((mon.width - this._pw) / 2);
-        this._py = mon.y + Math.round((mon.height - this._ph) * 0.6);
+        this._py = mon.y + mon.height - this._ph + BLEED;
 
         this._glass = makeLiquidGlass({
             innerW: this._pw, innerH: this._ph,
@@ -59,13 +63,12 @@ class WidgetPicker extends Clutter.Actor {
         this._wxUnsub = this._ctx.weather?.subscribe(() => this._syncWeatherLoc());
         this.connect('destroy', () => this._wxUnsub?.());
 
-        // rise from the desktop
+        // slide up out of the bottom edge
         const g = this._glass.widget;
-        g.set_pivot_point(0.5, 1);
-        g.translation_y = 60;
+        g.translation_y = 210;
         g.opacity = 0;
         g.ease({
-            translation_y: 0, opacity: 255, duration: 280,
+            translation_y: 0, opacity: 255, duration: 300,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
     }
@@ -162,10 +165,17 @@ class WidgetPicker extends Clutter.Actor {
         const btn = new St.Button({
             style_class: 'peachos-picker-side-item',
             can_focus: true, x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
         });
-        const box = new St.BoxLayout({style_class: 'peachos-picker-side-item-box'});
+        const box = new St.BoxLayout({
+            style_class: 'peachos-picker-side-item-box',
+            x_expand: true, x_align: Clutter.ActorAlign.FILL,
+        });
         box.add_child(new St.Icon({icon_name: icon, icon_size: 18, y_align: CENTER}));
-        box.add_child(new St.Label({text: label, x_expand: true, y_align: CENTER}));
+        box.add_child(new St.Label({
+            text: label, x_expand: true, y_align: CENTER,
+            x_align: Clutter.ActorAlign.START,
+        }));
         btn.set_child(box);
         btn.connect('clicked', () => this._select(type));
         this._sideItems.set(type, btn);
