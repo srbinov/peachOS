@@ -2,11 +2,9 @@
 // widget uses (Evolution Data Server / GNOME Online Accounts), but filtered to
 // the calendars that belong to a Google account.
 //
-// peachOS can't add a Google account itself (GOA's public API has no OAuth2
-// browser flow and Google's client creds live inside gnome-control-center), so
-// `connected` gates an empty state whose button launches
-// `gnome-control-center online-accounts`. Once the account is added there, EDS
-// syncs the events and GOA refreshes the tokens -- nothing secret ships here.
+// `connected` gates an empty state whose button opens peachOS Settings ->
+// Internet Accounts, where the native Google sign-in lives. Once the account
+// is added, EDS syncs the events and GOA refreshes the tokens.
 //
 // Same requestRange discipline as lib/providers/calendar.js: reload only from
 // _refreshRange(), never from getEvents().
@@ -245,13 +243,17 @@ export class GoogleCalendarSource {
     }
 }
 
-/** Launch the GNOME Online Accounts panel so the user can add Google. */
+/** Open peachOS Settings -> Internet Accounts to connect Google. */
 export function openAccountSettings() {
-    try {
-        Gio.Subprocess.new(
-            ['gnome-control-center', 'online-accounts'],
-            Gio.SubprocessFlags.NONE);
-    } catch (e) {
-        logError(e, '[peachos-widgets] could not open online accounts');
+    for (const argv of [
+        ['peachos-settings', 'internetaccounts'],
+        ['gnome-control-center', 'online-accounts'],
+    ]) {
+        try {
+            Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+            return;
+        } catch (e) {
+            // try the next
+        }
     }
 }

@@ -5,6 +5,7 @@ import gi
 gi.require_version('Goa', '1.0')
 from gi.repository import Gio, GLib, Goa, Gtk
 
+import google_signin
 from widgets import make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
@@ -179,13 +180,17 @@ class _AddAccountDialog(Gtk.Window):
         )
         self._parent = parent
         self._on_added = on_added
+        self._signin = None
+
+        self._stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.set_child(self._stack)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_margin_start(12)
         box.set_margin_end(12)
         box.set_margin_top(12)
         box.set_margin_bottom(12)
-        self.set_child(box)
+        self._stack.add_named(box, 'list')
 
         mail_row = Gtk.Button(css_classes=['flat'])
         mail_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -201,7 +206,9 @@ class _AddAccountDialog(Gtk.Window):
         mail_row.connect('clicked', self._on_mail_clicked)
         box.append(mail_row)
 
+        native_google = google_signin.goa_google_creds() is not None
         for provider_name, icon_name in SYSTEM_ACCOUNT_PROVIDERS:
+            is_google = provider_name == 'Google'
             prov_row = Gtk.Button(css_classes=['flat'])
             content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             content.set_margin_start(8)
@@ -214,12 +221,16 @@ class _AddAccountDialog(Gtk.Window):
             text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
             text_box.append(Gtk.Label(label=provider_name, xalign=0))
             text_box.append(Gtk.Label(
-                label='Opens System Accounts to sign in', xalign=0,
-                css_classes=['caption', 'dim-label']))
+                label='Sign in with your browser' if (is_google and native_google)
+                else 'Opens System Accounts to sign in',
+                xalign=0, css_classes=['caption', 'dim-label']))
             content.append(text_box)
             content.append(Gtk.Image.new_from_icon_name('external-link-symbolic'))
             prov_row.set_child(content)
-            prov_row.connect('clicked', self._on_system_clicked)
+            if is_google and native_google:
+                prov_row.connect('clicked', self._on_google_clicked)
+            else:
+                prov_row.connect('clicked', self._on_system_clicked)
             box.append(prov_row)
 
     def _on_mail_clicked(self, _btn):
@@ -230,6 +241,54 @@ class _AddAccountDialog(Gtk.Window):
     def _on_system_clicked(self, _btn):
         self.close()
         _open_system_accounts()
+
+    # --- native Google sign-in ---------------------------------------
+
+    def _on_google_clicked(self, _btn):
+        self._stack.add_named(self._build_status_page(), 'status')
+        self._stack.set_visible_child_name('status')
+        self._signin = google_signin.GoogleSignIn(on_done=self._on_google_done)
+        self._signin.start()
+
+    def _build_status_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
+                      valign=Gtk.Align.CENTER)
+        box.set_margin_start(28)
+        box.set_margin_end(28)
+        box.set_margin_top(28)
+        box.set_margin_bottom(20)
+        spinner = Gtk.Spinner(width_request=32, height_request=32,
+                              halign=Gtk.Align.CENTER)
+        spinner.start()
+        box.append(spinner)
+        box.append(Gtk.Label(label='Continue in your browser',
+                             css_classes=['title-4']))
+        box.append(Gtk.Label(
+            label='A Google sign-in page has opened. Come back here when '
+                  'you’re done.',
+            wrap=True, justify=Gtk.Justification.CENTER, css_classes=['dim-label']))
+        self._status_error = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
+                                       css_classes=['error'], visible=False)
+        box.append(self._status_error)
+        cancel = Gtk.Button(label='Cancel', halign=Gtk.Align.CENTER,
+                            css_classes=['flat'])
+        cancel.connect('clicked', lambda _b: self._cancel_google())
+        box.append(cancel)
+        return box
+
+    def _cancel_google(self):
+        if self._signin:
+            self._signin.cancel()
+        self.close()
+
+    def _on_google_done(self, ok, detail):
+        if ok:
+            self._on_added()
+            self.close()
+        else:
+            self._status_error.set_label(f'Sign-in failed: {detail}')
+            self._status_error.set_visible(True)
+        return GLib.SOURCE_REMOVE
 
 
 def _account_row(account: Goa.Account, on_removed) -> Gtk.Widget:
