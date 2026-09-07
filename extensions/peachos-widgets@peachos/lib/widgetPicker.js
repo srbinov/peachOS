@@ -46,7 +46,7 @@ class WidgetPicker extends Clutter.Actor {
         const mon = Main.layoutManager.primaryMonitor;
         const BLEED = 46;
         this._pw = Math.round(Math.min(1180, Math.max(820, mon.width * 0.66)));
-        this._ph = Math.round(Math.min(840, Math.max(520, mon.height * 0.82)));
+        this._ph = Math.round(Math.min(470, Math.max(320, mon.height * 0.44)));
         this._px = mon.x + Math.round((mon.width - this._pw) / 2);
         this._py = mon.y + mon.height - this._ph + BLEED;
 
@@ -65,7 +65,7 @@ class WidgetPicker extends Clutter.Actor {
 
         // slide up out of the bottom edge
         const g = this._glass.widget;
-        g.translation_y = 210;
+        g.translation_y = Math.round(this._ph * 0.5);
         g.opacity = 0;
         g.ease({
             translation_y: 0, opacity: 255, duration: 300,
