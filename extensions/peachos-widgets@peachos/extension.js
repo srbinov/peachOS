@@ -17,8 +17,7 @@ import {WidgetLayer} from './lib/widgetLayer.js';
 import {EditMode} from './lib/editMode.js';
 import {invalidateWallpaper, clearCropCache} from './lib/wallpaperCrop.js';
 import {WeatherProvider} from './lib/providers/weather.js';
-import {CalendarSource} from './lib/providers/calendar.js';
-import {GoogleCalendarSource} from './lib/providers/googleCalendar.js';
+import {ICloudCalendarSource, GoogleCalendarSource} from './lib/providers/edsCalendar.js';
 import {RemindersSource} from './lib/providers/reminders.js';
 
 export default class PeachosWidgetsExtension extends Extension {
@@ -41,7 +40,7 @@ export default class PeachosWidgetsExtension extends Extension {
     _build() {
         try {
             this._weather = new WeatherProvider(this._settings);
-            this._calendar = new CalendarSource();
+            this._calendar = new ICloudCalendarSource();
             this._gcal = new GoogleCalendarSource();
             this._reminders = new RemindersSource();
 

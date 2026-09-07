@@ -14,7 +14,7 @@ import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 
 import {formatEventTime} from '../lib/providers/calendar.js';
-import {openAccountSettings} from '../lib/providers/googleCalendar.js';
+import {openAccountSettings} from '../lib/providers/edsCalendar.js';
 import {FONT, fontStyle, fontDesc, Pango} from '../lib/fonts.js';
 
 // accent per brand: [glass, dark, light] rgb triplets (0-1)
