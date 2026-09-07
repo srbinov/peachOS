@@ -38,55 +38,103 @@
     background-color: rgba(220, 60, 55, 0.95);
 }
 
-/* ---- picker ------------------------------------------------------- */
+/* ---- picker (widget gallery) ------------------------------------- */
 
 .peachos-picker-body {
     spacing: 0;
+    font-family: "PeachDisplay", sans-serif;
+    color: #ffffff;
 }
 
-.peachos-picker-rail {
-    spacing: 10px;
+.peachos-picker-side {
+    spacing: 4px;
     padding: 16px 12px;
     background-color: rgba(0, 0, 0, 0.16);
 }
 
-.peachos-picker-rail-btn {
-    width: 46px;
-    height: 46px;
-    border-radius: 13px;
-    background-color: rgba(255, 255, 255, 0.06);
-}
-
-.peachos-picker-rail-btn:hover {
-    background-color: rgba(255, 255, 255, 0.14);
-}
-
-.peachos-picker-rail-btn.selected {
-    background-color: rgba(255, 255, 255, 0.26);
-}
-
-.peachos-picker-done {
-    width: 46px;
-    height: 46px;
-    border-radius: 13px;
+.peachos-picker-search {
+    background-color: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 9px;
+    padding: 5px 9px;
+    margin-bottom: 8px;
+    font-size: 12px;
     color: #ffffff;
-    background-color: rgba(60, 175, 95, 0.5);
 }
 
-.peachos-picker-done:hover {
-    background-color: rgba(60, 195, 105, 0.75);
+.peachos-picker-search:focus {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.peachos-picker-search StIcon {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.peachos-picker-side-scroll {
+    padding-right: 2px;
+}
+
+.peachos-picker-side-item {
+    border-radius: 9px;
+    padding: 0;
+}
+
+.peachos-picker-side-item-box {
+    spacing: 10px;
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.peachos-picker-side-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.peachos-picker-side-item.selected {
+    background-color: rgba(255, 255, 255, 0.16);
+    font-weight: 600;
 }
 
 .peachos-picker-main {
-    padding: 18px 20px;
+    padding: 18px 22px 14px 22px;
     spacing: 2px;
-    color: #ffffff;
-    font-family: "PeachDisplay", sans-serif;
+}
+
+.peachos-picker-head {
+    spacing: 8px;
 }
 
 .peachos-picker-title {
-    font-size: 19px;
+    font-size: 22px;
     font-weight: 700;
+}
+
+.peachos-picker-close {
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.peachos-picker-close:hover {
+    background-color: rgba(255, 255, 255, 0.24);
+}
+
+.peachos-picker-section {
+    spacing: 10px;
+    padding-bottom: 20px;
+}
+
+.peachos-picker-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0.55;
+}
+
+.peachos-picker-empty {
+    font-size: 13px;
+    opacity: 0.5;
+    padding: 20px 2px;
 }
 
 .peachos-picker-modeseg {
@@ -114,9 +162,9 @@
 }
 
 .peachos-picker-hint {
-    font-size: 11px;
-    opacity: 0.65;
-    padding-bottom: 12px;
+    font-size: 12px;
+    opacity: 0.55;
+    padding-bottom: 14px;
 }
 
 .peachos-picker-scroll {
@@ -124,7 +172,7 @@
 }
 
 .peachos-picker-grid {
-    spacing: 16px;
+    spacing: 0;
     padding-top: 4px;
 }
 

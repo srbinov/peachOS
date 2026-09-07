@@ -1,12 +1,10 @@
-// The widget picker: a bottom-left liquid-glass panel. Left rail = the app
-// icon per widget type; right = the bare previews for the selected type
-// (previews/<type>-<variant>.png, or the app icon if absent) -- no frame, no
-// label -- laid out at their true relative footprint so a row preview reads
-// twice as wide as a square one. Drag a preview onto the desktop to place it
-// (as a dark widget; change the look with the widget's own edit-mode toggle).
+// The widget gallery: a centred liquid-glass panel that rises from the desktop
+// in edit mode. Left sidebar = a search field, an "All Widgets" entry, then one
+// row per widget type (app icon + name). Right side = the bare previews for the
+// selection, grouped by type, each at its true relative footprint (a row reads
+// twice as wide as a square). Drag a preview onto the desktop to place it.
 
 import Clutter from 'gi://Clutter';
-import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
@@ -16,11 +14,12 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {makeLiquidGlass} from './liquidGlass.js';
 import {REGISTRY} from './widgetRegistry.js';
 
-const INSET = 20;
-const PU = 94;       // preview size for a square widget (px)
-const PGAP = 8;      // gap inside a preview footprint (matches the desktop grid)
-const CARD_GAP = 16; // gap between previews in the picker
+const PU = 100;        // preview size for a square widget (px)
+const PGAP = 8;        // gap inside a preview footprint (matches the desktop grid)
+const CARD_GAP = 16;   // gap between previews
+const SIDEBAR_W = 236;
 const PLACE_MODE = 'dark';
+const CENTER = Clutter.ActorAlign.CENTER;
 
 function previewDims(shape) {
     const wide = shape === 'row' || shape === 'grid';
@@ -38,26 +37,37 @@ class WidgetPicker extends Clutter.Actor {
         this._widgetLayer = widgetLayer;
         this._ctx = widgetLayer.ctx;
         this._callbacks = callbacks;
-        this._selectedType = Object.keys(REGISTRY)[0];
+        this._selectedType = null;   // null == "All Widgets"
+        this._query = '';
 
         const mon = Main.layoutManager.primaryMonitor;
-        this._pw = Math.round(Math.min(720, Math.max(560, mon.width * 0.38)));
-        this._ph = Math.round(Math.min(560, Math.max(420, mon.height * 0.46)));
-        this._px = mon.x + INSET;
-        this._py = mon.y + mon.height - this._ph - INSET;
+        this._pw = Math.round(Math.min(1120, Math.max(760, mon.width * 0.64)));
+        this._ph = Math.round(Math.min(720, Math.max(460, mon.height * 0.64)));
+        this._px = mon.x + Math.round((mon.width - this._pw) / 2);
+        this._py = mon.y + Math.round((mon.height - this._ph) * 0.6);
 
         this._glass = makeLiquidGlass({
             innerW: this._pw, innerH: this._ph,
-            x: this._px, y: this._py, radius: 46,
+            x: this._px, y: this._py, radius: 40,
         });
         this._glass.widget.reactive = true;
         this.add_child(this._glass.widget);
 
         this._buildContents();
-        this._selectType(this._selectedType);
+        this._select(null);
 
         this._wxUnsub = this._ctx.weather?.subscribe(() => this._syncWeatherLoc());
         this.connect('destroy', () => this._wxUnsub?.());
+
+        // rise from the desktop
+        const g = this._glass.widget;
+        g.set_pivot_point(0.5, 1);
+        g.translation_y = 60;
+        g.opacity = 0;
+        g.ease({
+            translation_y: 0, opacity: 255, duration: 280,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
     }
 
     _buildContents() {
@@ -67,51 +77,72 @@ class WidgetPicker extends Clutter.Actor {
         });
         this._glass.content.add_child(row);
 
-        this._rail = new St.BoxLayout({
+        // ---- sidebar --------------------------------------------------
+        const side = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            style_class: 'peachos-picker-rail',
+            style_class: 'peachos-picker-side',
             y_expand: true,
         });
-        row.add_child(this._rail);
+        side.width = SIDEBAR_W;
+        row.add_child(side);
 
-        this._railButtons = new Map();
-        for (const [type, def] of Object.entries(REGISTRY)) {
-            const btn = new St.Button({
-                style_class: 'peachos-picker-rail-btn',
-                child: new St.Icon({icon_name: def.appIcon, icon_size: 30}),
-                can_focus: true,
-            });
-            btn.connect('clicked', () => this._selectType(type));
-            this._rail.add_child(btn);
-            this._railButtons.set(type, btn);
-        }
-
-        this._rail.add_child(new St.Widget({y_expand: true}));
-
-        const done = new St.Button({
-            style_class: 'peachos-picker-done',
-            child: new St.Icon({icon_name: 'object-select-symbolic', icon_size: 20}),
-            can_focus: true,
+        this._search = new St.Entry({
+            hint_text: 'Search Widgets',
+            style_class: 'peachos-picker-search',
+            x_expand: true, can_focus: true,
         });
-        done.connect('clicked', () => this._callbacks.onDone());
-        this._rail.add_child(done);
+        this._search.set_primary_icon(new St.Icon({
+            icon_name: 'edit-find-symbolic', icon_size: 14,
+        }));
+        this._search.clutter_text.connect('text-changed', () => {
+            this._query = this._search.get_text().trim().toLowerCase();
+            this._renderPreviews();
+        });
+        side.add_child(this._search);
 
-        const right = new St.BoxLayout({
+        this._sideItems = new Map();
+        side.add_child(this._sideItem(null, 'All Widgets', 'view-app-grid-symbolic'));
+
+        const sideScroll = new St.ScrollView({
+            style_class: 'peachos-picker-side-scroll', y_expand: true,
+        });
+        sideScroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        const sideList = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
+        sideScroll.set_child(sideList);
+        side.add_child(sideScroll);
+        for (const [type, def] of Object.entries(REGISTRY))
+            sideList.add_child(this._sideItem(type, def.name, def.appIcon));
+
+        // ---- main ---------------------------------------------------
+        const main = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             x_expand: true, y_expand: true,
             style_class: 'peachos-picker-main',
         });
-        row.add_child(right);
+        row.add_child(main);
 
-        this._title = new St.Label({style_class: 'peachos-picker-title'});
-        right.add_child(this._title);
-        right.add_child(new St.Label({
+        const head = new St.BoxLayout({style_class: 'peachos-picker-head'});
+        this._title = new St.Label({
+            style_class: 'peachos-picker-title',
+            x_expand: true, y_align: CENTER,
+        });
+        head.add_child(this._title);
+        const close = new St.Button({
+            style_class: 'peachos-picker-close',
+            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 15}),
+            can_focus: true,
+        });
+        close.connect('clicked', () => this._callbacks.onDone());
+        head.add_child(close);
+        main.add_child(head);
+
+        main.add_child(new St.Label({
             text: 'Drag a widget onto the desktop',
             style_class: 'peachos-picker-hint',
         }));
 
         this._weatherLoc = this._buildWeatherLoc();
-        right.add_child(this._weatherLoc);
+        main.add_child(this._weatherLoc);
 
         this._scroll = new St.ScrollView({
             x_expand: true, y_expand: true,
@@ -124,10 +155,112 @@ class WidgetPicker extends Clutter.Actor {
             x_expand: true,
         });
         this._scroll.set_child(this._grid);
-        right.add_child(this._scroll);
+        main.add_child(this._scroll);
     }
 
-    // ---- weather location (Auto / Manual) -------------------------------
+    _sideItem(type, label, icon) {
+        const btn = new St.Button({
+            style_class: 'peachos-picker-side-item',
+            can_focus: true, x_expand: true,
+        });
+        const box = new St.BoxLayout({style_class: 'peachos-picker-side-item-box'});
+        box.add_child(new St.Icon({icon_name: icon, icon_size: 18, y_align: CENTER}));
+        box.add_child(new St.Label({text: label, x_expand: true, y_align: CENTER}));
+        btn.set_child(box);
+        btn.connect('clicked', () => this._select(type));
+        this._sideItems.set(type, btn);
+        return btn;
+    }
+
+    _select(type) {
+        this._selectedType = type;
+        for (const [t, btn] of this._sideItems)
+            btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+        this._title.text = type ? REGISTRY[type].name : 'All Widgets';
+        this._weatherLoc.visible = type === 'weather';
+        if (type === 'weather')
+            this._syncWeatherLoc();
+        this._renderPreviews();
+    }
+
+    _renderPreviews() {
+        this._grid.destroy_all_children();
+        const maxRowW = Math.max(PU * 2 + PGAP, this._pw - SIDEBAR_W - 76);
+
+        const types = Object.entries(REGISTRY)
+            .filter(([t]) => !this._selectedType || t === this._selectedType);
+
+        let any = false;
+        for (const [type, def] of types) {
+            const variants = Object.entries(def.variants).filter(([, vdef]) =>
+                !this._query ||
+                `${def.name} ${vdef.name}`.toLowerCase().includes(this._query));
+            if (!variants.length)
+                continue;
+            any = true;
+
+            const section = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style_class: 'peachos-picker-section',
+            });
+            section.add_child(new St.Label({
+                text: def.name, style_class: 'peachos-picker-section-title',
+            }));
+
+            let rowBox = null;
+            let rowW = 0;
+            for (const [variant, vdef] of variants) {
+                const {w, h} = previewDims(vdef.shape);
+                if (!rowBox || rowW + w > maxRowW) {
+                    rowBox = new St.BoxLayout({style_class: 'peachos-picker-grid-row'});
+                    section.add_child(rowBox);
+                    rowW = 0;
+                }
+                rowBox.add_child(this._makeCard(type, variant, w, h));
+                rowW += w + CARD_GAP;
+            }
+            this._grid.add_child(section);
+        }
+
+        if (!any) {
+            this._grid.add_child(new St.Label({
+                text: 'No widgets match your search',
+                style_class: 'peachos-picker-empty',
+            }));
+        }
+    }
+
+    _previewPath(type, variant) {
+        const p = GLib.build_filenamev(
+            [this._ctx.path, 'previews', `${type}-${variant}.png`]);
+        return GLib.file_test(p, GLib.FileTest.EXISTS) ? p : null;
+    }
+
+    _makeCard(type, variant, w, h) {
+        const card = new St.Widget({
+            width: w, height: h,
+            reactive: true, track_hover: true,
+            style_class: 'peachos-picker-preview',
+            layout_manager: new Clutter.BinLayout(),
+        });
+        const path = this._previewPath(type, variant);
+        if (path) {
+            card.set_style(
+                `background-image: url("file://${path}"); `
+                + 'background-size: contain; background-position: center;');
+        } else {
+            card.add_child(new St.Icon({
+                icon_name: REGISTRY[type].appIcon,
+                icon_size: Math.min(56, Math.round(Math.min(w, h) * 0.5)),
+                x_align: CENTER, y_align: CENTER,
+            }));
+        }
+        card.connect('button-press-event', (_a, event) =>
+            this._beginDrag(type, variant, event));
+        return card;
+    }
+
+    // ---- weather location (Auto / Manual) -----------------------------
 
     _buildWeatherLoc() {
         const box = new St.BoxLayout({
@@ -138,8 +271,7 @@ class WidgetPicker extends Clutter.Actor {
 
         const head = new St.BoxLayout({style_class: 'peachos-picker-weatherloc-head'});
         head.add_child(new St.Label({
-            text: 'Location', x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
+            text: 'Location', x_expand: true, y_align: CENTER,
             style_class: 'peachos-picker-weatherloc-label',
         }));
         const seg = new St.BoxLayout({style_class: 'peachos-picker-modeseg'});
@@ -226,67 +358,7 @@ class WidgetPicker extends Clutter.Actor {
             : '';
     }
 
-    _selectType(type) {
-        this._selectedType = type;
-        const def = REGISTRY[type];
-        this._title.text = def.name;
-
-        for (const [t, btn] of this._railButtons)
-            btn[t === type ? 'add_style_class_name' : 'remove_style_class_name']('selected');
-
-        this._weatherLoc.visible = type === 'weather';
-        if (type === 'weather')
-            this._syncWeatherLoc();
-
-        this._grid.destroy_all_children();
-
-        // Pack previews left-to-right at their true footprint, wrapping when a
-        // row would overflow the content width.
-        const maxRowW = Math.max(PU * 2 + PGAP, this._pw - 120);
-        let rowBox = null;
-        let rowW = 0;
-        for (const [variant, vdef] of Object.entries(def.variants)) {
-            const {w, h} = previewDims(vdef.shape);
-            if (!rowBox || rowW + w > maxRowW) {
-                rowBox = new St.BoxLayout({style_class: 'peachos-picker-grid-row'});
-                this._grid.add_child(rowBox);
-                rowW = 0;
-            }
-            rowBox.add_child(this._makeCard(type, variant, w, h));
-            rowW += w + CARD_GAP;
-        }
-    }
-
-    _previewPath(type, variant) {
-        const p = GLib.build_filenamev(
-            [this._ctx.path, 'previews', `${type}-${variant}.png`]);
-        return GLib.file_test(p, GLib.FileTest.EXISTS) ? p : null;
-    }
-
-    _makeCard(type, variant, w, h) {
-        const card = new St.Widget({
-            width: w, height: h,
-            reactive: true, track_hover: true,
-            style_class: 'peachos-picker-preview',
-            layout_manager: new Clutter.BinLayout(),
-        });
-        const path = this._previewPath(type, variant);
-        if (path) {
-            card.set_style(
-                `background-image: url("file://${path}"); `
-                + 'background-size: contain; background-position: center;');
-        } else {
-            card.add_child(new St.Icon({
-                icon_name: REGISTRY[type].appIcon,
-                icon_size: Math.min(56, Math.round(Math.min(w, h) * 0.5)),
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
-            }));
-        }
-        card.connect('button-press-event', (_a, event) =>
-            this._beginDrag(type, variant, event));
-        return card;
-    }
+    // ---- drag-out placement -----------------------------------------
 
     _panelRect() {
         return {x: this._glass.widget.x, y: this._glass.widget.y, w: this._pw, h: this._ph};
@@ -310,8 +382,7 @@ class WidgetPicker extends Clutter.Actor {
         } else {
             ghost.add_child(new St.Icon({
                 icon_name: def.appIcon, icon_size: 32,
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
+                x_align: CENTER, y_align: CENTER,
             }));
         }
         this._widgetLayer.layer.add_child(ghost);
