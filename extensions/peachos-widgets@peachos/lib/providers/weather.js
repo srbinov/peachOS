@@ -95,7 +95,7 @@ export function skyGradient(code, isDay) {
 // WMO code -> human condition label (ported from WeatherData.qml).
 export function wmoCondition(code) {
     const map = {
-        0: 'Clear', 1: 'Mostly Clear', 2: 'Partly Cloudy', 3: 'Cloudy',
+        0: 'Clear', 1: 'Mostly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
         45: 'Fog', 48: 'Rime Fog',
         51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle',
         56: 'Freezing Drizzle', 57: 'Freezing Drizzle',
