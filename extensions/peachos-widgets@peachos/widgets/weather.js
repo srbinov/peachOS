@@ -170,9 +170,10 @@ export class WeatherWidget {
         right.add_child(rAlign(this._txt(`H:${d.hi}°  L:${d.lo}°`, FONT.display, ls * 0.95, 0.7)));
         this._add(right, w - m - Math.round(ls * 8.5), m - Math.round(ls * 0.2));
 
-        // Hourly strip along the bottom.
+        // Hourly strip along the bottom, with any sunrise/sunset slotted in.
         const strip = new St.BoxLayout({width: w - 2 * m});
-        for (const slot of d.hours.slice(0, 6)) {
+        const slots = (d.strip && d.strip.length ? d.strip : d.hours).slice(0, 6);
+        for (const slot of slots) {
             const col = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
@@ -183,9 +184,18 @@ export class WeatherWidget {
                 a.x_align = Clutter.ActorAlign.CENTER;
                 return a;
             };
-            col.add_child(cAlign(this._txt(slot.hour, FONT.display, ls * 0.82, 0.7)));
-            col.add_child(cAlign(this._icon(wmoIconName(slot.code, d.isDay), Math.round(ls * 1.7))));
-            col.add_child(cAlign(this._txt(`${slot.temp}°`, FONT.display, ls * 0.95)));
+            if (slot.kind === 'sun') {
+                col.add_child(cAlign(this._txt(
+                    slot.type === 'sunrise' ? 'Sunrise' : 'Sunset',
+                    FONT.display, ls * 0.82, 0.7)));
+                col.add_child(cAlign(this._icon(slot.type, Math.round(ls * 1.7))));
+                col.add_child(cAlign(this._txt(slot.hour, FONT.display, ls * 0.82, 0.7)));
+            } else {
+                col.add_child(cAlign(this._txt(slot.hour, FONT.display, ls * 0.82, 0.7)));
+                col.add_child(cAlign(this._icon(
+                    wmoIconName(slot.code, slot.isDay ?? d.isDay), Math.round(ls * 1.7))));
+                col.add_child(cAlign(this._txt(`${slot.temp}°`, FONT.display, ls * 0.95)));
+            }
             strip.add_child(col);
         }
         this._add(strip, m, h - m - Math.round(ls * 4.3));

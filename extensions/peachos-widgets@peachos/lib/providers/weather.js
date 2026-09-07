@@ -32,11 +32,13 @@ export function wmoIconName(code, isDay = true) {
         return 'cloudy';
     if (code === 45 || code === 48)
         return 'fog';
-    if (code >= 51 && code <= 57)
+    if (code === 56 || code === 57 || code === 66 || code === 67)
+        return 'sleet';                               // freezing drizzle / rain
+    if (code >= 51 && code <= 55)
         return night ? 'nightdrizzle' : 'drizzle';
-    if (code === 61 || code === 63 || code === 66)
+    if (code === 61 || code === 63)
         return 'rain';
-    if (code === 65 || code === 67)
+    if (code === 65)
         return 'heavyrain';
     if (code === 71 || code === 73 || code === 75 || code === 85 || code === 86)
         return 'snow';
@@ -238,7 +240,8 @@ export class WeatherProvider {
             + '&current=temperature_2m,apparent_temperature,weather_code,is_day,'
             + 'precipitation,wind_speed_10m,wind_direction_10m'
             + '&hourly=temperature_2m,weather_code'
-            + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max'
+            + '&daily=weather_code,temperature_2m_max,temperature_2m_min,'
+            + 'precipitation_probability_max,sunrise,sunset'
             + `&temperature_unit=${unit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=5`;
 
         const msg = Soup.Message.new('GET', url);
@@ -280,19 +283,65 @@ export class WeatherProvider {
             };
         });
 
-        // Next 6 hourly slots from now.
+        // Sunrise / sunset events across the loaded days.
+        const sun = [];
+        (daily.time ?? []).forEach((_, i) => {
+            if (daily.sunrise?.[i])
+                sun.push({type: 'sunrise', time: new Date(daily.sunrise[i])});
+            if (daily.sunset?.[i])
+                sun.push({type: 'sunset', time: new Date(daily.sunset[i])});
+        });
+        sun.sort((a, b) => a.time - b.time);
+        // Daytime at instant t = the most recent sun event before t is a sunrise.
+        const isDaytime = t => {
+            let day = cur.is_day !== 0;
+            let seen = false;
+            for (const e of sun) {
+                if (e.time > t)
+                    break;
+                day = e.type === 'sunrise';
+                seen = true;
+            }
+            return seen ? day : cur.is_day !== 0;
+        };
+
+        // Next hourly slots from now (per-slot day/night from the sun table).
         const nowMs = Date.now();
+        const hourFmt = {hour: 'numeric'};
         const hours = [];
         const times = hourly.time ?? [];
-        for (let i = 0; i < times.length && hours.length < 6; i++) {
-            const t = new Date(times[i]).getTime();
-            if (t < nowMs - 3600000)
+        for (let i = 0; i < times.length && hours.length < 8; i++) {
+            const dt = new Date(times[i]);
+            if (dt.getTime() < nowMs - 3600000)
                 continue;
             hours.push({
-                hour: new Date(times[i]).toLocaleTimeString(undefined, {hour: 'numeric'}),
+                kind: 'hour',
+                time: dt,
+                hour: dt.toLocaleTimeString(undefined, hourFmt),
                 temp: Math.round(hourly.temperature_2m?.[i] ?? 0),
                 code: hourly.weather_code?.[i] ?? 0,
+                isDay: isDaytime(dt),
             });
+        }
+
+        // Merge in any sunrise/sunset that lands inside the hourly window, the
+        // way Apple Weather slots them into the strip.
+        const strip = hours.slice();
+        if (hours.length) {
+            const lo = hours[0].time;
+            const hi = hours[hours.length - 1].time;
+            for (const e of sun) {
+                if (e.time >= lo && e.time <= hi) {
+                    strip.push({
+                        kind: 'sun',
+                        time: e.time,
+                        type: e.type,
+                        hour: e.time.toLocaleTimeString(undefined,
+                            {hour: 'numeric', minute: '2-digit'}),
+                    });
+                }
+            }
+            strip.sort((a, b) => a.time - b.time);
         }
 
         const precipProb = days[0]?.precipProb ?? null;
@@ -316,8 +365,11 @@ export class WeatherProvider {
                 : 'No precipitation expected today',
             hi: days[0]?.hi ?? 0,
             lo: days[0]?.lo ?? 0,
+            sunrise: sun.find(e => e.type === 'sunrise' && e.time.getTime() >= nowMs)?.time ?? null,
+            sunset: sun.find(e => e.type === 'sunset' && e.time.getTime() >= nowMs)?.time ?? null,
             days,
             hours,
+            strip,
         };
     }
 
