@@ -1,8 +1,9 @@
 // The widget picker: a bottom-left liquid-glass panel. Left rail = the app
-// icon per widget type; right = a card per variant showing a still preview
-// (previews/<type>-<variant>.png, or the app icon if absent). Drag a card onto
-// the desktop to place it (as a dark widget -- change the look afterwards with
-// the widget's own edit-mode toggle). Every widget is one fixed size.
+// icon per widget type; right = the bare previews for the selected type
+// (previews/<type>-<variant>.png, or the app icon if absent) -- no frame, no
+// label -- laid out at their true relative footprint so a row preview reads
+// twice as wide as a square one. Drag a preview onto the desktop to place it
+// (as a dark widget; change the look with the widget's own edit-mode toggle).
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -16,9 +17,19 @@ import {makeLiquidGlass} from './liquidGlass.js';
 import {REGISTRY} from './widgetRegistry.js';
 
 const INSET = 20;
-const CARDS_PER_ROW = 3;
-const PREVIEW_MAX = 108;
+const PU = 94;       // preview size for a square widget (px)
+const PGAP = 8;      // gap inside a preview footprint (matches the desktop grid)
+const CARD_GAP = 16; // gap between previews in the picker
 const PLACE_MODE = 'dark';
+
+function previewDims(shape) {
+    const wide = shape === 'row' || shape === 'grid';
+    const tall = shape === 'grid';
+    return {
+        w: wide ? PU * 2 + PGAP : PU,
+        h: tall ? PU * 2 + PGAP : PU,
+    };
+}
 
 export const WidgetPicker = GObject.registerClass(
 class WidgetPicker extends Clutter.Actor {
@@ -229,58 +240,49 @@ class WidgetPicker extends Clutter.Actor {
 
         this._grid.destroy_all_children();
 
-        const variants = Object.entries(def.variants);
+        // Pack previews left-to-right at their true footprint, wrapping when a
+        // row would overflow the content width.
+        const maxRowW = Math.max(PU * 2 + PGAP, this._pw - 120);
         let rowBox = null;
-        variants.forEach(([variant, vdef], i) => {
-            if (i % CARDS_PER_ROW === 0) {
+        let rowW = 0;
+        for (const [variant, vdef] of Object.entries(def.variants)) {
+            const {w, h} = previewDims(vdef.shape);
+            if (!rowBox || rowW + w > maxRowW) {
                 rowBox = new St.BoxLayout({style_class: 'peachos-picker-grid-row'});
                 this._grid.add_child(rowBox);
+                rowW = 0;
             }
-            rowBox.add_child(this._makeCard(type, variant, vdef));
-        });
-    }
-
-    _previewActor(type, variant, vdef) {
-        const path = GLib.build_filenamev(
-            [this._ctx.path, 'previews', `${type}-${variant}.png`]);
-        if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
-            const row = vdef.shape === 'row';
-            const bw = row ? 132 : PREVIEW_MAX;
-            const bh = row ? 66 : PREVIEW_MAX;
-            return new St.Widget({
-                width: bw, height: bh,
-                style_class: 'peachos-picker-card-preview',
-                style: `background-image: url("file://${path}"); background-size: contain;`,
-            });
+            rowBox.add_child(this._makeCard(type, variant, w, h));
+            rowW += w + CARD_GAP;
         }
-        return new St.Icon({
-            icon_name: REGISTRY[type].appIcon,
-            icon_size: 44,
-            style_class: 'peachos-picker-card-preview',
-        });
     }
 
-    _makeCard(type, variant, vdef) {
-        const card = new St.Button({style_class: 'peachos-picker-card', can_focus: true});
-        const box = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-            x_align: Clutter.ActorAlign.CENTER,
-        });
+    _previewPath(type, variant) {
+        const p = GLib.build_filenamev(
+            [this._ctx.path, 'previews', `${type}-${variant}.png`]);
+        return GLib.file_test(p, GLib.FileTest.EXISTS) ? p : null;
+    }
 
-        const previewBin = new St.Widget({
+    _makeCard(type, variant, w, h) {
+        const card = new St.Widget({
+            width: w, height: h,
+            reactive: true, track_hover: true,
+            style_class: 'peachos-picker-preview',
             layout_manager: new Clutter.BinLayout(),
-            width: 132, height: PREVIEW_MAX,
         });
-        previewBin.add_child(this._previewActor(type, variant, vdef));
-        box.add_child(previewBin);
-
-        box.add_child(new St.Label({
-            text: vdef.name,
-            x_align: Clutter.ActorAlign.CENTER,
-            style_class: 'peachos-picker-card-label',
-        }));
-
-        card.set_child(box);
+        const path = this._previewPath(type, variant);
+        if (path) {
+            card.set_style(
+                `background-image: url("file://${path}"); `
+                + 'background-size: contain; background-position: center;');
+        } else {
+            card.add_child(new St.Icon({
+                icon_name: REGISTRY[type].appIcon,
+                icon_size: Math.min(56, Math.round(Math.min(w, h) * 0.5)),
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
         card.connect('button-press-event', (_a, event) =>
             this._beginDrag(type, variant, event));
         return card;
@@ -295,24 +297,28 @@ class WidgetPicker extends Clutter.Actor {
             return Clutter.EVENT_PROPAGATE;
 
         const def = REGISTRY[type];
-        const ghost = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-            style_class: 'peachos-picker-ghost',
-            x_align: Clutter.ActorAlign.CENTER,
+        const {w, h} = previewDims(def.variants[variant].shape);
+        const path = this._previewPath(type, variant);
+        const ghost = new St.Widget({
+            width: w, height: h, opacity: 210,
+            layout_manager: new Clutter.BinLayout(),
         });
-        ghost.add_child(new St.Icon({
-            icon_name: def.appIcon, icon_size: 30,
-            x_align: Clutter.ActorAlign.CENTER,
-        }));
-        ghost.add_child(new St.Label({
-            text: def.variants[variant].name,
-            x_align: Clutter.ActorAlign.CENTER,
-            style_class: 'peachos-picker-ghost-label',
-        }));
+        if (path) {
+            ghost.set_style(
+                `background-image: url("file://${path}"); `
+                + 'background-size: contain; background-position: center;');
+        } else {
+            ghost.add_child(new St.Icon({
+                icon_name: def.appIcon, icon_size: 32,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
         this._widgetLayer.layer.add_child(ghost);
 
         const [px, py] = event.get_coords();
-        const move = (x, y) => ghost.set_position(Math.round(x - 60), Math.round(y - 24));
+        const move = (x, y) => ghost.set_position(
+            Math.round(x - w / 2), Math.round(y - h / 2));
         move(px, py);
 
         const capturedId = global.stage.connect('captured-event', (_s, ev) => {
