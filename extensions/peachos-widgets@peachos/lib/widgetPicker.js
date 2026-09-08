@@ -73,6 +73,14 @@ class WidgetPicker extends Clutter.Actor {
         this._wxUnsub = this._ctx.weather?.subscribe(() => this._syncWeatherLoc());
         this.connect('destroy', () => this._wxUnsub?.());
 
+        // stay above every placed widget / chrome for as long as we're shown
+        const parent = this._widgetLayer.layer;
+        parent.connectObject('child-added', () => {
+            if (this.get_parent() === parent && !this._hidden)
+                parent.set_child_above_sibling(this, null);
+        }, this);
+        this.connect('destroy', () => parent.disconnectObject(this));
+
         // slide up out of the bottom edge
         const g = this._glass.widget;
         g.translation_y = Math.round(this._ph * 0.5);
@@ -80,6 +88,39 @@ class WidgetPicker extends Clutter.Actor {
         g.ease({
             translation_y: 0, opacity: 255, duration: 300,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+    }
+
+    // Slide the panel down out of view while a widget is being dragged, back
+    // up when it's dropped.
+    slideOut() {
+        if (this._hidden)
+            return;
+        this._hidden = true;
+        const g = this._glass.widget;
+        g.remove_all_transitions();
+        g.reactive = false;
+        g.ease({
+            translation_y: this._ph, opacity: 0, duration: 220,
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+        });
+    }
+
+    slideIn() {
+        if (!this._hidden)
+            return;
+        this._hidden = false;
+        const parent = this._widgetLayer.layer;
+        if (this.get_parent() === parent)
+            parent.set_child_above_sibling(this, null);
+        const g = this._glass.widget;
+        g.remove_all_transitions();
+        g.ease({
+            translation_y: 0, opacity: 255, duration: 260,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onStopped: () => {
+                g.reactive = true;
+            },
         });
     }
 
@@ -412,6 +453,7 @@ class WidgetPicker extends Clutter.Actor {
             }));
         }
         this._widgetLayer.layer.add_child(ghost);
+        this.slideOut();
 
         const [px, py] = event.get_coords();
         const move = (x, y) => ghost.set_position(
@@ -429,12 +471,8 @@ class WidgetPicker extends Clutter.Actor {
                 global.stage.disconnect(capturedId);
                 const [x, y] = ev.get_coords();
                 ghost.destroy();
-                const p = this._panelRect();
-                const onPanel = x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
-                if (!onPanel) {
-                    this._widgetLayer.addWidget(type, variant, x, y, PLACE_MODE);
-                    this.get_parent()?.set_child_above_sibling(this, null);
-                }
+                this._widgetLayer.addWidget(type, variant, x, y, PLACE_MODE);
+                this.slideIn();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;

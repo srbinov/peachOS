@@ -99,7 +99,8 @@ export class WidgetFrame {
         const [, cw] = this._chrome.get_preferred_width(-1);
         this._chrome.set_position(
             Math.round(r.x + r.w - Math.max(cw, 34) + 6), Math.round(r.y - 12));
-        this._layer.set_child_above_sibling(this._chrome, null);
+        // above this widget's own card, but NOT above the picker
+        this._layer.set_child_above_sibling(this._chrome, this._glass.widget);
     }
 
     innerRect() {
@@ -185,6 +186,9 @@ export class WidgetFrame {
         this._drag = {px, py, ax: r.x, ay: r.y};
         this._capturedId = global.stage.connect('captured-event', (_s, ev) => this._onDragEvent(ev));
         this._glass.widget.add_style_class_name('peachos-widget--dragging');
+        this._layer.set_child_above_sibling(this._glass.widget, null);
+        this._syncChrome();
+        this._callbacks.onDragStart?.();
         return Clutter.EVENT_STOP;
     }
 
@@ -205,6 +209,7 @@ export class WidgetFrame {
                 this.instance.id, r.x, r.y, this._size.w, this._size.h);
             this._snapInto(sn.x, sn.y);
             this._callbacks.onMoved(this);
+            this._callbacks.onDragEnd?.();
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;

@@ -197,6 +197,8 @@ export class WidgetLayer {
             onRemove: f => this.removeWidget(f),
             onResized: f => this._onFrameResized(f),
             onConfigured: () => this._persist(),
+            onDragStart: () => this._dragListener?.(true),
+            onDragEnd: () => this._dragListener?.(false),
             snap: (id, x, y, w, hh) => this.snapPosition(id, x, y, w, hh),
         });
         this._frames.set(inst.id, frame);
@@ -349,6 +351,10 @@ export class WidgetLayer {
 
     get layer() {
         return this._layer;
+    }
+
+    setDragListener(fn) {
+        this._dragListener = fn;
     }
 
     get ctx() {

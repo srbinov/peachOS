@@ -68,6 +68,14 @@ export class EditMode {
         });
         this._widgetLayer.layer.add_child(this._picker);
 
+        // hide the panel out of the way while a widget is being dragged
+        this._widgetLayer.setDragListener(active => {
+            if (active)
+                this._picker?.slideOut();
+            else
+                this._picker?.slideIn();
+        });
+
         this._capturedId = global.stage.connect('captured-event', (_s, ev) => {
             if (ev.type() === Clutter.EventType.KEY_PRESS &&
                 ev.get_key_symbol() === Clutter.KEY_Escape) {
@@ -87,6 +95,7 @@ export class EditMode {
             global.stage.disconnect(this._capturedId);
             this._capturedId = 0;
         }
+        this._widgetLayer.setDragListener(null);
         this._picker?.destroy();
         this._picker = null;
 
