@@ -16,6 +16,8 @@ import St from 'gi://St';
 import {topicName} from '../lib/providers/news.js';
 import {FONT, fontStyle, Pango} from '../lib/fonts.js';
 
+const {cairo: Cairo} = imports;
+
 const ACCENT = {glass: '10,132,255', dark: '10,132,255', light: '0,96,223'};
 
 export class NewsWidget {
@@ -90,23 +92,46 @@ export class NewsWidget {
         return null;
     }
 
-    // A publication mark: the logo if we have one, else the name in small caps.
+    // A publication mark, rendered monochrome (Apple-News style) so it's
+    // legible on any card: the logo PNG's alpha is used as a mask filled with
+    // the card's foreground -- white on glass/dark, near-black on light.
     _sourceMark(article, px, onLight) {
         const path = this._iconPath(article.sourceSlug);
-        if (path) {
-            // wide box so every wordmark fits by height and left-aligns
-            return new St.Widget({
-                width: Math.round(px * 7), height: Math.round(px),
-                style: `background-image: url("file://${path}"); background-size: contain; `
-                    + 'background-position: left center;',
+        if (!path || path.endsWith('.svg')) {
+            const l = new St.Label({
+                text: (article.source || '').toUpperCase(),
+                x_align: Clutter.ActorAlign.START,
+                style: fontStyle(FONT.display, Math.round(px * 0.82),
+                    onLight ? 0.5 : 0.6, onLight ? this._fg : '255,255,255')
+                    + ' font-weight: 700;',
             });
+            return l;
         }
-        return new St.Label({
-            text: (article.source || '').toUpperCase(),
-            style: fontStyle(FONT.display, Math.round(px * 0.82),
-                onLight ? 0.5 : 0.6, onLight ? this._fg : '255,255,255')
-                + ' font-weight: 700;',
+        const tint = onLight ? [0.13, 0.13, 0.15] : [1, 1, 1];
+        const area = new St.DrawingArea({
+            width: Math.round(px * 8), height: Math.round(px),
+            x_align: Clutter.ActorAlign.START,
         });
+        area.connect('repaint', a => {
+            const [, h] = a.get_surface_size();
+            const cr = a.get_context();
+            try {
+                const png = Cairo.ImageSurface.createFromPNG(path);
+                const pw = png.getWidth();
+                const ph = png.getHeight();
+                if (pw > 0 && ph > 0) {
+                    const s = h / ph;
+                    cr.scale(s, s);
+                    cr.setSourceRGBA(tint[0], tint[1], tint[2], 1);
+                    cr.maskSurface(png, 0, 0);
+                }
+            } catch (e) {
+                // logo unreadable -- leave blank
+            } finally {
+                cr.$dispose();
+            }
+        });
+        return area;
     }
 
     _newsLogo(px) {
