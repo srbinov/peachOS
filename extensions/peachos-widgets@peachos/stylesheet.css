@@ -355,6 +355,110 @@
     font-weight: 600;
 }
 
+/* ---- stocks ticker picker -------------------------------------- */
+
+.peachos-stockpick {
+    padding: 18px 20px 14px 20px;
+    spacing: 12px;
+    color: #ffffff;
+    font-family: "PeachDisplay", sans-serif;
+}
+
+.peachos-stockpick-header { spacing: 10px; }
+
+.peachos-stockpick-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.peachos-stockpick-done {
+    padding: 4px 12px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.peachos-stockpick-done:hover { background-color: rgba(255, 255, 255, 0.24); }
+
+.peachos-stockpick-chips {
+    spacing: 6px;
+}
+
+.peachos-stockpick-empty,
+.peachos-stockpick-status {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 2px 2px;
+}
+
+.peachos-stockpick-chip {
+    spacing: 5px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 11px;
+    background-color: rgba(255, 255, 255, 0.14);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.peachos-stockpick-chip-x {
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.peachos-stockpick-chip-x:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+.peachos-stockpick-entry {
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font-size: 13px;
+}
+
+.peachos-stockpick-entry:focus {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.peachos-stockpick-scroll { padding-right: 4px; }
+
+.peachos-stockpick-result {
+    padding: 9px 10px;
+    border-radius: 9px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.peachos-stockpick-result:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.peachos-stockpick-result.selected {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.peachos-stockpick-result-sym {
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 58px;
+}
+
+.peachos-stockpick-result-name {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    padding-left: 4px;
+}
+
+.peachos-stockpick-result-exch {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    padding-left: 6px;
+}
+
 /* ---- world-clock city picker ------------------------------------- */
 
 .peachos-cities {

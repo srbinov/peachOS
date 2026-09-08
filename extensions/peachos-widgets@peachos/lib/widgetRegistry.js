@@ -117,11 +117,11 @@ export const REGISTRY = {
         appIcon: 'icons/app/stocks.png',
         variants: {
             single: {
-                name: 'SPY', shape: 'square',
+                name: 'SPY', shape: 'square', configurable: true, config: 'stocks',
                 make: (parent, ctx, size) => new StocksWidget(parent, ctx, size, 'square'),
             },
             row: {
-                name: 'Watchlist', shape: 'row',
+                name: 'Watchlist', shape: 'row', configurable: true, config: 'stocks',
                 make: (parent, ctx, size) => new StocksWidget(parent, ctx, size, 'row'),
             },
         },

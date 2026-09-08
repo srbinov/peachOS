@@ -8,6 +8,7 @@ import {makeLiquidGlass, MODE_FG} from '../lib/liquidGlass.js';
 import {variantDef, sizeFor} from '../lib/widgetRegistry.js';
 import {CityPicker} from '../lib/cityPicker.js';
 import {NewsTopicPicker} from '../lib/newsTopicPicker.js';
+import {StockPicker} from '../lib/stockPicker.js';
 
 const GRID = 8;
 const MODE_ORDER = ['glass', 'dark', 'light'];
@@ -45,6 +46,7 @@ export class WidgetFrame {
                 mode, fg: MODE_FG[mode],
                 clocks: inst.clocks,
                 topic: inst.topic,
+                symbols: inst.symbols,
                 setTint: t => this._glass.setTint(t),
                 setImage: p => this._glass.setImage(p),
             });
@@ -144,6 +146,16 @@ export class WidgetFrame {
                 onChange: topic => {
                     this.instance.topic = topic;
                     this._content?.setTopic?.(topic);
+                    this._callbacks.onConfigured?.(this);
+                },
+                onDone: done,
+            });
+        } else if (kind === 'stocks') {
+            const max = this.instance.variant === 'row' ? 5 : 1;
+            this._config = new StockPicker(this.instance.symbols || [], max, this._ctx, {
+                onChange: symbols => {
+                    this.instance.symbols = symbols;
+                    this._content?.setSymbols?.(symbols);
                     this._callbacks.onConfigured?.(this);
                 },
                 onDone: done,

@@ -1,17 +1,18 @@
 // Stocks widget -- Yahoo Finance quotes + a Cairo sparkline, matched to the
 // Apple Stocks widget.
 //
-//   'square' -- SPY only: ticker, big price, change, sparkline.
-//   'row'    -- SPY / AAPL / Bitcoin: ticker + name, sparkline, price + change.
+//   'square' -- one ticker: ticker, big price, change, sparkline.
+//   'row'    -- up to 5 tickers: ticker + name, sparkline, price + change.
 //
-// Symbols are fixed (lib/providers/stocks.js). Font: SF Pro Display.
+// Tickers are chosen per-widget (config: 'stocks', lib/stockPicker.js);
+// defaults live in lib/providers/stocks.js. Font: SF Pro Display.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 
-import {STOCK_SYMBOLS} from '../lib/providers/stocks.js';
+import {STOCK_DEFAULTS} from '../lib/providers/stocks.js';
 import {FONT, fontDesc, Pango} from '../lib/fonts.js';
 
 const {cairo: Cairo} = imports;
@@ -26,7 +27,10 @@ export class StocksWidget {
         this._w = size.w;
         this._h = size.h;
         this._fg = (size.fg || '255,255,255').split(',').map(v => parseInt(v, 10) / 255);
-        this._symbols = variant === 'row' ? STOCK_SYMBOLS : ['SPY'];
+        const dflt = STOCK_DEFAULTS[variant === 'row' ? 'row' : 'square'];
+        this._symbols = (size.symbols && size.symbols.length)
+            ? size.symbols.slice(0, variant === 'row' ? 5 : 1)
+            : dflt.slice();
 
         this._root = new St.Widget({
             layout_manager: new Clutter.BinLayout(), width: size.w, height: size.h,
@@ -37,6 +41,7 @@ export class StocksWidget {
         this._root.add_child(this._area);
 
         this._unsub = ctx.stocks.subscribe(() => this._area.queue_repaint());
+        this._unwatch = size.preview ? null : ctx.stocks.watch(this._symbols);
         this._tick = size.preview ? {destroy() {}} : {
             _id: GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 45, () => {
                 this._area.queue_repaint();
@@ -48,6 +53,16 @@ export class StocksWidget {
                 this._id = 0;
             },
         };
+    }
+
+    // Re-point the widget at a new ticker set (from the config picker).
+    setSymbols(arr) {
+        const next = (arr && arr.length ? arr : STOCK_DEFAULTS[this._variant === 'row' ? 'row' : 'square'])
+            .slice(0, this._variant === 'row' ? 5 : 1);
+        this._symbols = next;
+        this._unwatch?.();
+        this._unwatch = this._ctx.stocks.watch(next);
+        this._area.queue_repaint();
     }
 
     // --- cairo helpers -------------------------------------------------
@@ -181,11 +196,13 @@ export class StocksWidget {
         const fg = this._fg;
         const dim = a => [fg[0], fg[1], fg[2], a];
         const m = Math.round(h * 0.11);
-        const q = this._ctx.stocks.get('SPY');
+        const sym = this._symbols[0] || 'SPY';
+        const q = this._ctx.stocks.get(sym);
         const fs = Math.max(11, h * 0.085);
 
         if (!q) {
-            this._text(cr, 'SPY', m, m, fs, dim(0.5), {bold: true});
+            this._text(cr, sym.replace(/-USD$/, '').replace(/^\^/, ''),
+                m, m, fs, dim(0.5), {bold: true});
             return;
         }
         const col = q.up ? GREEN : RED;
@@ -202,6 +219,7 @@ export class StocksWidget {
 
     destroy() {
         this._unsub?.();
+        this._unwatch?.();
         this._tick.destroy();
         this._root.destroy();
     }
