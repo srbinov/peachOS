@@ -201,6 +201,7 @@ class FilteredCalendarSource {
             rows.push({
                 uid: src.UID,
                 parent: get('Data Source', 'Parent') || null,
+                name: get('Data Source', 'DisplayName'),
                 host: get('Authentication', 'Host').toLowerCase(),
                 backend: get('Calendar', 'BackendName').toLowerCase(),
                 resource: get('Resource', 'Identity').toLowerCase(),
@@ -240,14 +241,25 @@ class FilteredCalendarSource {
     getEvents(begin, end) {
         if (!this._source || this._uids === null)
             return [];   // sources not resolved yet -- don't flash unfiltered data
-        let events = this._source.getEvents(begin, end) ?? [];
-        events = events.filter(ev => this._uids.has(String(ev.id).split('\n')[0]));
-        return events.map(ev => {
+        const events = (this._source.getEvents(begin, end) ?? [])
+            .filter(ev => this._uids.has(String(ev.id).split('\n')[0]));
+
+        // The same event can arrive from more than one calendar (US Holidays
+        // via both an iCloud and a Google account, a shared calendar synced to
+        // both, ...) -- collapse identical (title + start + end).
+        const seen = new Set();
+        const out = [];
+        for (const ev of events) {
+            const key = `${ev.summary}|${ev.date.getTime()}|${ev.end.getTime()}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
             const span = ev.end.getTime() - ev.date.getTime();
             const allDay = ev.date.getHours() === 0 && ev.date.getMinutes() === 0 &&
                 span % (24 * 3600 * 1000) === 0 && span >= 24 * 3600 * 1000;
-            return {summary: ev.summary, date: ev.date, end: ev.end, allDay};
-        });
+            out.push({summary: ev.summary, date: ev.date, end: ev.end, allDay});
+        }
+        return out;
     }
 
     destroy() {
@@ -270,11 +282,24 @@ function isGoogle(host, resource) {
     return GOOGLE_RE.test(host) || resource.includes('googleusercontent');
 }
 
+// A subscribed holiday calendar (Google's "Holidays in ...", Apple's "US
+// Holidays", etc.). These belong on the regular Calendar widget no matter
+// which account provides them.
+function isHoliday(r, resource) {
+    return /\bholidays?\b/i.test(r.name || '') ||
+        resource.includes('holiday') ||
+        resource.includes('%40virtual') ||
+        resource.includes('v.calendar.google.com') ||
+        (r.webdav || '').includes('holiday');
+}
+
 export class ICloudCalendarSource extends FilteredCalendarSource {
     constructor() {
         super({
             alwaysConnected: true,   // there is always an on-device calendar
             keep: (r, host, resource) => {
+                if (isHoliday(r, resource))
+                    return true;                       // holidays: any source
                 if (isGoogle(host, resource))
                     return false;
                 if (ICLOUD_RE.test(host) || resource.includes('icloud'))
@@ -290,7 +315,10 @@ export class GoogleCalendarSource extends FilteredCalendarSource {
     constructor() {
         super({
             alwaysConnected: false,
-            keep: (r, host, resource) => isGoogle(host, resource),
+            // Google calendars only, minus the holiday calendar (it shows on
+            // the regular widget so it can't appear in both).
+            keep: (r, host, resource) =>
+                isGoogle(host, resource) && !isHoliday(r, resource),
         });
     }
 }
