@@ -96,7 +96,7 @@ export const REGISTRY = {
     },
     news: {
         name: 'News',
-        appIcon: 'newspaper-symbolic',
+        appIcon: 'icons/app/news.png',
         variants: {
             story: {
                 name: 'Story', shape: 'square', configurable: true, config: 'newsTopic',
@@ -114,7 +114,7 @@ export const REGISTRY = {
     },
     stocks: {
         name: 'Stocks',
-        appIcon: 'histogram-symbolic',
+        appIcon: 'icons/app/stocks.png',
         variants: {
             single: {
                 name: 'SPY', shape: 'square',
@@ -142,7 +142,7 @@ export const REGISTRY = {
     },
     gcalendar: {
         name: 'Google Calendar',
-        appIcon: 'goa-account-google-symbolic',
+        appIcon: 'icons/app/gcalendar.png',
         variants: {
             month: {
                 name: 'Month', shape: 'square',

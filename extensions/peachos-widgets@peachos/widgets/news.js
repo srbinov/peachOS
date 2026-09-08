@@ -82,16 +82,21 @@ export class NewsWidget {
     }
 
     _iconPath(slug) {
-        const p = GLib.build_filenamev([this._iconDir, `${slug}.png`]);
-        return GLib.file_test(p, GLib.FileTest.EXISTS) ? p : null;
+        for (const ext of ['png', 'svg']) {
+            const p = GLib.build_filenamev([this._iconDir, `${slug}.${ext}`]);
+            if (GLib.file_test(p, GLib.FileTest.EXISTS))
+                return p;
+        }
+        return null;
     }
 
     // A publication mark: the logo if we have one, else the name in small caps.
     _sourceMark(article, px, onLight) {
         const path = this._iconPath(article.sourceSlug);
         if (path) {
+            // wide box so every wordmark fits by height and left-aligns
             return new St.Widget({
-                width: Math.round(px * 4.6), height: Math.round(px),
+                width: Math.round(px * 7), height: Math.round(px),
                 style: `background-image: url("file://${path}"); background-size: contain; `
                     + 'background-position: left center;',
             });

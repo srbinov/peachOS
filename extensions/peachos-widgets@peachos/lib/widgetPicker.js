@@ -5,6 +5,7 @@
 // twice as wide as a square). Drag a preview onto the desktop to place it.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
@@ -13,6 +14,13 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {makeLiquidGlass} from './liquidGlass.js';
 import {REGISTRY} from './widgetRegistry.js';
+
+// appIcon can be a themed name or a path relative to the extension.
+function iconGicon(ctxPath, name) {
+    if (name && (name.includes('/') || name.endsWith('.png') || name.endsWith('.svg')))
+        return Gio.icon_new_for_string(GLib.build_filenamev([ctxPath, name]));
+    return null;
+}
 
 const PU = 100;        // preview size for a square widget (px)
 const PGAP = 8;        // gap inside a preview footprint (matches the desktop grid)
@@ -173,7 +181,11 @@ class WidgetPicker extends Clutter.Actor {
             style_class: 'peachos-picker-side-item-box',
             x_expand: true, x_align: Clutter.ActorAlign.FILL,
         });
-        box.add_child(new St.Icon({icon_name: icon, icon_size: 18, y_align: CENTER}));
+        const gi = iconGicon(this._ctx.path, icon);
+        box.add_child(new St.Icon({
+            gicon: gi, icon_name: gi ? null : icon,
+            icon_size: 18, y_align: CENTER,
+        }));
         box.add_child(new St.Label({
             text: label, x_expand: true, y_align: CENTER,
             x_align: Clutter.ActorAlign.START,
@@ -261,8 +273,9 @@ class WidgetPicker extends Clutter.Actor {
                 `background-image: url("file://${path}"); `
                 + 'background-size: contain; background-position: center;');
         } else {
+            const gi = iconGicon(this._ctx.path, REGISTRY[type].appIcon);
             card.add_child(new St.Icon({
-                icon_name: REGISTRY[type].appIcon,
+                gicon: gi, icon_name: gi ? null : REGISTRY[type].appIcon,
                 icon_size: Math.min(56, Math.round(Math.min(w, h) * 0.5)),
                 x_align: CENTER, y_align: CENTER,
             }));
@@ -392,8 +405,9 @@ class WidgetPicker extends Clutter.Actor {
                 `background-image: url("file://${path}"); `
                 + 'background-size: contain; background-position: center;');
         } else {
+            const gi = iconGicon(this._ctx.path, def.appIcon);
             ghost.add_child(new St.Icon({
-                icon_name: def.appIcon, icon_size: 32,
+                gicon: gi, icon_name: gi ? null : def.appIcon, icon_size: 32,
                 x_align: CENTER, y_align: CENTER,
             }));
         }
