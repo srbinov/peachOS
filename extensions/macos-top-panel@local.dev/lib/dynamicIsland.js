@@ -182,12 +182,12 @@ export class DynamicIsland {
                 const suffix = formatTimeToFull(timeToFullSeconds);
                 this._showTransient(
                     null, suffix ? `Charging — ${suffix}` : 'Charging',
-                    ACCENT.green, {anim: true});
+                    ACCENT.green, {anim: 'charge'});
             },
             onLowBattery: percent =>
                 this._showTransient(null, `Low Battery — ${percent}%`, ACCENT.red, {anim: 'lowbat'}),
             onFullyCharged: () =>
-                this._showTransient(null, 'Fully Charged', ACCENT.green, {anim: true}),
+                this._showTransient(null, 'Fully Charged', ACCENT.green, {anim: 'charge'}),
         });
 
         this._localSendWatcher = new LocalSendWatcher(filename => {
