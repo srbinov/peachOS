@@ -1,12 +1,13 @@
 // News widget -- curated RSS headlines per topic, matched to the Apple News
 // widget.
 //
-//   'square' -- one story, full-bleed image with the headline over a gradient.
+//   'square' -- one story, the image fills the squircle (painted by the glass
+//               card) with the headline over a base gradient.
 //   'row'    -- topic header + two stories with thumbnails.
 //   'grid'   -- topic header + four stories (2x2 footprint).
 //
-// Topic is per-widget, changed by the pencil in edit mode. Feeds +
-// image cache: lib/providers/news.js. Font: SF Pro Display.
+// Topic is per-widget, changed by the pencil in edit mode. Feeds + image
+// cache: lib/providers/news.js. Publication marks: icons/news/<slug>.png.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -27,6 +28,8 @@ export class NewsWidget {
         this._h = size.h;
         this._fg = size.fg || '255,255,255';
         this._accent = ACCENT[this._cardMode] || ACCENT.glass;
+        this._setImage = size.setImage;
+        this._iconDir = GLib.build_filenamev([ctx.path, 'icons', 'news']);
 
         this._root = new Clutter.Actor({
             width: size.w, height: size.h, clip_to_allocation: true,
@@ -78,143 +81,170 @@ export class NewsWidget {
         return actor;
     }
 
-    _thumb(path, d, radius) {
-        const w = new St.Widget({width: d, height: d});
+    _iconPath(slug) {
+        const p = GLib.build_filenamev([this._iconDir, `${slug}.png`]);
+        return GLib.file_test(p, GLib.FileTest.EXISTS) ? p : null;
+    }
+
+    // A publication mark: the logo if we have one, else the name in small caps.
+    _sourceMark(article, px, onLight) {
+        const path = this._iconPath(article.sourceSlug);
         if (path) {
-            w.style = `background-image: url("file://${path}"); background-size: cover; `
-                + `border-radius: ${radius}px;`;
-        } else {
-            w.style = `background-color: rgba(${this._accent},0.25); border-radius: ${radius}px;`;
+            return new St.Widget({
+                width: Math.round(px * 4.6), height: Math.round(px),
+                style: `background-image: url("file://${path}"); background-size: contain; `
+                    + 'background-position: left center;',
+            });
         }
+        return new St.Label({
+            text: (article.source || '').toUpperCase(),
+            style: fontStyle(FONT.display, Math.round(px * 0.82),
+                onLight ? 0.5 : 0.6, onLight ? this._fg : '255,255,255')
+                + ' font-weight: 700;',
+        });
+    }
+
+    _newsLogo(px) {
+        const path = this._iconPath('n');
+        if (path) {
+            return new St.Widget({
+                width: px, height: px,
+                style: `background-image: url("file://${path}"); background-size: contain;`,
+            });
+        }
+        return new St.Label({
+            text: 'N',
+            style: `font-family: "${FONT.display}"; font-size: ${Math.round(px)}px; `
+                + `font-weight: 800; color: rgba(${this._accent},1);`,
+        });
+    }
+
+    _thumb(path, d) {
+        const w = new St.Widget({width: d, height: d});
+        const r = Math.round(d * 0.16);
+        w.style = path
+            ? `background-image: url("file://${path}"); background-size: cover; border-radius: ${r}px;`
+            : `background-color: rgba(${this._fg},0.10); border-radius: ${r}px;`;
         return w;
     }
 
-    // ---- square -----------------------------------------------------
+    // ---- square (image painted by the glass card) --------------------
 
     _renderSquare(a) {
+        this._setImage?.(a?.imagePath || null);
+
         const w = this._w;
         const h = this._h;
-        const m = Math.round(h * 0.08);
-
-        const img = new St.Widget({width: w, height: h});
-        img.style = a?.imagePath
-            ? `background-image: url("file://${a.imagePath}"); background-size: cover;`
-            : `background-color: rgba(${this._accent},0.35);`;
-        this._add(img, 0, 0);
-
-        const grad = new St.Widget({width: w, height: Math.round(h * 0.66)});
-        grad.style = 'background-gradient-direction: vertical; '
-            + 'background-gradient-start: rgba(0,0,0,0); '
-            + 'background-gradient-end: rgba(0,0,0,0.9);';
-        this._add(grad, 0, h - grad.height);
+        const m = Math.round(h * 0.09);
+        const fs = Math.max(11, Math.round(h * 0.085));
 
         if (!a) {
             this._add(new St.Label({
-                text: `${topicName(this._topic)} — loading…`,
-                style: fontStyle(FONT.display, Math.round(h * 0.07), 0.9, '255,255,255'),
-            }), m, h - m - Math.round(h * 0.09));
+                text: `${topicName(this._topic)}…`,
+                style: fontStyle(FONT.display, fs, 0.9, '255,255,255'),
+            }), m, h - m - fs);
             return;
         }
 
-        const fs = Math.max(11, Math.round(h * 0.085));
         const box = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             width: w - 2 * m,
-            style: `spacing: ${Math.round(fs * 0.2)}px;`,
+            style: `spacing: ${Math.round(fs * 0.35)}px;`,
         });
-        box.add_child(new St.Label({
-            text: a.source,
-            style: fontStyle(FONT.display, Math.round(fs * 0.8), 0.8, '255,255,255'),
-        }));
+        box.add_child(this._sourceMark(a, Math.round(fs * 0.95), false));
+
         const title = new St.Label({
             text: a.title,
-            height: Math.round(fs * 1.25 * 3),
+            height: Math.round(fs * 1.24 * 3),
             style: fontStyle(FONT.display, fs, 1, '255,255,255') + ' font-weight: 700;',
         });
         title.clutter_text.line_wrap = true;
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         box.add_child(title);
 
-        const bh = Math.round(fs * 0.8 + fs * 1.25 * 3 + fs * 0.4);
+        const bh = Math.round(fs * 0.95 + fs * 0.35 + fs * 1.24 * 3);
         this._add(box, m, h - m - bh);
     }
 
-    // ---- row / grid ----------------------------------------------
+    // ---- row / grid --------------------------------------------------
 
     _renderList(arts, n) {
+        this._setImage?.(null);
+
         const w = this._w;
         const h = this._h;
-        const m = Math.round(h * (this._variant === 'grid' ? 0.055 : 0.1));
+        const grid = this._variant === 'grid';
+        const m = Math.round(h * (grid ? 0.055 : 0.1));
         const fg = this._fg;
+        const onLight = fg.startsWith('26,') || fg.startsWith('28,');
 
         // header
-        const headFs = Math.max(12, Math.round(h * (this._variant === 'grid' ? 0.05 : 0.09)));
+        const headFs = Math.max(12, Math.round(h * (grid ? 0.052 : 0.09)));
         const head = new St.BoxLayout({width: w - 2 * m});
         head.add_child(new St.Label({
             text: topicName(this._topic), x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
             style: fontStyle(FONT.display, headFs, 1, this._accent) + ' font-weight: 800;',
         }));
-        const logo = new St.Label({
-            text: 'N', y_align: Clutter.ActorAlign.CENTER,
-            style: `font-family: "${FONT.display}"; font-size: ${Math.round(headFs * 0.95)}px; `
-                + `font-weight: 800; color: rgba(${this._accent},1);`,
-        });
+        const logo = this._newsLogo(Math.round(headFs * 1.0));
+        logo.y_align = Clutter.ActorAlign.CENTER;
         head.add_child(logo);
         this._add(head, m, m);
 
-        const top = m + Math.round(headFs * 1.7);
+        const top = m + Math.round(headFs * 1.9);
         const rowH = (h - top - m) / n;
-        const fs = Math.max(10, Math.round(rowH * (this._variant === 'grid' ? 0.24 : 0.2)));
-        const lines = this._variant === 'grid' ? 3 : 2;
+
+        // size text so a 2-line headline + source mark fits inside one row
+        const fs = Math.max(10,
+            Math.min(grid ? 17 : 14, Math.floor((rowH - 10) / 3.3)));
+        const markPx = Math.round(fs * 0.9);
+        const titleH = Math.round(fs * 1.26 * 2);
+        const contentH = markPx + Math.round(fs * 0.3) + titleH;
+        const padY = Math.max(0, (rowH - contentH) / 2);
+        const d = Math.round(Math.min(rowH * 0.78, w * 0.14));
 
         for (let i = 0; i < n; i++) {
             const a = arts[i];
-            const y = top + i * rowH;
+            const y0 = top + i * rowH;
+
             if (i > 0) {
                 this._add(new St.Widget({
                     width: w - 2 * m, height: 1,
                     style: `background-color: rgba(${fg},0.10);`,
-                }), m, y);
+                }), m, y0);
             }
             if (!a) {
                 this._add(new St.Label({
                     text: 'Loading…',
                     style: fontStyle(FONT.display, fs, 0.4, fg),
-                }), m, y + rowH * 0.4);
+                }), m, y0 + rowH * 0.4);
                 continue;
             }
 
-            const d = Math.round(rowH * 0.74);
             const thumbX = w - m - d;
-            this._add(this._thumb(a.imagePath, d, Math.round(d * 0.16)),
-                thumbX, y + (rowH - d) / 2);
+            this._add(this._thumb(a.imagePath, d), thumbX, y0 + (rowH - d) / 2);
 
-            const textBox = new St.BoxLayout({
+            const box = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
-                width: thumbX - m - Math.round(fs * 0.6),
-                y_align: Clutter.ActorAlign.CENTER,
-                style: `spacing: ${Math.round(fs * 0.18)}px;`,
+                width: thumbX - m - Math.round(fs * 0.7),
+                style: `spacing: ${Math.round(fs * 0.3)}px;`,
             });
-            textBox.add_child(new St.Label({
-                text: a.source.toUpperCase(),
-                style: fontStyle(FONT.display, Math.round(fs * 0.72), 0.45, fg)
-                    + ' font-weight: 700;',
-            }));
+            box.add_child(this._sourceMark(a, markPx, onLight));
             const t = new St.Label({
                 text: a.title,
-                height: Math.round(fs * 1.25 * lines),
+                height: titleH,
                 style: fontStyle(FONT.display, fs, 1, fg) + ' font-weight: 600;',
             });
             t.clutter_text.line_wrap = true;
             t.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            textBox.add_child(t);
-            this._add(textBox, m, y + rowH * 0.12);
+            box.add_child(t);
+            this._add(box, m, y0 + padY);
         }
     }
 
     destroy() {
         this._unsub?.();
+        this._setImage?.(null);
         if (this._midnight)
             GLib.source_remove(this._midnight);
         this._midnight = 0;

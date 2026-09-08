@@ -46,6 +46,7 @@ export class WidgetFrame {
                 clocks: inst.clocks,
                 topic: inst.topic,
                 setTint: t => this._glass.setTint(t),
+                setImage: p => this._glass.setImage(p),
             });
         } catch (e) {
             logError(e, `[peachos-widgets] failed to build ${inst.type}/${inst.variant}`);

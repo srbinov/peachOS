@@ -28,10 +28,43 @@ function traceSquircle(cr, w, h, r) {
     squirclePath(cr, w / 2, h / 2, w / 2 - 1, h / 2 - 1, Math.max(1, r - 1), SQUIRCLE_N, 28);
 }
 
-function paintCard(cr, w, h, radiusPx, mode, cropPath, tint) {
+function paintCard(cr, w, h, radiusPx, mode, cropPath, tint, imagePath) {
     cr.save();
     traceSquircle(cr, w, h, radiusPx);
     cr.clip();
+
+    if (imagePath) {
+        // photo card (news "Story"): cover the squircle + darken toward the base
+        try {
+            const png = Cairo.ImageSurface.createFromPNG(imagePath);
+            const pw = png.getWidth();
+            const ph = png.getHeight();
+            if (pw > 0 && ph > 0) {
+                const s = Math.max(w / pw, h / ph);
+                cr.save();
+                cr.translate((w - pw * s) / 2, (h - ph * s) / 2);
+                cr.scale(s, s);
+                cr.setSourceSurface(png, 0, 0);
+                cr.paint();
+                cr.restore();
+            }
+        } catch (e) {
+            cr.setSourceRGBA(0.15, 0.15, 0.17, 1);
+            cr.paint();
+        }
+        const g = new Cairo.LinearGradient(0, h * 0.3, 0, h);
+        g.addColorStopRGBA(0, 0, 0, 0, 0);
+        g.addColorStopRGBA(1, 0, 0, 0, 0.9);
+        cr.setSource(g);
+        cr.paint();
+        cr.restore();
+
+        traceSquircle(cr, w, h, radiusPx);
+        cr.setLineWidth(1.0);
+        cr.setSourceRGBA(1, 1, 1, 0.12);
+        cr.stroke();
+        return;
+    }
 
     if (mode === 'glass') {
         if (cropPath) {
@@ -103,7 +136,8 @@ export function makeLiquidGlass(opts) {
     let cropPath = null;
     let prevPath = null;
     let cropN = 0;
-    let tint = null; // light mode only: {top:[r,g,b], bottom:[r,g,b], dark:bool}
+    let tint = null;       // light mode only: {top:[r,g,b], bottom:[r,g,b], dark}
+    let imagePath = null;  // photo card (news Story): fills the squircle
 
     const card = new St.DrawingArea({x_expand: true, y_expand: true});
     card.connect('repaint', area => {
@@ -111,7 +145,7 @@ export function makeLiquidGlass(opts) {
         const cr = area.get_context();
         try {
             const scale = w / Math.max(1, innerW);
-            paintCard(cr, w, h, radius * scale, mode, cropPath, tint);
+            paintCard(cr, w, h, radius * scale, mode, cropPath, tint, imagePath);
         } finally {
             cr.$dispose();
         }
@@ -159,6 +193,12 @@ export function makeLiquidGlass(opts) {
         // Pass null to go back to white.
         setTint(t) {
             tint = t;
+            card.queue_repaint();
+        },
+        // photo card: fill the squircle with an image (PNG path) + base
+        // gradient. Pass null to go back to the normal card.
+        setImage(path) {
+            imagePath = path || null;
             card.queue_repaint();
         },
     };

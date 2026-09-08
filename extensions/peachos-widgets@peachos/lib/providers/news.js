@@ -3,6 +3,7 @@
 // so St can show them (it won't load remote http images directly).
 
 import Gio from 'gi://Gio';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
@@ -72,21 +73,22 @@ export function topicName(id) {
 }
 
 const SOURCE_MAP = {
-    'nytimes.com': 'The New York Times',
-    'bbc.co.uk': 'BBC News', 'bbc.com': 'BBC News',
-    'arstechnica.com': 'Ars Technica',
-    'npr.org': 'NPR',
-    'variety.com': 'Variety',
-    'polygon.com': 'Polygon',
-    'ign.com': 'IGN',
-    'cbssports.com': 'CBS Sports',
+    'nytimes.com': {name: 'The New York Times', slug: 'nytimes'},
+    'bbc.co.uk': {name: 'BBC News', slug: 'bbc'},
+    'bbc.com': {name: 'BBC News', slug: 'bbc'},
+    'arstechnica.com': {name: 'Ars Technica', slug: 'arstechnica'},
+    'npr.org': {name: 'NPR', slug: 'npr'},
+    'variety.com': {name: 'Variety', slug: 'variety'},
+    'polygon.com': {name: 'Polygon', slug: 'polygon'},
+    'ign.com': {name: 'IGN', slug: 'ign'},
+    'cbssports.com': {name: 'CBS Sports', slug: 'cbssports'},
 };
 
 function hostOf(url) {
     return (url || '').replace(/^https?:\/\/(www\.)?/, '').split(/[/?#]/)[0].toLowerCase();
 }
 
-function sourceName(link, feedUrl) {
+function sourceInfo(link, feedUrl) {
     const h = hostOf(link) || hostOf(feedUrl);
     for (const k in SOURCE_MAP) {
         if (h === k || h.endsWith(`.${k}`))
@@ -94,7 +96,7 @@ function sourceName(link, feedUrl) {
     }
     const parts = h.split('.');
     const base = parts.length >= 2 ? parts[parts.length - 2] : h;
-    return base.charAt(0).toUpperCase() + base.slice(1);
+    return {name: base.charAt(0).toUpperCase() + base.slice(1), slug: base};
 }
 
 const ENTITIES = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", '#x27': "'", nbsp: ' ', mdash: '—', ndash: '–', hellip: '…', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”'};
@@ -146,10 +148,12 @@ function parseFeed(xml, feedUrl) {
         const dateStr = tag(b, 'pubDate') || tag(b, 'published') || tag(b, 'updated') ||
             tag(b, 'dc:date');
         const ts = dateStr ? Date.parse(decode(dateStr)) : NaN;
+        const si = sourceInfo(link, feedUrl);
         out.push({
             title,
             link,
-            source: sourceName(link, feedUrl),
+            source: si.name,
+            sourceSlug: si.slug,
             date: Number.isFinite(ts) ? ts : Date.now(),
             imageUrl: imageIn(b),
             imagePath: null,
@@ -260,11 +264,11 @@ export class NewsProvider {
     _cacheImage(id, article) {
         if (!article.imageUrl || article.imagePath)
             return;
-        const ext = (article.imageUrl.match(/\.(jpe?g|png|webp|avif)/i)?.[1] || 'jpg')
-            .toLowerCase();
-        const name = GLib.compute_checksum_for_string(
-            GLib.ChecksumType.MD5, article.imageUrl, -1) + '.' + ext;
-        const path = GLib.build_filenamev([this._cacheDir, name]);
+        // Always a PNG -- St shows it via background-image and the glass card
+        // paints it through a Cairo squircle clip (createFromPNG only).
+        const path = GLib.build_filenamev([this._cacheDir,
+            GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, article.imageUrl, -1)
+            + '.png']);
         if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
             article.imagePath = path;
             this._emit(id);
@@ -273,15 +277,28 @@ export class NewsProvider {
         const msg = Soup.Message.new('GET', article.imageUrl);
         msg.request_headers.append('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64)');
         this._session.send_and_read_async(msg, GLib.PRIORITY_LOW, null, (src, res) => {
+            const tmp = `${path}.raw`;
             try {
                 const bytes = src.send_and_read_finish(res);
                 if (msg.get_status() !== Soup.Status.OK)
                     return;
-                GLib.file_set_contents(path, bytes.get_data());
+                GLib.file_set_contents(tmp, bytes.get_data());
+                let pb = GdkPixbuf.Pixbuf.new_from_file(tmp);
+                const big = Math.max(pb.get_width(), pb.get_height());
+                if (big > 900) {
+                    const s = 900 / big;
+                    pb = pb.scale_simple(Math.round(pb.get_width() * s),
+                        Math.round(pb.get_height() * s), GdkPixbuf.InterpType.BILINEAR);
+                }
+                pb.savev(path, 'png', [], []);
                 article.imagePath = path;
                 this._emit(id);
             } catch (e) {
-                // no image
+                // unsupported image / decode failed -- leave without a picture
+            } finally {
+                try {
+                    GLib.unlink(tmp);
+                } catch (e) {}
             }
         });
     }
@@ -292,9 +309,8 @@ export class NewsProvider {
             for (const a of keepArticles) {
                 if (!a.imageUrl)
                     continue;
-                const ext = (a.imageUrl.match(/\.(jpe?g|png|webp|avif)/i)?.[1] || 'jpg').toLowerCase();
                 keep.add(GLib.compute_checksum_for_string(
-                    GLib.ChecksumType.MD5, a.imageUrl, -1) + '.' + ext);
+                    GLib.ChecksumType.MD5, a.imageUrl, -1) + '.png');
             }
             const dir = Gio.File.new_for_path(this._cacheDir);
             const en = dir.enumerate_children('standard::name,time::modified',
