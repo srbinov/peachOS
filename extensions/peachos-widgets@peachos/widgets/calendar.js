@@ -34,6 +34,19 @@ function sameDay(a, b) {
         a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+// "Tomorrow" / "Wed" / "Sep 22" relative to today
+function relDay(date) {
+    const now = new Date();
+    const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const t0 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const days = Math.round((t0 - d0) / 86400000);
+    if (days === 1)
+        return 'Tomorrow';
+    if (days > 1 && days < 7)
+        return date.toLocaleDateString(undefined, {weekday: 'long'});
+    return date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+}
+
 // Today marker: a filled circle in the accent colour. Glass mode punches the
 // day number out (Cairo DEST_OUT) so the backdrop shows through; solid modes
 // draw a white number over the accent fill.
@@ -259,21 +272,28 @@ export class CalendarWidget {
         this._add(list, originX + m, m);
 
         const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const weekEnd = new Date(start);
-        weekEnd.setDate(weekEnd.getDate() + (7 - start.getDay()));
-        const end = new Date(start);
+        const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endToday = new Date(startToday);
+        endToday.setDate(endToday.getDate() + 1);
+        const end = new Date(startToday);
         end.setDate(end.getDate() + 30);
 
-        const events = this._source.getEvents(now, end);
-        const buckets = {today: [], week: [], later: []};
-        for (const ev of events.slice(0, 12)) {
-            if (sameDay(ev.date, now))
-                buckets.today.push(ev);
-            else if (ev.date < weekEnd)
-                buckets.week.push(ev);
-            else
-                buckets.later.push(ev);
+        const all = this._source.getEvents(startToday, end);
+
+        const todays = all
+            .filter(ev => ev.date < endToday && ev.end > startToday)
+            .sort((a, b) => a.date - b.date);
+
+        // Upcoming: the next occurrence of each distinct event -- a daily
+        // recurring event collapses to one row, not thirty.
+        const seen = new Set();
+        const upcoming = [];
+        for (const ev of all.filter(ev => ev.date >= endToday).sort((a, b) => a.date - b.date)) {
+            const key = `${ev.summary || ''}|${ev.date.getHours()}:${ev.date.getMinutes()}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            upcoming.push(ev);
         }
 
         const heading = text => {
@@ -289,31 +309,19 @@ export class CalendarWidget {
             }));
         };
 
-        // Nothing anywhere -> a single line.
-        if (!events.length) {
-            emptyLine('No events today');
-            return;
-        }
-
-        const section = (title, evs, fmt) => {
-            if (!evs.length)
-                return;
-            heading(title);
-            for (const ev of evs)
-                list.add_child(this._eventCard(ev, fmt(ev), ls));
-        };
-
         heading('Events today');
-        if (buckets.today.length) {
-            for (const ev of buckets.today)
+        if (todays.length) {
+            for (const ev of todays)
                 list.add_child(this._eventCard(ev, formatEventTime(ev), ls));
         } else {
             emptyLine('No events today');
         }
-        section('This week', buckets.week,
-            ev => ev.date.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric'}));
-        section('Upcoming', buckets.later,
-            ev => ev.date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'}));
+
+        if (upcoming.length) {
+            heading('Upcoming');
+            for (const ev of upcoming.slice(0, 6))
+                list.add_child(this._eventCard(ev, relDay(ev.date), ls));
+        }
     }
 
     _eventCard(ev, timeText, ls) {

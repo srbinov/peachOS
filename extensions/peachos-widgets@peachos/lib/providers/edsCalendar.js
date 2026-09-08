@@ -54,7 +54,7 @@ class FilteredCalendarSource {
             this._detect();
             return GLib.SOURCE_CONTINUE;
         });
-        this._syncTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5 * 60, () => {
+        this._syncTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 3 * 60, () => {
             this._refreshCalDav();
             return GLib.SOURCE_CONTINUE;
         });
@@ -62,6 +62,12 @@ class FilteredCalendarSource {
 
     get connected() {
         return this._connected;
+    }
+
+    /** Pull from the server right now (e.g. the user just opened edit mode). */
+    refreshNow() {
+        this._detect();
+        this._refreshCalDav();
     }
 
     subscribe(fn) {
@@ -201,7 +207,9 @@ class FilteredCalendarSource {
                 continue;
             const kf = new GLib.KeyFile();
             try {
-                if (!kf.load_from_data(src.Data, src.Data.length, GLib.KeyFileFlags.NONE))
+                // length must be the UTF-8 byte count, not the JS string length
+                const bytes = new TextEncoder().encode(src.Data).length;
+                if (!kf.load_from_data(src.Data, bytes, GLib.KeyFileFlags.NONE))
                     continue;
             } catch (e) {
                 continue;

@@ -86,6 +86,10 @@ export class RemindersSource {
         return () => this._listeners.delete(fn);
     }
 
+    refreshNow() {
+        this._discover();
+    }
+
     /** Open incomplete reminders, soonest-due first (undated last). */
     getReminders() {
         return this._tasks
@@ -137,7 +141,8 @@ export class RemindersSource {
                         continue;
                     const kf = new GLib.KeyFile();
                     try {
-                        if (!kf.load_from_data(src.Data, src.Data.length, GLib.KeyFileFlags.NONE))
+                        const bytes = new TextEncoder().encode(src.Data).length;
+                        if (!kf.load_from_data(src.Data, bytes, GLib.KeyFileFlags.NONE))
                             continue;
                     } catch (e) {
                         continue;

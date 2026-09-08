@@ -58,6 +58,11 @@ export class EditMode {
         this._setDockHidden(true);
         this._setWindowsHidden(true);
 
+        // opening edit mode is a good moment to pull fresh account data
+        const ctx = this._widgetLayer.ctx;
+        for (const p of [ctx?.calendar, ctx?.gcal, ctx?.reminders])
+            p?.refreshNow?.();
+
         this._picker = new WidgetPicker(this._widgetLayer, {
             onDone: () => this.toggle(),
         });
