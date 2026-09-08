@@ -104,7 +104,9 @@ export class CalendarWidget {
             : (this._cardMode === 'light' ? lt : dk);
         this._accentRgb = this._accent.map(v => Math.round(v * 255)).join(',');
 
-        this._root = new Clutter.Actor({width: size.w, height: size.h});
+        this._root = new Clutter.Actor({
+            width: size.w, height: size.h, clip_to_allocation: true,
+        });
         parent.add_child(this._root);
 
         this._unsub = this._source.subscribe(() => this._render());
@@ -226,13 +228,6 @@ export class CalendarWidget {
         const numRows = Math.ceil((offset + daysInMonth) / 7);
         const rowH = gridH / numRows;
 
-        const monthEvents = this._source.getEvents(
-            new Date(today.getFullYear(), today.getMonth(), 1),
-            new Date(today.getFullYear(), today.getMonth() + 1, 1));
-        const hasEvent = day => monthEvents.some(ev =>
-            ev.date < new Date(today.getFullYear(), today.getMonth(), day + 1) &&
-            ev.end > new Date(today.getFullYear(), today.getMonth(), day));
-
         for (let day = 1; day <= daysInMonth; day++) {
             const slot = offset + day - 1;
             const col = slot % 7;
@@ -252,24 +247,33 @@ export class CalendarWidget {
                     style: fontStyle(FONT.display, ls, weekend ? 0.45 : 1, this._fg),
                 });
                 this._add(dl, cx - ls * 0.32, cy - ls * 0.62);
-                if (hasEvent(day)) {
-                    this._add(new St.Widget({
-                        width: 4, height: 4,
-                        style: `background-color: rgba(${this._fg},0.85); border-radius: 2px;`,
-                    }), cx - 2, cy + ls * 0.55);
-                }
             }
         }
     }
 
     _renderAgenda(originX, areaW, ls, today) {
         const m = Math.round(this._h * 0.09);
+        // A clipped, scrollable column -- contained in the card, no scrollbar.
+        const scroll = new St.ScrollView({
+            width: areaW - 2 * m,
+            height: this._h - 2 * m,
+            style_class: 'peachos-cal-scroll',
+            reactive: true,
+            x_expand: false, y_expand: false,
+        });
+        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        try {
+            scroll.overlay_scrollbars = true;
+        } catch (e) {
+            // older St
+        }
         const list = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
-            width: areaW - 2 * m,
+            x_expand: true,
             style: `spacing: ${Math.round(this._h * 0.022)}px;`,
         });
-        this._add(list, originX + m, m);
+        scroll.set_child(list);
+        this._add(scroll, originX + m, m);
 
         const now = new Date();
         const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

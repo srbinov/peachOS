@@ -288,6 +288,26 @@
     background-color: rgba(255, 255, 255, 0.06);
 }
 
+/* ---- calendar agenda scroll (no visible scrollbar) -------------- */
+
+.peachos-cal-scroll {
+    padding: 0;
+}
+
+.peachos-cal-scroll StScrollBar,
+.peachos-cal-scroll .scroll-bar {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    opacity: 0;
+    -st-minimum-size: 0;
+}
+
+.peachos-cal-scroll StScrollView StScrollBar {
+    width: 0;
+}
+
 /* ---- world-clock city picker ------------------------------------- */
 
 .peachos-cities {
