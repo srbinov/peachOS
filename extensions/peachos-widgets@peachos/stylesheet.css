@@ -46,6 +46,24 @@
     color: #ffffff;
 }
 
+/* grab handle at the top of the panel -- click / drag / scroll to
+   collapse the panel to a peek and back */
+.peachos-picker-handle {
+    padding: 5px 0 3px 0;
+}
+
+.peachos-picker-handle-chevrons {
+    spacing: 0;
+}
+
+.peachos-picker-handle-chevron {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.peachos-picker-handle:hover .peachos-picker-handle-chevron {
+    color: rgba(255, 255, 255, 0.85);
+}
+
 .peachos-picker-side {
     spacing: 4px;
     padding: 16px 12px;

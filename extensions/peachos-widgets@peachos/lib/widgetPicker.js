@@ -29,6 +29,12 @@ const SIDEBAR_W = 236;
 const PLACE_MODE = 'dark';
 const CENTER = Clutter.ActorAlign.CENTER;
 
+// How much of the panel stays on-screen when the user manually collapses it
+// (the grab handle + a sliver), vs. slideOut() which takes it fully away
+// during a widget drag.
+const PEEK_H = 44;
+const DRAWER_MS = 260;
+
 function previewDims(shape) {
     const wide = shape === 'row' || shape === 'grid';
     const tall = shape === 'grid';
@@ -60,6 +66,16 @@ class WidgetPicker extends Clutter.Actor {
         this._px = mon.x + Math.round((mon.width - this._pw) / 2);
         this._py = mon.y + mon.height - visibleH;
 
+        // Drawer state:
+        //   drawer  -- 'full' (all the way up) | 'peek' (collapsed to the handle),
+        //              toggled by the handle at the top of the panel
+        //   dragGone -- fully off-screen while a widget is being dragged
+        // translation_y targets: full = 0, peek = _peekTy, gone = _ph
+        this._peekTy = visibleH - PEEK_H;
+        this._drawer = 'full';
+        this._dragGone = false;
+        this._chevrons = [];
+
         this._glass = makeLiquidGlass({
             innerW: this._pw, innerH: this._ph,
             x: this._px, y: this._py, radius: 40,
@@ -74,9 +90,10 @@ class WidgetPicker extends Clutter.Actor {
         this.connect('destroy', () => this._wxUnsub?.());
 
         // stay above every placed widget / chrome for as long as we're shown
+        // (peek included -- the handle must stay clickable over placed widgets)
         const parent = this._widgetLayer.layer;
         parent.connectObject('child-added', () => {
-            if (this.get_parent() === parent && !this._hidden)
+            if (this.get_parent() === parent && !this._dragGone)
                 parent.set_child_above_sibling(this, null);
         }, this);
         this.connect('destroy', () => parent.disconnectObject(this));
@@ -91,45 +108,144 @@ class WidgetPicker extends Clutter.Actor {
         });
     }
 
-    // Slide the panel down out of view while a widget is being dragged, back
-    // up when it's dropped.
+    // Take the panel fully off-screen while a widget is being dragged; restore
+    // it (to whatever drawer state it was in) when the widget is dropped.
     slideOut() {
-        if (this._hidden)
+        if (this._dragGone)
             return;
-        this._hidden = true;
-        const g = this._glass.widget;
-        g.remove_all_transitions();
-        g.reactive = false;
-        g.ease({
-            translation_y: this._ph, opacity: 0, duration: 220,
-            mode: Clutter.AnimationMode.EASE_IN_QUAD,
-        });
+        this._dragGone = true;
+        this._applyDrawer(true);
     }
 
     slideIn() {
-        if (!this._hidden)
+        if (!this._dragGone)
             return;
-        this._hidden = false;
+        this._dragGone = false;
         const parent = this._widgetLayer.layer;
         if (this.get_parent() === parent)
             parent.set_child_above_sibling(this, null);
+        this._applyDrawer(true);
+    }
+
+    // The manual collapse/expand toggle, driven by the handle.
+    _setDrawer(state) {
+        if (state === this._drawer)
+            return;
+        this._drawer = state;
+        if (!this._dragGone)
+            this._applyDrawer(true);
+        this._updateChevrons();
+    }
+
+    _applyDrawer(animate) {
         const g = this._glass.widget;
+        const ty = this._dragGone ? this._ph
+            : this._drawer === 'peek' ? this._peekTy : 0;
+        const op = this._dragGone ? 0 : 255;
         g.remove_all_transitions();
-        g.ease({
-            translation_y: 0, opacity: 255, duration: 260,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            onStopped: () => {
-                g.reactive = true;
-            },
+        // stay reactive while peeking so the handle keeps working
+        g.reactive = !this._dragGone;
+        if (animate) {
+            g.ease({
+                translation_y: ty, opacity: op, duration: DRAWER_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        } else {
+            g.translation_y = ty;
+            g.opacity = op;
+        }
+        this._updateChevrons();
+    }
+
+    _updateChevrons() {
+        const name = this._drawer === 'peek' ? 'pan-up-symbolic' : 'pan-down-symbolic';
+        for (const ic of this._chevrons)
+            ic.icon_name = name;
+    }
+
+    // The grab handle at the top of the panel: three chevrons. Click to toggle
+    // full <-> peek; or drag it (and release -- snaps to the nearer state); or
+    // scroll over it.
+    _buildHandle() {
+        const handle = new St.BoxLayout({
+            style_class: 'peachos-picker-handle',
+            x_expand: true, x_align: Clutter.ActorAlign.FILL,
+            reactive: true, track_hover: true,
         });
+        const chevBox = new St.BoxLayout({
+            style_class: 'peachos-picker-handle-chevrons',
+            x_expand: true, x_align: CENTER,
+        });
+        for (let i = 0; i < 3; i++) {
+            const ic = new St.Icon({
+                icon_name: 'pan-down-symbolic', icon_size: 16,
+                style_class: 'peachos-picker-handle-chevron',
+            });
+            this._chevrons.push(ic);
+            chevBox.add_child(ic);
+        }
+        handle.add_child(chevBox);
+
+        handle.connect('button-press-event', (_a, ev) => this._onHandlePress(ev));
+        handle.connect('scroll-event', (_a, ev) => {
+            const dir = ev.get_scroll_direction();
+            if (dir === Clutter.ScrollDirection.DOWN)
+                this._setDrawer('peek');
+            else if (dir === Clutter.ScrollDirection.UP)
+                this._setDrawer('full');
+            return Clutter.EVENT_STOP;
+        });
+        return handle;
+    }
+
+    _onHandlePress(ev) {
+        if (ev.get_button && ev.get_button() !== Clutter.BUTTON_PRIMARY)
+            return Clutter.EVENT_PROPAGATE;
+        if (this._dragGone)
+            return Clutter.EVENT_STOP;
+
+        const g = this._glass.widget;
+        const [, startY] = ev.get_coords();
+        const startTy = g.translation_y;
+        let peakMove = 0;
+        g.remove_all_transitions();
+
+        const id = global.stage.connect('captured-event', (_s, e) => {
+            const t = e.type();
+            if (t === Clutter.EventType.MOTION) {
+                const [, y] = e.get_coords();
+                const dy = y - startY;
+                peakMove = Math.max(peakMove, Math.abs(dy));
+                g.translation_y = Math.min(this._peekTy, Math.max(0, startTy + dy));
+                return Clutter.EVENT_STOP;
+            }
+            if (t === Clutter.EventType.BUTTON_RELEASE) {
+                global.stage.disconnect(id);
+                if (peakMove < 5)
+                    this._drawer = this._drawer === 'full' ? 'peek' : 'full';
+                else
+                    this._drawer = g.translation_y > this._peekTy / 2 ? 'peek' : 'full';
+                this._applyDrawer(true);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        return Clutter.EVENT_STOP;
     }
 
     _buildContents() {
+        const wrap = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true, y_expand: true,
+        });
+        this._glass.content.add_child(wrap);
+        wrap.add_child(this._buildHandle());
+
         const row = new St.BoxLayout({
             x_expand: true, y_expand: true,
             style_class: 'peachos-picker-body',
         });
-        this._glass.content.add_child(row);
+        wrap.add_child(row);
 
         // ---- sidebar --------------------------------------------------
         const side = new St.BoxLayout({
