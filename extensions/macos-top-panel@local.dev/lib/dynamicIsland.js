@@ -224,10 +224,16 @@ export class DynamicIsland {
             onDisconnected: name => this._showTransient('bluetooth-symbolic', `${name} disconnected`, ACCENT.blue),
         });
 
+        // Reuse the Control Center screenshot-button icon (camera in a capture
+        // frame). screenshot.png is already pure white -- the "white filter" is
+        // baked into the asset -- so it reads on the dark pill as-is.
+        this._screenshotGicon = Gio.icon_new_for_string(GLib.build_filenamev(
+            [this._path, 'icons', 'control-center', 'screenshot.png']));
         this._screenshotWatcher = new ScreenshotWatcher({
             onCaptured: kind => this._showTransient(
-                'camera-photo-symbolic',
-                kind === 'recording' ? 'Recording saved' : 'Screenshot saved', ACCENT.indigo),
+                null,
+                kind === 'recording' ? 'Recording saved' : 'Screenshot saved',
+                ACCENT.indigo, {gicon: this._screenshotGicon, iconSize: 16}),
         });
 
         this._nightLightWatcher = new NightLightWatcher(active => {
@@ -349,7 +355,7 @@ export class DynamicIsland {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._transientIcon = new St.Icon({
-            icon_size: 13, style_class: 'dynamic-island-transient-icon', y_align: Clutter.ActorAlign.CENTER,
+            icon_size: 15, style_class: 'dynamic-island-transient-icon', y_align: Clutter.ActorAlign.CENTER,
         });
         this._transientLabel = new St.Label({
             style_class: 'dynamic-island-transient-label', y_align: Clutter.ActorAlign.CENTER,
@@ -544,8 +550,17 @@ export class DynamicIsland {
             this._transientLabel.set_style('color: #ffffff;');
             this._container.set_style(null);
         } else {
-            this._transientIcon.icon_name = iconName;
-            this._transientIcon.set_style(`color: ${accentColor};`);
+            this._transientIcon.icon_size = opts.iconSize ?? 15;
+            if (opts.gicon) {
+                // pre-coloured (white) raster icon -- no symbolic tint
+                this._transientIcon.gicon = opts.gicon;
+                this._transientIcon.icon_name = null;
+                this._transientIcon.set_style(null);
+            } else {
+                this._transientIcon.gicon = null;
+                this._transientIcon.icon_name = iconName;
+                this._transientIcon.set_style(`color: ${accentColor};`);
+            }
             this._transientLabel.set_style(`color: ${accentColor};`);
             this._container.set_style(`border: 1px solid ${accentColor}99;`);
         }
