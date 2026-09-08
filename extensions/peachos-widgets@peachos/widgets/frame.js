@@ -7,6 +7,7 @@ import St from 'gi://St';
 import {makeLiquidGlass, MODE_FG} from '../lib/liquidGlass.js';
 import {variantDef, sizeFor} from '../lib/widgetRegistry.js';
 import {CityPicker} from '../lib/cityPicker.js';
+import {NewsTopicPicker} from '../lib/newsTopicPicker.js';
 
 const GRID = 8;
 const MODE_ORDER = ['glass', 'dark', 'light'];
@@ -43,6 +44,7 @@ export class WidgetFrame {
                 radius: this._size.radius, roundness: 7.5,
                 mode, fg: MODE_FG[mode],
                 clocks: inst.clocks,
+                topic: inst.topic,
                 setTint: t => this._glass.setTint(t),
             });
         } catch (e) {
@@ -116,9 +118,9 @@ export class WidgetFrame {
         this._editing = editing;
         this._glass.widget.reactive = editing;
         this._chrome.visible = editing;
-        if (!editing && this._cityPicker) {
-            this._cityPicker.destroy();
-            this._cityPicker = null;
+        if (!editing && this._config) {
+            this._config.destroy();
+            this._config = null;
         }
         if (editing)
             this._glass.widget.add_style_class_name('peachos-widget--editing');
@@ -127,21 +129,35 @@ export class WidgetFrame {
     }
 
     _openConfig() {
-        if (this._cityPicker)
+        if (this._config)
             return;
-        this._cityPicker = new CityPicker(this.instance.clocks || [], {
-            onChange: clocks => {
-                this.instance.clocks = clocks;
-                this._content?.setClocks?.(clocks);
-                this._callbacks.onConfigured?.(this);
-            },
-            onDone: () => {
-                this._cityPicker?.destroy();
-                this._cityPicker = null;
-            },
-        });
-        this._layer.add_child(this._cityPicker);
-        this._layer.set_child_above_sibling(this._cityPicker, null);
+        const kind = variantDef(this.instance.type, this.instance.variant)?.config;
+        const done = () => {
+            this._config?.destroy();
+            this._config = null;
+        };
+
+        if (kind === 'newsTopic') {
+            this._config = new NewsTopicPicker(this.instance.topic || 'top', {
+                onChange: topic => {
+                    this.instance.topic = topic;
+                    this._content?.setTopic?.(topic);
+                    this._callbacks.onConfigured?.(this);
+                },
+                onDone: done,
+            });
+        } else {
+            this._config = new CityPicker(this.instance.clocks || [], {
+                onChange: clocks => {
+                    this.instance.clocks = clocks;
+                    this._content?.setClocks?.(clocks);
+                    this._callbacks.onConfigured?.(this);
+                },
+                onDone: done,
+            });
+        }
+        this._layer.add_child(this._config);
+        this._layer.set_child_above_sibling(this._config, null);
     }
 
     _cycle(key, order) {
@@ -241,8 +257,8 @@ export class WidgetFrame {
     destroy() {
         this._endDrag();
         this._pressId = 0;
-        this._cityPicker?.destroy();
-        this._cityPicker = null;
+        this._config?.destroy();
+        this._config = null;
         this._teardownContent();
         this._chrome?.destroy();
         this._chrome = null;

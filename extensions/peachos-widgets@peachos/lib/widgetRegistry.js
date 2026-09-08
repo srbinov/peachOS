@@ -15,6 +15,7 @@ import {WeatherWidget} from '../widgets/weather.js';
 import {CalendarWidget} from '../widgets/calendar.js';
 import {RemindersWidget} from '../widgets/reminders.js';
 import {StocksWidget} from '../widgets/stocks.js';
+import {NewsWidget} from '../widgets/news.js';
 
 export const UNIT = 170;          // square widget side, px
 export const ROW_GAP = 8;         // gap a row spans (matches widgetLayer GAP)
@@ -90,6 +91,24 @@ export const REGISTRY = {
             agenda: {
                 name: 'Agenda', shape: 'row',
                 make: (parent, ctx, size) => new CalendarWidget(parent, ctx, size, 'agenda'),
+            },
+        },
+    },
+    news: {
+        name: 'News',
+        appIcon: 'newspaper-symbolic',
+        variants: {
+            story: {
+                name: 'Story', shape: 'square', configurable: true, config: 'newsTopic',
+                make: (parent, ctx, size) => new NewsWidget(parent, ctx, size, 'square'),
+            },
+            headlines: {
+                name: 'Headlines', shape: 'row', configurable: true, config: 'newsTopic',
+                make: (parent, ctx, size) => new NewsWidget(parent, ctx, size, 'row'),
+            },
+            digest: {
+                name: 'Digest', shape: 'grid', configurable: true, config: 'newsTopic',
+                make: (parent, ctx, size) => new NewsWidget(parent, ctx, size, 'grid'),
             },
         },
     },
