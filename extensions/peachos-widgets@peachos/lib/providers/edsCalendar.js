@@ -1,12 +1,13 @@
-// Branded calendar sources, both on the shell's DBusEventSource (Evolution
-// Data Server / GNOME Online Accounts) but each scoped to one account family:
+// Branded calendar sources on the shell's DBusEventSource (Evolution Data
+// Server), each scoped to one account family:
 //
-//   ICloudCalendarSource -- iCloud + on-device calendars (everything that is
-//                           NOT another branded account, i.e. not Google).
-//   GoogleCalendarSource -- calendars that chain up to a Google GOA account.
+//   ICloudCalendarSource -- iCloud + on-device calendars (not Google).
+//   GoogleCalendarSource -- Google calendars only.
 //
-// Filtering is by the event id prefix (= the ESource UID); the ESources are
-// enumerated over the EDS Sources bus and matched against GOA accounts.
+// Scoping is decided from each ESource's own keyfile (auth host / backend),
+// NOT from GOA -- GOA's Account GIR has a property/method name clash in GJS
+// that makes `acc.provider_type` unreliable. Events are then filtered by the
+// event-id prefix, which is the ESource UID.
 //
 // requestRange discipline (see lib/providers/calendar.js): reload only from
 // _refreshRange(), never from getEvents().
@@ -19,21 +20,22 @@ import * as Calendar from 'resource:///org/gnome/shell/ui/calendar.js';
 const SOURCES_NAME = 'org.gnome.evolution.dataserver.Sources5';
 const SOURCES_PATH = '/org/gnome/evolution/dataserver/SourceManager';
 const SOURCE_IFACE = 'org.gnome.evolution.dataserver.Source';
+const CAL_NAME = 'org.gnome.evolution.dataserver.Calendar8';
+const FACTORY_PATH = '/org/gnome/evolution/dataserver/CalendarFactory';
+
+const GOOGLE_RE = /googleusercontent\.com|(^|\.)google\.com$/i;
+const ICLOUD_RE = /icloud\.com|(^|\.)me\.com$|(^|\.)mac\.com$/i;
+const LOCAL_BACKENDS = new Set(['local', 'contacts', 'weather', 'webcal']);
 
 class FilteredCalendarSource {
-    // cfg: {
-    //   collectAccounts(acc) -> bool   -- GOA accounts whose calendars we want
-    //   excludeAccounts(acc) -> bool   -- GOA accounts to exclude even so
-    //   matchSourceData(dataStr) -> bool   -- extra include by raw keyfile
-    //   alwaysConnected: bool
-    // }
+    // cfg: { keep(row, host, resource) -> bool, alwaysConnected: bool }
     constructor(cfg) {
         this._cfg = cfg;
         this._listeners = new Set();
         this._emitId = 0;
         this._emitting = false;
         this._rangeKey = '';
-        this._uids = null;         // Set<uid> to keep, or null == keep all
+        this._uids = null;         // Set<uid> to keep, or null == not resolved yet
         this._connected = !!cfg.alwaysConnected;
 
         try {
@@ -64,7 +66,6 @@ class FilteredCalendarSource {
         return this._connected;
     }
 
-    /** Pull from the server right now (e.g. the user just opened edit mode). */
     refreshNow() {
         this._detect();
         this._refreshCalDav();
@@ -110,79 +111,41 @@ class FilteredCalendarSource {
 
     // Ask EDS to fetch each kept calendar from the server now.
     _refreshCalDav() {
-        for (const uid of this._uids ?? []) {
-            Gio.DBus.session.call(
-                'org.gnome.evolution.dataserver.Calendar8',
-                '/org/gnome/evolution/dataserver/CalendarFactory', 'OpenCalendar',
-                new GLib.Variant('(s)', [uid]), null,
-                Gio.DBusCallFlags.NONE, 15000, null,
-                (bus, res) => {
-                    try {
-                        const [path, name] = bus.call_finish(res).recursiveUnpack();
-                        bus.call(name, path,
-                            'org.gnome.evolution.dataserver.Calendar', 'Refresh',
-                            null, null, Gio.DBusCallFlags.NONE, 15000, null, null);
-                    } catch (e) {
-                        // backend busy / offline -- next tick
-                    }
-                });
-        }
+        for (const uid of this._uids ?? [])
+            this._openAndRefresh(uid).catch(() => {});
     }
 
-    // --- which calendars to keep -----------------------------------------
+    async _openAndRefresh(uid) {
+        const bus = Gio.DBus.session;
+        const opened = await bus.call(
+            CAL_NAME, FACTORY_PATH,
+            'org.gnome.evolution.dataserver.CalendarFactory', 'OpenCalendar',
+            new GLib.Variant('(s)', [uid]), null, Gio.DBusCallFlags.NONE, 15000, null);
+        const [path, name] = opened.recursiveUnpack();
+        await bus.call(name, path, 'org.gnome.evolution.dataserver.Calendar', 'Refresh',
+            null, null, Gio.DBusCallFlags.NONE, 15000, null);
+    }
+
+    // --- which calendars to keep ---------------------------------------
 
     async _detect() {
-        let collect = new Set();
-        let exclude = new Set();
-        try {
-            ({collect, exclude} = await this._goaAccounts());
-        } catch (e) {
-            // GOA unavailable
-        }
-
         let uids = null;
         try {
-            uids = await this._sourceUids(collect, exclude);
+            uids = await this._sourceUids();
         } catch (e) {
             logError(e, '[peachos-widgets] EDS source enumeration failed');
         }
-
         const before = this._uids ? [...this._uids].sort().join() : '';
-        this._uids = uids;                       // null == keep all
+        this._uids = uids;
         const after = this._uids ? [...this._uids].sort().join() : '';
         this._connected = this._cfg.alwaysConnected ||
-            (!!this._uids && this._uids.size > 0) || collect.size > 0;
+            (!!this._uids && this._uids.size > 0);
         if (this._uids && after !== before)
             this._refreshCalDav();
         this._scheduleEmit();
     }
 
-    async _goaAccounts() {
-        const {default: Goa} = await import('gi://Goa');
-        const client = await new Promise((resolve, reject) => {
-            Goa.Client.new(null, (_o, res) => {
-                try {
-                    resolve(Goa.Client.new_finish(res));
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        });
-        const collect = new Set();
-        const exclude = new Set();
-        for (const obj of client.get_accounts()) {
-            const acc = obj.get_account();
-            if (!acc)
-                continue;
-            if (this._cfg.excludeAccounts?.(acc))
-                exclude.add(acc.id);
-            if (this._cfg.collectAccounts?.(acc) && !acc.calendar_disabled && obj.get_calendar())
-                collect.add(acc.id);
-        }
-        return {collect, exclude};
-    }
-
-    _sourceUids(collect, exclude) {
+    _sourceUids() {
         return new Promise((resolve, reject) => {
             Gio.DBus.session.call(
                 SOURCES_NAME, SOURCES_PATH,
@@ -191,7 +154,7 @@ class FilteredCalendarSource {
                 (bus, res) => {
                     try {
                         const [objects] = bus.call_finish(res).recursiveUnpack();
-                        resolve(this._parseSources(objects, collect, exclude));
+                        resolve(this._parseSources(objects));
                     } catch (e) {
                         reject(e);
                     }
@@ -199,7 +162,7 @@ class FilteredCalendarSource {
         });
     }
 
-    _parseSources(objects, collect, exclude) {
+    _parseSources(objects) {
         const rows = [];
         for (const ifaces of Object.values(objects)) {
             const src = ifaces[SOURCE_IFACE];
@@ -207,53 +170,51 @@ class FilteredCalendarSource {
                 continue;
             const kf = new GLib.KeyFile();
             try {
-                // length must be the UTF-8 byte count, not the JS string length
                 const bytes = new TextEncoder().encode(src.Data).length;
                 if (!kf.load_from_data(src.Data, bytes, GLib.KeyFileFlags.NONE))
                     continue;
             } catch (e) {
                 continue;
             }
+            if (!kf.has_group('Calendar'))
+                continue;
             const get = (grp, k) => {
                 try {
                     return kf.has_group(grp) && kf.has_key(grp, k)
-                        ? kf.get_string(grp, k) : null;
+                        ? kf.get_string(grp, k) : '';
                 } catch (e) {
-                    return null;
+                    return '';
                 }
             };
             rows.push({
                 uid: src.UID,
-                data: src.Data,
-                parent: get('Data Source', 'Parent'),
-                account: get('GNOME Online Accounts', 'AccountId'),
-                isCalendar: kf.has_group('Calendar'),
+                parent: get('Data Source', 'Parent') || null,
+                host: get('Authentication', 'Host').toLowerCase(),
+                backend: get('Calendar', 'BackendName').toLowerCase(),
+                resource: get('Resource', 'Identity').toLowerCase(),
+                webdav: get('WebDAV Backend', 'ResourcePath').toLowerCase(),
             });
         }
 
         const byUid = new Map(rows.map(r => [r.uid, r]));
-        const chainAccount = r => {
+        // resolve the effective host/resource, walking to the parent collection
+        // if the leaf source doesn't carry one
+        const origin = r => {
             let cur = r;
+            let host = '';
+            let resource = '';
             for (let i = 0; cur && i < 6; i++) {
-                if (cur.account)
-                    return cur.account;
+                host ||= cur.host;
+                resource ||= cur.resource || cur.webdav;
                 cur = cur.parent ? byUid.get(cur.parent) : null;
             }
-            return null;
+            return {host, resource};
         };
 
         const uids = new Set();
         for (const r of rows) {
-            if (!r.isCalendar)
-                continue;
-            const acc = chainAccount(r);
-            if (acc && exclude.has(acc))
-                continue;
-            const keep =
-                (acc && collect.has(acc)) ||
-                (this._cfg.matchSourceData?.(r.data) ?? false) ||
-                (this._cfg.keepUnbranded && !acc);
-            if (keep)
+            const {host, resource} = origin(r);
+            if (this._cfg.keep(r, host, resource))
                 uids.add(r.uid);
         }
         return uids;
@@ -262,11 +223,10 @@ class FilteredCalendarSource {
     // --- events --------------------------------------------------------
 
     getEvents(begin, end) {
-        if (!this._source)
-            return [];
+        if (!this._source || this._uids === null)
+            return [];   // sources not resolved yet -- don't flash unfiltered data
         let events = this._source.getEvents(begin, end) ?? [];
-        if (this._uids)
-            events = events.filter(ev => this._uids.has(String(ev.id).split('\n')[0]));
+        events = events.filter(ev => this._uids.has(String(ev.id).split('\n')[0]));
         return events.map(ev => {
             const span = ev.end.getTime() - ev.date.getTime();
             const allDay = ev.date.getHours() === 0 && ev.date.getMinutes() === 0 &&
@@ -291,30 +251,31 @@ class FilteredCalendarSource {
     }
 }
 
-const ICLOUD_RE = /(^|[.@/])icloud\.com|@me\.com|@mac\.com/i;
+function isGoogle(host, resource) {
+    return GOOGLE_RE.test(host) || resource.includes('googleusercontent');
+}
 
 export class ICloudCalendarSource extends FilteredCalendarSource {
     constructor() {
         super({
-            // keep on-device + iCloud + any CalDAV; just not the Google tab's
-            excludeAccounts: acc => acc.provider_type === 'google',
-            matchSourceData: data => ICLOUD_RE.test(data),
-            keepUnbranded: true,
-            alwaysConnected: true,   // there is always a local calendar
+            alwaysConnected: true,   // there is always an on-device calendar
+            keep: (r, host, resource) => {
+                if (isGoogle(host, resource))
+                    return false;
+                if (ICLOUD_RE.test(host) || resource.includes('icloud'))
+                    return true;
+                // on-device: no remote host, a local backend
+                return !host && LOCAL_BACKENDS.has(r.backend);
+            },
         });
-    }
-
-    get hasICloud() {
-        return !!this._uids && [...this._uids].length > 0 &&
-            this._connected;
     }
 }
 
 export class GoogleCalendarSource extends FilteredCalendarSource {
     constructor() {
         super({
-            collectAccounts: acc => acc.provider_type === 'google',
             alwaysConnected: false,
+            keep: (r, host, resource) => isGoogle(host, resource),
         });
     }
 }
