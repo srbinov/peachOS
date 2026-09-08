@@ -181,13 +181,13 @@ export class DynamicIsland {
             onChargingStarted: timeToFullSeconds => {
                 const suffix = formatTimeToFull(timeToFullSeconds);
                 this._showTransient(
-                    'battery-good-charging-symbolic',
-                    suffix ? `Charging — ${suffix}` : 'Charging', ACCENT.green);
+                    null, suffix ? `Charging — ${suffix}` : 'Charging',
+                    ACCENT.green, {anim: true});
             },
             onLowBattery: percent =>
                 this._showTransient('battery-low-symbolic', `Low Battery — ${percent}%`, ACCENT.orange),
             onFullyCharged: () =>
-                this._showTransient('battery-full-charged-symbolic', 'Fully Charged', ACCENT.green),
+                this._showTransient(null, 'Fully Charged', ACCENT.green, {anim: true}),
         });
 
         this._localSendWatcher = new LocalSendWatcher(filename => {
@@ -358,6 +358,21 @@ export class DynamicIsland {
         this._transientBox.add_child(this._transientLabel);
         this._container.add_child(this._transientBox);
 
+        // Charging / Fully Charged toasts use a baked-Lottie ring instead of the
+        // flat symbolic icon (assets/charging.*). Sits where _transientIcon is;
+        // one draws while the other hides.
+        try {
+            const meta = loadSpriteMeta(
+                GLib.build_filenamev([this._path, 'assets', 'charging.json']));
+            this._chargeAnim = new SpriteAnimation(
+                GLib.build_filenamev([this._path, 'assets', 'charging.png']),
+                meta, {width: 20, height: 20, loop: false, durationMs: 1900});
+            this._chargeAnim.actor.visible = false;
+            this._transientBox.insert_child_at_index(this._chargeAnim.actor, 0);
+        } catch (e) {
+            logError(e, '[macos-top-panel] charging animation unavailable');
+        }
+
         // Persistent "screen recording" pill: a pulsing red dot + a running clock, the same
         // read as iOS's recording indicator. Driven by ScreenRecordingWatcher.
         this._recordingBox = new St.BoxLayout({
@@ -498,7 +513,7 @@ export class DynamicIsland {
     // a second... then disappearing" -- unlike dictation/media there's no ongoing state here,
     // just a moment-in-time event, so a fixed-duration timer (not a state machine) is honest.
 
-    _showTransient(iconName, text, accentColor) {
+    _showTransient(iconName, text, accentColor, opts = {}) {
         // Don't let a toast stomp on something the user is actively doing in the pill:
         // dictation (mid-utterance, has a modal grab) or a screen recording (would land in
         // the recorded video). The event is edge-triggered, so it's just dropped, not queued.
@@ -510,11 +525,23 @@ export class DynamicIsland {
             this._transientTimerId = 0;
         }
 
-        this._transientIcon.icon_name = iconName;
-        this._transientIcon.set_style(`color: ${accentColor};`);
+        const anim = Boolean(opts.anim && this._chargeAnim);
+        this._transientIcon.visible = !anim;
+        if (this._chargeAnim)
+            this._chargeAnim.actor.visible = anim;
+
+        if (anim) {
+            // white label, no coloured border -- the green ring carries the accent
+            this._chargeAnim.play();
+            this._transientLabel.set_style('color: #ffffff;');
+            this._container.set_style(null);
+        } else {
+            this._transientIcon.icon_name = iconName;
+            this._transientIcon.set_style(`color: ${accentColor};`);
+            this._transientLabel.set_style(`color: ${accentColor};`);
+            this._container.set_style(`border: 1px solid ${accentColor}99;`);
+        }
         this._transientLabel.set_text(text);
-        this._transientLabel.set_style(`color: ${accentColor};`);
-        this._container.set_style(`border: 1px solid ${accentColor}99;`);
 
         this._transientActive = true;
         this._dictationBox.visible = false;
@@ -540,6 +567,10 @@ export class DynamicIsland {
         // from the .dynamic-island class, and the dictation --error border is a style class,
         // so neither is touched by this.
         this._container.set_style(null);
+        this._chargeAnim?.stop();
+        if (this._chargeAnim)
+            this._chargeAnim.actor.visible = false;
+        this._transientIcon.visible = true;
         this._transientActive = false;
         this._transientBox.visible = false;
     }
@@ -639,6 +670,8 @@ export class DynamicIsland {
     destroy() {
         this._piWave?.destroy();
         this._piWave = null;
+        this._chargeAnim?.destroy();
+        this._chargeAnim = null;
         this._stopRecElapsed();
         if (this._transientTimerId) {
             GLib.source_remove(this._transientTimerId);

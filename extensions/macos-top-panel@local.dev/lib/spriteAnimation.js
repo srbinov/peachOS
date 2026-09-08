@@ -24,9 +24,13 @@ export function loadSpriteMeta(jsonPath) {
 
 export class SpriteAnimation {
     // meta: { frames, cols, rows, cellW, cellH, durationMs }
-    constructor(sheetPath, meta, {width, height}) {
+    // opts.loop       -- true: restart at 0 forever; false: stop on the last frame
+    // opts.durationMs  -- override the loop length from meta (e.g. play it faster)
+    constructor(sheetPath, meta, {width, height, loop = true, durationMs = null}) {
         this._sheetPath = sheetPath;
         this._meta = meta;
+        this._loop = loop;
+        this._durationMs = durationMs ?? meta.durationMs;
         this._frames = null;
         this._timerId = 0;
         this._i = 0;
@@ -76,11 +80,21 @@ export class SpriteAnimation {
     play() {
         if (this._timerId || !this._ensureFrames())
             return;
-        const {frames, durationMs} = this._meta;
-        const interval = Math.max(16, Math.round(durationMs / frames));
-        this._show(this._i);
+        const {frames} = this._meta;
+        const interval = Math.max(16, Math.round(this._durationMs / frames));
+        this._i = 0;
+        this._show(0);
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
-            this._i = (this._i + 1) % frames;
+            this._i++;
+            if (this._i >= frames) {
+                if (!this._loop) {
+                    this._i = frames - 1;
+                    this._show(this._i);
+                    this._timerId = 0;
+                    return GLib.SOURCE_REMOVE;
+                }
+                this._i = 0;
+            }
             this._show(this._i);
             return GLib.SOURCE_CONTINUE;
         });

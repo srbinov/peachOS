@@ -24,9 +24,10 @@ extension reads: `{ frames, cols, rows, cellW, cellH, durationMs }`.
 
 | animation | source | output | params |
 |---|---|---|---|
-| Peach Intelligence voice waveform (Dynamic Island "listening") | `extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.lottie.json` | `…/peach-intelligence-voice.png` | `40 8 400` |
+| Peach Intelligence voice waveform (Dynamic Island "listening") | `…/assets/peach-intelligence-voice.lottie.json` | `…/peach-intelligence-voice.png` | `40 8 400` |
+| Charging ring (Dynamic Island "Charging" / "Fully Charged" toast) | `…/assets/charging.lottie.json` | `…/charging.png` | `48 8 220` |
 
-Regenerate: `npm run bake:pi-voice`.
+Regenerate: `npm run bake:pi-voice`, `npm run bake:charging`.
 
 `node_modules/` is **not** committed — the baked PNGs + `.json` are the shipped
 artifacts, plus the pinned source `*.lottie.json`.
