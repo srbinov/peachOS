@@ -109,21 +109,34 @@ class FilteredCalendarSource {
         this._source.requestRange(begin, end);
     }
 
-    // Ask EDS to fetch each kept calendar from the server now.
+    // Ask EDS to fetch each kept calendar from the server now (callback form --
+    // the promisified Gio call misbehaves with our arg list).
     _refreshCalDav() {
-        for (const uid of this._uids ?? [])
-            this._openAndRefresh(uid).catch(() => {});
-    }
-
-    async _openAndRefresh(uid) {
-        const bus = Gio.DBus.session;
-        const opened = await bus.call(
-            CAL_NAME, FACTORY_PATH,
-            'org.gnome.evolution.dataserver.CalendarFactory', 'OpenCalendar',
-            new GLib.Variant('(s)', [uid]), null, Gio.DBusCallFlags.NONE, 15000, null);
-        const [path, name] = opened.recursiveUnpack();
-        await bus.call(name, path, 'org.gnome.evolution.dataserver.Calendar', 'Refresh',
-            null, null, Gio.DBusCallFlags.NONE, 15000, null);
+        for (const uid of this._uids ?? []) {
+            Gio.DBus.session.call(
+                CAL_NAME, FACTORY_PATH,
+                'org.gnome.evolution.dataserver.CalendarFactory', 'OpenCalendar',
+                new GLib.Variant('(s)', [uid]), new GLib.VariantType('(ss)'),
+                Gio.DBusCallFlags.NONE, 15000, null,
+                (bus, res) => {
+                    let path, name;
+                    try {
+                        [path, name] = bus.call_finish(res).recursiveUnpack();
+                    } catch (e) {
+                        return;
+                    }
+                    Gio.DBus.session.call(
+                        name, path, 'org.gnome.evolution.dataserver.Calendar',
+                        'Refresh', null, null, Gio.DBusCallFlags.NONE, 15000, null,
+                        (b, r) => {
+                            try {
+                                b.call_finish(r);
+                            } catch (e) {
+                                // backend busy / offline
+                            }
+                        });
+                });
+        }
     }
 
     // --- which calendars to keep ---------------------------------------
@@ -180,10 +193,9 @@ class FilteredCalendarSource {
                 continue;
             const get = (grp, k) => {
                 try {
-                    return kf.has_group(grp) && kf.has_key(grp, k)
-                        ? kf.get_string(grp, k) : '';
+                    return kf.get_string(grp, k) || '';
                 } catch (e) {
-                    return '';
+                    return '';   // missing group/key
                 }
             };
             rows.push({
@@ -217,6 +229,9 @@ class FilteredCalendarSource {
             if (this._cfg.keep(r, host, resource))
                 uids.add(r.uid);
         }
+        console.log(`[peachos-widgets] ${this.constructor.name}: `
+            + `${rows.length} calendars, kept ${uids.size} `
+            + `[${rows.map(r => `${(origin(r).host || r.backend || '?')}`).join(', ')}]`);
         return uids;
     }
 

@@ -151,7 +151,7 @@ export class RemindersSource {
                         continue;
                     const g = (grp, k, dflt) => {
                         try {
-                            return kf.has_key(grp, k) ? kf.get_string(grp, k) : dflt;
+                            return kf.get_string(grp, k) || dflt;
                         } catch (e) {
                             return dflt;
                         }
