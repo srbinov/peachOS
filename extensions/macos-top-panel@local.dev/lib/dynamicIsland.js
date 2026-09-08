@@ -552,9 +552,6 @@ export class DynamicIsland {
         }
 
         const sprite = opts.anim ? this._toastAnims[opts.anim] : null;
-        // A "drawn glyph" toast (baked animation, or a pre-coloured white raster
-        // icon) carries its own colour -> white label, no coloured pill border.
-        const drawnGlyph = Boolean(sprite || opts.gicon);
 
         for (const [key, s] of Object.entries(this._toastAnims))
             s.actor.visible = key === opts.anim;
@@ -567,14 +564,17 @@ export class DynamicIsland {
                 this._transientIcon.icon_name = null;
                 this._transientIcon.set_style(null);
             } else {
+                // symbolic icon keeps the accent colour -- the one spot of colour on
+                // an otherwise white pill (matches the drawn-glyph toasts, e.g. the
+                // green charging ring). Text is always white; no coloured border.
                 this._transientIcon.gicon = null;
                 this._transientIcon.icon_name = iconName;
                 this._transientIcon.set_style(`color: ${accentColor};`);
             }
         }
         this._transientLabel.set_text(text);
-        this._transientLabel.set_style(drawnGlyph ? 'color: #ffffff;' : `color: ${accentColor};`);
-        this._container.set_style(drawnGlyph ? null : `border: 1px solid ${accentColor}99;`);
+        this._transientLabel.set_style('color: #ffffff;');
+        this._container.set_style(null);
 
         this._transientActive = true;
         this._dictationBox.visible = false;

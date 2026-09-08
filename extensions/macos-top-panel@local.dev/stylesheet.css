@@ -833,9 +833,9 @@
 }
 
 /* One-off toasts (charging, battery, DND, power profile, USB, Bluetooth, screenshot, Night
-   Light, VPN, LocalSend). The per-toast accent color -- icon + label tint and the pill's
-   border -- is set inline from ACCENT in dynamicIsland.js's _showTransient(), not here, so a
-   new toast type doesn't need a CSS rule. */
+   Light, VPN, LocalSend). Label is always white; only the icon carries the per-toast accent
+   colour, set inline from ACCENT in dynamicIsland.js's _showTransient(), so a new toast type
+   doesn't need a CSS rule. */
 .dynamic-island-transient {
   spacing: 7px;
 }
@@ -843,6 +843,7 @@
 .dynamic-island-transient-label {
   font-size: 0.82em;
   font-weight: 600;
+  color: white;
 }
 
 /* Persistent "screen recording" pill -- red dot + label + running clock. */
@@ -866,7 +867,7 @@
 .dynamic-island-recording-elapsed {
   font-size: 0.82em;
   font-weight: 600;
-  color: #FF453A;
+  color: white;
 }
 
 .dynamic-island-dictation,
