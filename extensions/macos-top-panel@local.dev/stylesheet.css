@@ -821,11 +821,11 @@
   padding: 1px 16px;
   border-radius: 999px;
   background-color: #0a0a0a;
-  /* Every pill type is this tall, not just the media one -- the "now playing" pill's
-     two-line text block set its natural height, and the single-line pills (charging,
-     Peach Intelligence, recording, all the toasts) used to come out shorter. Their content
-     is y_align: CENTER, so it centres in this fixed height. */
-  min-height: 24px;
+  font-family: "SF Pro Display", sans-serif;
+  /* Every pill is exactly the Peach Intelligence pill's height -- a hard height,
+     not a min, so the "now playing" pill can't grow taller. Content is
+     y_align: CENTER everywhere, so it centres in this box. */
+  height: 24px;
 }
 
 .dynamic-island--error {
@@ -841,7 +841,8 @@
 }
 
 .dynamic-island-transient-label {
-  font-size: 0.78em;
+  font-size: 0.82em;
+  font-weight: 600;
 }
 
 /* Persistent "screen recording" pill -- red dot + label + running clock. */
@@ -857,12 +858,13 @@
 }
 
 .dynamic-island-recording-label {
-  font-size: 0.78em;
+  font-size: 0.82em;
+  font-weight: 600;
   color: white;
 }
 
 .dynamic-island-recording-elapsed {
-  font-size: 0.8em;
+  font-size: 0.82em;
   font-weight: 600;
   color: #FF453A;
 }
@@ -881,7 +883,8 @@
 }
 
 .dynamic-island-label {
-  font-size: 0.78em;
+  font-size: 0.82em;
+  font-weight: 600;
   color: white;
 }
 
@@ -904,14 +907,10 @@
 }
 
 .dynamic-island-media-title {
-  font-size: 0.78em;
+  font-size: 0.82em;
   font-weight: 600;
   color: white;
-}
-
-.dynamic-island-media-artist {
-  font-size: 0.7em;
-  color: rgba(255, 255, 255, 0.65);
+  max-width: 180px;
 }
 
 /* Peach Intelligence's recent-transcriptions dropdown (lib/dictationHistoryIndicator.js) */

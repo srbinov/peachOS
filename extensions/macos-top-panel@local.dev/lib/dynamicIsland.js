@@ -320,12 +320,15 @@ export class DynamicIsland {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._mediaBox.add_child(this._mediaArt);
-        const mediaText = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
-        this._mediaTitle = new St.Label({style_class: 'dynamic-island-media-title'});
-        this._mediaArtist = new St.Label({style_class: 'dynamic-island-media-artist'});
-        mediaText.add_child(this._mediaTitle);
-        mediaText.add_child(this._mediaArtist);
-        this._mediaBox.add_child(mediaText);
+        // One line only -- every pill is now the same (Peach Intelligence) height,
+        // so the old stacked title + artist block doesn't fit. Title, ellipsized.
+        this._mediaTitle = new St.Label({
+            style_class: 'dynamic-island-media-title', y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._mediaTitle.clutter_text.set({
+            single_line_mode: true, ellipsize: 3 /* Pango.EllipsizeMode.END */,
+        });
+        this._mediaBox.add_child(this._mediaTitle);
         this._mediaEqBars = [];
         this._mediaEqBox = new St.BoxLayout({
             style_class: 'dynamic-island-waveform', vertical: false, y_align: Clutter.ActorAlign.CENTER,
@@ -590,9 +593,9 @@ export class DynamicIsland {
         }
 
         if (showMedia) {
-            this._mediaTitle.set_text(this._mediaState.title || 'Now Playing');
-            this._mediaArtist.set_text(this._mediaState.artist || '');
-            this._mediaArtist.visible = Boolean(this._mediaState.artist);
+            const {title, artist} = this._mediaState;
+            this._mediaTitle.set_text(
+                title && artist ? `${title} — ${artist}` : title || artist || 'Now Playing');
             this._mediaArt.gicon = this._mediaState.artIcon ?? null;
             if (!this._mediaState.artIcon)
                 this._mediaArt.icon_name = 'audio-x-generic-symbolic';
