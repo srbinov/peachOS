@@ -95,7 +95,7 @@ export default class MacosTopPanelExtension extends Extension {
 
             // Dynamic Island: Main.panel._centerBox is cleared above (line ~42) but nothing
             // was ever added back to it -- real, unused space in the middle of the bar.
-            this._dynamicIsland = new DynamicIsland();
+            this._dynamicIsland = new DynamicIsland(this.path);
             Main.panel._centerBox.add_child(this._dynamicIsland.container);
 
             this._controlCenter = new ControlCenterIndicator(this.path);

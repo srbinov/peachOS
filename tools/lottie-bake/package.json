@@ -1,0 +1,14 @@
+{
+  "name": "peachos-lottie-bake",
+  "private": true,
+  "type": "module",
+  "description": "Bake a Lottie JSON into a sprite-sheet PNG for GNOME Shell (no rlottie / GJS Lottie runtime needed)",
+  "scripts": {
+    "bake:pi-voice": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.lottie.json ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.png 40 8 400"
+  },
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "jsdom": "^30.0.1",
+    "lottie-web": "^5.13.0"
+  }
+}

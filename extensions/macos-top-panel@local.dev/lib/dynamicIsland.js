@@ -38,6 +38,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
+import {SpriteAnimation, loadSpriteMeta} from './spriteAnimation.js';
 import {MediaPlayerController} from './mediaPlayerController.js';
 import {PowerStatusWatcher, formatTimeToFull} from './powerStatus.js';
 import {LocalSendWatcher} from './localSendWatcher.js';
@@ -54,14 +55,12 @@ const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
 const DAEMON_BUS_NAME = 'org.peachos.DictationDaemon';
 const DAEMON_OBJECT_PATH = '/org/peachos/DictationDaemon';
 
-const WAVEFORM_BAR_COUNT = 5;
-const WAVEFORM_MIN_HEIGHT = 2;
-const WAVEFORM_MAX_HEIGHT = 8;
-// How long each bar takes to ease to a newly-received level -- matched to roughly the
-// daemon's own emission cadence (LEVEL_EMIT_INTERVAL_S, ~80ms) so one bar's motion finishes
-// right as the next value arrives, instead of visibly lagging behind or snapping.
-const LEVEL_EASE_MS = 90;
-const WAVEFORM_RESET_MS = 120;
+// Peach Intelligence "listening" waveform: a Lottie voice animation baked to a sprite sheet
+// (assets/peach-intelligence-voice.*, from tools/lottie-bake/). The baked loop plays at a
+// fixed rate; real mic-level readings from the daemon drive a subtle vertical pulse on top
+// (SpriteAnimation.setLevel), so it still visibly reacts to the voice without being a
+// literal FFT. Height in px; width follows the sheet's own aspect.
+const PI_WAVE_HEIGHT = 18;
 
 // Appear/disappear: the pill unfurls to the RIGHT from its left edge (scale_x from a sliver
 // to full) with a small slide-in, and retracts left + shrinks on the way out. Left pivot is
@@ -143,12 +142,10 @@ function guessAppNameFromBusName(busName) {
 }
 
 export class DynamicIsland {
-    constructor() {
+    constructor(extensionPath) {
+        this._path = extensionPath;
         this._recordingState = 'idle';
         this._mediaState = null;
-        this._levelHistory = [];
-        this._elapsedTimerId = 0;
-        this._listenStartUs = 0;
         this._transientActive = false;
         this._transientTimerId = 0;
         this._dndInitialized = false;
@@ -163,14 +160,9 @@ export class DynamicIsland {
         if (this._dictationSettings) {
             this._recordingState = this._dictationSettings.get_string('recording-state');
             this._recordingChangedId = this._dictationSettings.connect('changed::recording-state', () => {
-                const previous = this._recordingState;
                 this._recordingState = this._dictationSettings.get_string('recording-state');
                 if (this._recordingState !== 'listening')
-                    this._resetWaveform();
-                if (this._recordingState === 'listening' && previous !== 'listening')
-                    this._startElapsedTimer();
-                else if (this._recordingState !== 'listening')
-                    this._stopElapsedTimer();
+                    this._piWave?.stop();
                 this._sync();
             });
         }
@@ -293,34 +285,31 @@ export class DynamicIsland {
         this._dictationBox = new St.BoxLayout({
             style_class: 'dynamic-island-dictation', vertical: false, y_align: Clutter.ActorAlign.CENTER,
         });
+        // The full-colour Peach Intelligence badge -- the same themed icon the top-bar
+        // history dropdown uses (lib/dictationHistoryIndicator.js), reused verbatim.
         this._dictationIcon = new St.Icon({
-            icon_name: 'audio-input-microphone-symbolic', icon_size: 12, style_class: 'dynamic-island-mic-icon',
-            y_align: Clutter.ActorAlign.CENTER,
+            icon_name: 'peachos-dictation-topbar', icon_size: 18,
+            style_class: 'dynamic-island-pi-icon', y_align: Clutter.ActorAlign.CENTER,
         });
         this._dictationBox.add_child(this._dictationIcon);
-        this._waveformBars = [];
-        this._waveformBox = new St.BoxLayout({
-            style_class: 'dynamic-island-waveform', vertical: false, y_align: Clutter.ActorAlign.CENTER,
-        });
-        for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
-            // St.BoxLayout stretches children to fill its own allocated height by default
-            // (a real bug this fixes -- explicit y_expand: false + y_align: CENTER is what
-            // actually lets a bar's own `height` win instead of being re-stretched to match
-            // the box/tallest sibling on every layout pass, which is what made the waveform
-            // look both "too tall" AND "static": every bar was being stretched back to the
-            // same full height regardless of what _onAudioLevel() had just set it to).
-            const bar = new St.Widget({
-                style_class: 'dynamic-island-waveform-bar', height: WAVEFORM_MIN_HEIGHT,
-                y_align: Clutter.ActorAlign.CENTER, y_expand: false,
-            });
-            this._waveformBox.add_child(bar);
-            this._waveformBars.push(bar);
+
+        // Baked-Lottie voice waveform (assets/peach-intelligence-voice.*), shown only
+        // while actively listening. Missing/broken assets just leave it out -- the icon
+        // and any status label still work.
+        try {
+            const meta = loadSpriteMeta(
+                GLib.build_filenamev([this._path, 'assets', 'peach-intelligence-voice.json']));
+            this._piWave = new SpriteAnimation(
+                GLib.build_filenamev([this._path, 'assets', 'peach-intelligence-voice.png']),
+                meta,
+                {width: Math.round(PI_WAVE_HEIGHT * meta.cellW / meta.cellH), height: PI_WAVE_HEIGHT});
+            this._dictationBox.add_child(this._piWave.actor);
+        } catch (e) {
+            logError(e, '[macos-top-panel] Peach Intelligence waveform unavailable');
         }
-        this._dictationBox.add_child(this._waveformBox);
+
         this._dictationLabel = new St.Label({style_class: 'dynamic-island-label', y_align: Clutter.ActorAlign.CENTER});
         this._dictationBox.add_child(this._dictationLabel);
-        this._elapsedLabel = new St.Label({style_class: 'dynamic-island-elapsed', y_align: Clutter.ActorAlign.CENTER});
-        this._dictationBox.add_child(this._elapsedLabel);
         this._container.add_child(this._dictationBox);
 
         this._mediaBox = new St.BoxLayout({
@@ -409,30 +398,13 @@ export class DynamicIsland {
     }
 
     // One real amplitude reading (0..1, already noise-floored and gamma-curved by the daemon
-    // -- see peachos-dictation-daemon's own _emit_level() docstring) becomes the newest bar; a
-    // short rolling history slides through the rest, so adjacent bars read as adjacent recent
-    // instants (like a trailing oscilloscope trace) instead of five bars all doing the same
-    // thing at once.
+    // -- see peachos-dictation-daemon's own _emit_level() docstring). The baked waveform
+    // loop carries the motion; this just adds a subtle live vertical pulse on top so it
+    // still reacts to how loudly you're speaking.
     _onAudioLevel(level) {
         if (this._recordingState !== 'listening')
             return;
-        this._levelHistory.push(level);
-        if (this._levelHistory.length > WAVEFORM_BAR_COUNT)
-            this._levelHistory.shift();
-
-        const n = this._waveformBars.length;
-        for (let i = 0; i < n; i++) {
-            const historyIndex = this._levelHistory.length - n + i;
-            const v = historyIndex >= 0 ? this._levelHistory[historyIndex] : 0;
-            const height = WAVEFORM_MIN_HEIGHT + v * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT);
-            this._waveformBars[i].ease({height, duration: LEVEL_EASE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        }
-    }
-
-    _resetWaveform() {
-        this._levelHistory = [];
-        for (const bar of this._waveformBars)
-            bar.ease({height: WAVEFORM_MIN_HEIGHT, duration: WAVEFORM_RESET_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this._piWave?.setLevel(level);
     }
 
     // ---- Media "now playing" equalizer (canned -- see MEDIA_EQ_* constants' own comment) ----
@@ -471,32 +443,6 @@ export class DynamicIsland {
         const focusWindow = global.display.get_focus_window();
         const wmClass = focusWindow?.get_wm_class()?.toLowerCase();
         return Boolean(wmClass && wmClass.includes(appGuess));
-    }
-
-    // ---- Elapsed-time counter (the 'listening' state's own label -- see the voice-memo
-    // reference: no "Listening…" text, just the waveform and a running clock) ----------------
-
-    _startElapsedTimer() {
-        this._listenStartUs = GLib.get_monotonic_time();
-        this._updateElapsedLabel();
-        if (this._elapsedTimerId)
-            GLib.source_remove(this._elapsedTimerId);
-        this._elapsedTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-            this._updateElapsedLabel();
-            return GLib.SOURCE_CONTINUE;
-        });
-    }
-
-    _stopElapsedTimer() {
-        if (this._elapsedTimerId) {
-            GLib.source_remove(this._elapsedTimerId);
-            this._elapsedTimerId = 0;
-        }
-    }
-
-    _updateElapsedLabel() {
-        const elapsedSeconds = (GLib.get_monotonic_time() - this._listenStartUs) / 1000000;
-        this._elapsedLabel.set_text(formatElapsed(elapsedSeconds));
     }
 
     // ---- Screen-recording elapsed clock (its own timer -- the dictation one above is tied to
@@ -630,8 +576,13 @@ export class DynamicIsland {
             const listening = this._recordingState === 'listening';
             this._dictationLabel.set_text(TRANSIENT_LABELS[this._recordingState] ?? '');
             this._dictationLabel.visible = !listening;
-            this._elapsedLabel.visible = listening;
-            this._waveformBox.visible = listening;
+            if (this._piWave) {
+                this._piWave.actor.visible = listening;
+                if (listening)
+                    this._piWave.play();
+                else
+                    this._piWave.stop();
+            }
 
             this._container.remove_style_class_name('dynamic-island--error');
             if (this._recordingState === 'error')
@@ -683,7 +634,8 @@ export class DynamicIsland {
     }
 
     destroy() {
-        this._stopElapsedTimer();
+        this._piWave?.destroy();
+        this._piWave = null;
         this._stopRecElapsed();
         if (this._transientTimerId) {
             GLib.source_remove(this._transientTimerId);
