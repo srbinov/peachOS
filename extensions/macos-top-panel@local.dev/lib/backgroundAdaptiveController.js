@@ -1,8 +1,6 @@
-import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 
 const TILE_ON_LIGHT_CLASS = 'macos-control-center-tile-on-light';
-const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
 
 // Deliberately high -- only a genuinely white/very-light background (a browser showing a
 // white page, Files on a white folder view, etc.) should flip the glass dark. Anything more
@@ -23,11 +21,10 @@ export const LIGHT_LUMINANCE_THRESHOLD = 0.78;
  *
  *   - desktop behind the popup  -> the menu bar's own wallpaper light/dark verdict
  *     (extension.js `_applyPanelForeground` -> `setForceDark`)
- *   - a window behind the popup  -> the system color-scheme
- *     (org.gnome.desktop.interface): a light-mode app is light, a dark-mode app is dark,
- *     regardless of what the wallpaper is doing. Not perfect (a white web page in a
- *     dark-mode browser still reads as "dark" here) but it keeps the popup legible over
- *     the overwhelmingly common cases without touching a pixel.
+ *   - ANY normal window behind the popup -> dark glass. We can't tell the window's
+ *     colour, so we don't try: the dark tile recipe (ADAPTIVE_RECIPE) is opaque + bordered
+ *     enough to read on a light window (the case that was broken) AND on a dark one
+ *     (better than translucent light glass, which washes out over either).
  */
 export class BackgroundAdaptiveController {
     /** @param {() => ({x,y,width,height}|null)} getRegion  where the popup will render */
@@ -36,7 +33,6 @@ export class BackgroundAdaptiveController {
         this._actors = new Set();
         this._wallpaperForceDark = false;
         this._effective = false;
-        this._interfaceSettings = new Gio.Settings({schema_id: INTERFACE_SCHEMA_ID});
     }
 
     /** Call once per glass tile actor right after creating it. */
@@ -71,9 +67,8 @@ export class BackgroundAdaptiveController {
         } catch (e) {
             region = null;
         }
-        if (region && this._windowBehind(region)) {
-            return this._interfaceSettings.get_string('color-scheme') !== 'prefer-dark';
-        }
+        if (region && this._windowBehind(region))
+            return true;
         return this._wallpaperForceDark;
     }
 
@@ -127,6 +122,5 @@ export class BackgroundAdaptiveController {
         this._actors.clear();
         this._wallpaperForceDark = false;
         this._effective = false;
-        this._interfaceSettings = null;
     }
 }

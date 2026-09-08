@@ -58,24 +58,29 @@ export const ON_RECIPE = {
 // a plain, non-!important compound selector (however much higher its specificity) still
 // loses to ANY !important rule, so once the base/hover/.on tiles became !important-driven,
 // this adaptive dark variant stopped visibly doing anything at all.
+// "Something (window or bright wallpaper) behind the popup" -> the tile goes dark. These
+// must stay legible even if Shell.BlurEffect is a no-op (it can be, on the nouveau GPUs
+// peachOS targets), so the fill carries the contrast on its own: a mid-dark, mostly-opaque
+// panel (~#2c2c2e-ish, iOS Control Center) with a defining border -- reads white text over
+// a white web page AND reads as a raised tile over a dark window.
 export const ADAPTIVE_RECIPE = {
-    fill: {r: 20, g: 20, b: 24, a: 0.55},
-    gradientStart: {r: 50, g: 50, b: 56, a: 0.55},
-    gradientEnd: {r: 10, g: 10, b: 12, a: 0.72},
-    border: {r: 255, g: 255, b: 255, a: 0.2},
-    shadow: {r: 255, g: 255, b: 255, a: 0.28},
+    fill: {r: 44, g: 44, b: 48, a: 0.82},
+    gradientStart: {r: 60, g: 60, b: 66, a: 0.8},
+    gradientEnd: {r: 30, g: 30, b: 34, a: 0.88},
+    border: {r: 255, g: 255, b: 255, a: 0.16},
+    shadow: {r: 255, g: 255, b: 255, a: 0.22},
 };
 export const ADAPTIVE_HOVER_RECIPE = {
-    fill: {r: 35, g: 35, b: 40, a: 0.62},
-    gradientStart: {r: 65, g: 65, b: 72, a: 0.6},
-    gradientEnd: {r: 15, g: 15, b: 18, a: 0.78},
-    border: {r: 255, g: 255, b: 255, a: 0.32},
+    fill: {r: 60, g: 60, b: 66, a: 0.86},
+    gradientStart: {r: 78, g: 78, b: 86, a: 0.84},
+    gradientEnd: {r: 40, g: 40, b: 45, a: 0.9},
+    border: {r: 255, g: 255, b: 255, a: 0.26},
 };
 export const ADAPTIVE_ON_RECIPE = {
-    fill: {r: 50, g: 50, b: 58, a: 0.72},
-    gradientStart: {r: 80, g: 80, b: 90, a: 0.68},
-    gradientEnd: {r: 20, g: 20, b: 24, a: 0.85},
-    border: {r: 255, g: 255, b: 255, a: 0.42},
+    fill: {r: 74, g: 74, b: 84, a: 0.9},
+    gradientStart: {r: 96, g: 96, b: 108, a: 0.88},
+    gradientEnd: {r: 48, g: 48, b: 54, a: 0.93},
+    border: {r: 255, g: 255, b: 255, a: 0.36},
 };
 
 function lerp(a, b, t) {
