@@ -151,7 +151,7 @@ export class WidgetFrame {
                 onDone: done,
             });
         } else if (kind === 'stocks') {
-            const max = this.instance.variant === 'row' ? 5 : 1;
+            const max = this.instance.variant === 'row' ? 3 : 1;
             this._config = new StockPicker(this.instance.symbols || [], max, this._ctx, {
                 onChange: symbols => {
                     this.instance.symbols = symbols;

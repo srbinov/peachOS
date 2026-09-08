@@ -17,7 +17,7 @@ const SEARCH_URL = q =>
     + encodeURIComponent(q);
 
 export const STOCK_DEFAULTS = {square: ['SPY'], row: ['SPY', 'AAPL', 'BTC-USD']};
-export const STOCK_MAX = {square: 1, row: 5};
+export const STOCK_MAX = {square: 1, row: 3};
 
 // friendlier display names for common symbols; anything else uses the ticker
 const LABELS = {

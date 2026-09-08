@@ -2,7 +2,7 @@
 // Apple Stocks widget.
 //
 //   'square' -- one ticker: ticker, big price, change, sparkline.
-//   'row'    -- up to 5 tickers: ticker + name, sparkline, price + change.
+//   'row'    -- up to 3 tickers: ticker + name, sparkline, price + change.
 //
 // Tickers are chosen per-widget (config: 'stocks', lib/stockPicker.js);
 // defaults live in lib/providers/stocks.js. Font: SF Pro Display.
@@ -29,7 +29,7 @@ export class StocksWidget {
         this._fg = (size.fg || '255,255,255').split(',').map(v => parseInt(v, 10) / 255);
         const dflt = STOCK_DEFAULTS[variant === 'row' ? 'row' : 'square'];
         this._symbols = (size.symbols && size.symbols.length)
-            ? size.symbols.slice(0, variant === 'row' ? 5 : 1)
+            ? size.symbols.slice(0, variant === 'row' ? 3 : 1)
             : dflt.slice();
 
         this._root = new St.Widget({
@@ -58,7 +58,7 @@ export class StocksWidget {
     // Re-point the widget at a new ticker set (from the config picker).
     setSymbols(arr) {
         const next = (arr && arr.length ? arr : STOCK_DEFAULTS[this._variant === 'row' ? 'row' : 'square'])
-            .slice(0, this._variant === 'row' ? 5 : 1);
+            .slice(0, this._variant === 'row' ? 3 : 1);
         this._symbols = next;
         this._unwatch?.();
         this._unwatch = this._ctx.stocks.watch(next);
