@@ -185,7 +185,7 @@ export class DynamicIsland {
                     ACCENT.green, {anim: true});
             },
             onLowBattery: percent =>
-                this._showTransient('battery-low-symbolic', `Low Battery — ${percent}%`, ACCENT.orange),
+                this._showTransient(null, `Low Battery — ${percent}%`, ACCENT.red, {anim: 'lowbat'}),
             onFullyCharged: () =>
                 this._showTransient(null, 'Fully Charged', ACCENT.green, {anim: true}),
         });
@@ -358,19 +358,27 @@ export class DynamicIsland {
         this._transientBox.add_child(this._transientLabel);
         this._container.add_child(this._transientBox);
 
-        // Charging / Fully Charged toasts use a baked-Lottie ring instead of the
-        // flat symbolic icon (assets/charging.*). Sits where _transientIcon is;
-        // one draws while the other hides.
-        try {
-            const meta = loadSpriteMeta(
-                GLib.build_filenamev([this._path, 'assets', 'charging.json']));
-            this._chargeAnim = new SpriteAnimation(
-                GLib.build_filenamev([this._path, 'assets', 'charging.png']),
-                meta, {width: 20, height: 20, loop: false, durationMs: 1900});
-            this._chargeAnim.actor.visible = false;
-            this._transientBox.insert_child_at_index(this._chargeAnim.actor, 0);
-        } catch (e) {
-            logError(e, '[macos-top-panel] charging animation unavailable');
+        // Some toasts use a baked-Lottie glyph (assets/*.png, from the icons repo)
+        // that draws itself once, instead of the flat symbolic icon. Each sits
+        // where _transientIcon is; whichever is active draws, the rest hide.
+        // Keyed by the name passed as _showTransient(..., {anim: <key>}).
+        this._toastAnims = {};
+        for (const [key, file, w, h, dur] of [
+            ['charge', 'charging', 20, 20, 1900],
+            ['lowbat', 'low-battery', 27, 16, 1700],
+        ]) {
+            try {
+                const meta = loadSpriteMeta(
+                    GLib.build_filenamev([this._path, 'assets', `${file}.json`]));
+                const sprite = new SpriteAnimation(
+                    GLib.build_filenamev([this._path, 'assets', `${file}.png`]),
+                    meta, {width: w, height: h, loop: false, durationMs: dur});
+                sprite.actor.visible = false;
+                this._transientBox.insert_child_at_index(sprite.actor, 0);
+                this._toastAnims[key] = sprite;
+            } catch (e) {
+                logError(e, `[macos-top-panel] toast animation ${file} unavailable`);
+            }
         }
 
         // Persistent "screen recording" pill: a pulsing red dot + a running clock, the same
@@ -525,14 +533,14 @@ export class DynamicIsland {
             this._transientTimerId = 0;
         }
 
-        const anim = Boolean(opts.anim && this._chargeAnim);
-        this._transientIcon.visible = !anim;
-        if (this._chargeAnim)
-            this._chargeAnim.actor.visible = anim;
+        const sprite = opts.anim ? this._toastAnims[opts.anim] : null;
+        for (const [key, s] of Object.entries(this._toastAnims))
+            s.actor.visible = key === opts.anim && s === sprite;
+        this._transientIcon.visible = !sprite;
 
-        if (anim) {
-            // white label, no coloured border -- the green ring carries the accent
-            this._chargeAnim.play();
+        if (sprite) {
+            // white label, no coloured border -- the drawn glyph carries the accent
+            sprite.play();
             this._transientLabel.set_style('color: #ffffff;');
             this._container.set_style(null);
         } else {
@@ -567,9 +575,10 @@ export class DynamicIsland {
         // from the .dynamic-island class, and the dictation --error border is a style class,
         // so neither is touched by this.
         this._container.set_style(null);
-        this._chargeAnim?.stop();
-        if (this._chargeAnim)
-            this._chargeAnim.actor.visible = false;
+        for (const s of Object.values(this._toastAnims)) {
+            s.stop();
+            s.actor.visible = false;
+        }
         this._transientIcon.visible = true;
         this._transientActive = false;
         this._transientBox.visible = false;
@@ -670,8 +679,9 @@ export class DynamicIsland {
     destroy() {
         this._piWave?.destroy();
         this._piWave = null;
-        this._chargeAnim?.destroy();
-        this._chargeAnim = null;
+        for (const s of Object.values(this._toastAnims ?? {}))
+            s.destroy();
+        this._toastAnims = {};
         this._stopRecElapsed();
         if (this._transientTimerId) {
             GLib.source_remove(this._transientTimerId);

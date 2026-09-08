@@ -26,8 +26,9 @@ extension reads: `{ frames, cols, rows, cellW, cellH, durationMs }`.
 |---|---|---|---|
 | Peach Intelligence voice waveform (Dynamic Island "listening") | `…/assets/peach-intelligence-voice.lottie.json` | `…/peach-intelligence-voice.png` | `40 8 400` |
 | Charging ring (Dynamic Island "Charging" / "Fully Charged" toast) | `…/assets/charging.lottie.json` | `…/charging.png` | `48 8 220` |
+| Low-battery glyph (Dynamic Island "Low Battery" toast) | `…/assets/low-battery.lottie.json` | `…/low-battery.png` | `48 8 240` |
 
-Regenerate: `npm run bake:pi-voice`, `npm run bake:charging`.
+Regenerate: `npm run bake:pi-voice`, `npm run bake:charging`, `npm run bake:low-battery`.
 
 `node_modules/` is **not** committed — the baked PNGs + `.json` are the shipped
 artifacts, plus the pinned source `*.lottie.json`.

@@ -5,7 +5,8 @@
   "description": "Bake a Lottie JSON into a sprite-sheet PNG for GNOME Shell (no rlottie / GJS Lottie runtime needed)",
   "scripts": {
     "bake:pi-voice": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.lottie.json ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.png 40 8 400",
-    "bake:charging": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/charging.lottie.json ../../extensions/macos-top-panel@local.dev/assets/charging.png 48 8 220"
+    "bake:charging": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/charging.lottie.json ../../extensions/macos-top-panel@local.dev/assets/charging.png 48 8 220",
+    "bake:low-battery": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/low-battery.lottie.json ../../extensions/macos-top-panel@local.dev/assets/low-battery.png 48 8 240"
   },
   "dependencies": {
     "canvas": "^3.2.3",
