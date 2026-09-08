@@ -265,6 +265,18 @@ export class DynamicIsland {
         }
 
         this._sync();
+
+        // Slice every baked animation into GL textures while the shell is idle,
+        // one sheet per idle pass (each upload briefly blocks), so the first
+        // toast that needs one isn't the thing that pays for it.
+        this._warmQueue = [this._piWave, ...Object.values(this._toastAnims ?? {})].filter(Boolean);
+        this._warmId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            this._warmQueue.shift()?.warm();
+            if (this._warmQueue.length)
+                return GLib.SOURCE_CONTINUE;
+            this._warmId = 0;
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     get container() {
@@ -540,19 +552,17 @@ export class DynamicIsland {
         }
 
         const sprite = opts.anim ? this._toastAnims[opts.anim] : null;
+        // A "drawn glyph" toast (baked animation, or a pre-coloured white raster
+        // icon) carries its own colour -> white label, no coloured pill border.
+        const drawnGlyph = Boolean(sprite || opts.gicon);
+
         for (const [key, s] of Object.entries(this._toastAnims))
-            s.actor.visible = key === opts.anim && s === sprite;
+            s.actor.visible = key === opts.anim;
         this._transientIcon.visible = !sprite;
 
-        if (sprite) {
-            // white label, no coloured border -- the drawn glyph carries the accent
-            sprite.play();
-            this._transientLabel.set_style('color: #ffffff;');
-            this._container.set_style(null);
-        } else {
+        if (!sprite) {
             this._transientIcon.icon_size = opts.iconSize ?? 15;
             if (opts.gicon) {
-                // pre-coloured (white) raster icon -- no symbolic tint
                 this._transientIcon.gicon = opts.gicon;
                 this._transientIcon.icon_name = null;
                 this._transientIcon.set_style(null);
@@ -561,10 +571,10 @@ export class DynamicIsland {
                 this._transientIcon.icon_name = iconName;
                 this._transientIcon.set_style(`color: ${accentColor};`);
             }
-            this._transientLabel.set_style(`color: ${accentColor};`);
-            this._container.set_style(`border: 1px solid ${accentColor}99;`);
         }
         this._transientLabel.set_text(text);
+        this._transientLabel.set_style(drawnGlyph ? 'color: #ffffff;' : `color: ${accentColor};`);
+        this._container.set_style(drawnGlyph ? null : `border: 1px solid ${accentColor}99;`);
 
         this._transientActive = true;
         this._dictationBox.visible = false;
@@ -572,6 +582,12 @@ export class DynamicIsland {
         this._recordingBox.visible = false;
         this._transientBox.visible = true;
         this._setVisible(true);
+
+        // Kick the animation only after the pill is on screen -- the first play()
+        // slices the sprite sheet into GL textures, which on a slow GPU can block
+        // the main loop for a beat (idle pre-warm below usually beats it to it).
+        if (sprite)
+            sprite.play();
 
         this._transientTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, TRANSIENT_TOAST_MS, () => {
             this._transientTimerId = 0;
@@ -692,6 +708,10 @@ export class DynamicIsland {
     }
 
     destroy() {
+        if (this._warmId) {
+            GLib.source_remove(this._warmId);
+            this._warmId = 0;
+        }
         this._piWave?.destroy();
         this._piWave = null;
         for (const s of Object.values(this._toastAnims ?? {}))

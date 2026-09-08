@@ -77,6 +77,11 @@ export class SpriteAnimation {
         return this._timerId !== 0;
     }
 
+    // Slice + upload the frames now (idle time) so the first play() doesn't.
+    warm() {
+        this._ensureFrames();
+    }
+
     play() {
         if (this._timerId || !this._ensureFrames())
             return;
