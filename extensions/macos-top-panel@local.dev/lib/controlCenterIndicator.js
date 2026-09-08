@@ -62,7 +62,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this.add_child(this._icon);
 
         this._tileBlur = new TileBlurController();
-        this._backgroundAdaptive = new BackgroundAdaptiveController(() => this._getBackgroundSamplePoint());
+        this._backgroundAdaptive = new BackgroundAdaptiveController(() => this._getBackgroundRegion());
         // Liquid Glass intensity slider (Settings -> Appearance -> Liquid Glass): a
         // supplementary-stylesheet-reload controller, not plain inline `.style` on these
         // tiles -- see controlCenterGlass.js's own docstring for why that approach broke
@@ -678,24 +678,33 @@ class ControlCenterIndicator extends PanelMenu.Button {
     }
 
     /**
-     * Rough point behind where the popup will render, for BackgroundAdaptiveController's
-     * pick_color() sample. Doesn't need to be exact -- it just needs to land somewhere
-     * inside whatever window/desktop area the popup is about to cover, and in practice
-     * that's a single window/wallpaper region regardless of exactly which tile it's under.
-     * The menu's own actor isn't reliably laid out yet at the instant open-state-changed
-     * fires true, so this is computed from the always-available panel button position
-     * instead of the (not yet allocated) popup geometry.
+     * The screen rect the popup covers, for BackgroundAdaptiveController's "is a window
+     * behind it" test. Prefer the real menu actor once it's allocated; fall back to an
+     * estimate from the (always-available) panel button when open-state-changed fires
+     * before the popup is laid out. The overlap test is generous, so the estimate only
+     * has to be roughly right.
      */
-    _getBackgroundSamplePoint() {
+    _getBackgroundRegion() {
         try {
-            const [buttonX, buttonY] = this.get_transformed_position();
-            const [, buttonHeight] = this.get_transformed_size();
-            return {
-                x: Math.max(0, Math.round(buttonX - CONTROL_CENTER_MENU_WIDTH / 2)),
-                y: Math.round(buttonY + buttonHeight + 120),
-            };
+            const a = this.menu?.actor;
+            if (a && a.get_stage() && a.width > 20 && a.height > 20) {
+                const [x, y] = a.get_transformed_position();
+                return {x, y, width: a.width, height: a.height};
+            }
         } catch (e) {
-            logError(e, '[macos-top-panel] control center: failed to compute sample point');
+            // fall through to the estimate
+        }
+        try {
+            const [bx, by] = this.get_transformed_position();
+            const [bw, bh] = this.get_transformed_size();
+            const monitor = Main.layoutManager.primaryMonitor;
+            const w = CONTROL_CENTER_MENU_WIDTH;
+            let x = Math.round(bx + bw - w);           // right edge ~= button's right edge
+            if (monitor)
+                x = Math.max(monitor.x, Math.min(x, monitor.x + monitor.width - w));
+            return {x, y: Math.round(by + bh), width: w, height: 540};
+        } catch (e) {
+            logError(e, '[macos-top-panel] control center: failed to compute popup region');
             return null;
         }
     }
