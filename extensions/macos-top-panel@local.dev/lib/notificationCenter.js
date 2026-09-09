@@ -1,12 +1,24 @@
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Calendar from 'resource:///org/gnome/shell/ui/calendar.js';
 import * as MessageList from 'resource:///org/gnome/shell/ui/messageList.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import {glassStyleString, SHARED_RECIPE, ADAPTIVE_RECIPE} from './liquidGlassIntensity.js';
+import {WEB_APPS, iconFor, openWebApp} from './webAppLauncher.js';
+
+// evolution-alarm-notify -- the EDS reminders daemon. Every connected calendar's
+// event alarms come through this one GApplication, hence the generic "Events and
+// Tasks Reminders" identity we re-attribute below.
+const REMINDER_APP_ID = 'org.gnome.Evolution-alarm-notify';
+// notification.title values worth replacing with the calendar name -- e-a-n sends a
+// static label here, not the event summary (that's in the body). If a config ever
+// sends a real per-event title, it won't match this and we leave it alone.
+const GENERIC_TITLE_RE = /^(reminder|reminders|appointment|events and tasks reminders)$/i;
 
 const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
@@ -42,19 +54,26 @@ function _findActorByName(actor, name) {
 }
 
 export class NotificationCenterPanel {
-    constructor() {
+    /**
+     * @param {string} [extensionPath]  the extension dir, for re-attribution icons
+     * @param {import('./calendarAccounts.js').CalendarAccounts} [calendarAccounts]
+     */
+    constructor(extensionPath = '', calendarAccounts = null) {
         this._open = false;
         this._capturedEventId = 0;
+        this._extensionPath = extensionPath;
+        this._calendarAccounts = calendarAccounts;
+        this._repositionIdleId = 0;
 
         this._messageList = new Calendar.CalendarMessageList();
-        // CalendarMessageList sets its own x_expand: true (see calendar.js), but its actual
-        // rendered width is capped by the theme's .message-list { width: 29em } rule -- inside
-        // a BoxLayout parent that's wider than that (any rounding slop between the panel's
-        // computed width in _reposition() and this actor's real CSS width), an expanding but
-        // width-capped child was landing flush against the start edge instead of centered in
-        // the leftover space. Forcing CENTER here makes it correct regardless of exactly how
-        // that arithmetic lines up.
-        this._messageList.x_align = Clutter.ActorAlign.CENTER;
+        // CalendarMessageList sets its own x_expand: true (see calendar.js). Its rendered
+        // width is now anchored by stylesheet.css
+        // (.macos-notification-center .message-list { width: 27em }, with the theme's own
+        // .message-view right margin zeroed), and _reposition() sizes the panel from the
+        // list's real preferred width -- so the two agree and there's no leftover space to
+        // distribute. START (not CENTER) then matches the left-aligned group headers and the
+        // Clear-button row.
+        this._messageList.x_align = Clutter.ActorAlign.START;
         // St.BoxLayout sizes a vertical child to its own natural/content height by default,
         // not to the box's available space -- without an explicit FILL here, this list just
         // grew to fit every expanded notification and overflowed past the panel's own fixed
@@ -83,6 +102,7 @@ export class NotificationCenterPanel {
         // of routing through _setExpandedGroup's single-slot bookkeeping. This only affects
         // sources added from here on -- but that's every real notification, since this runs
         // immediately on construction, well before any of them exist.
+        const panel = this;
         const messageView = this._messageList._messageView;
         messageView._addNotificationSource = function (source) {
             // Real macOS doesn't dismiss a notification from Notification Center just
@@ -109,6 +129,12 @@ export class NotificationCenterPanel {
             const group = new MessageList.NotificationMessageGroup(source);
 
             this._notificationSourceToGroup.set(source, group);
+
+            // peachOS: rewrite evolution-alarm-notify's generic "Reminders" identity to
+            // the connected calendar (Google/iCloud/Outlook), route a click to that
+            // calendar, and give every card a hover-X + swipe-right dismiss.
+            panel._reattributeReminderSource(source);
+            panel._wireGroupDecoration(source, group);
 
             // The group's own Clutter.ClickGesture (passed as `actions:` in
             // NotificationMessageGroup's constructor) is attached to the whole group actor,
@@ -280,6 +306,19 @@ export class NotificationCenterPanel {
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
+        // _reposition() above ran while the list was still unallocated (panel hidden),
+        // so on the very first open its preferred width can read short and the panel
+        // ends up narrower than the cards (which then clip on the right). Re-run once
+        // now that the panel is visible and the list has a real measurement.
+        if (!this._repositionIdleId) {
+            this._repositionIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                this._repositionIdleId = 0;
+                if (this._open)
+                    this._reposition();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
         this._capturedEventId = global.stage.connect('captured-event', this._onCapturedEvent.bind(this));
     }
 
@@ -395,7 +434,12 @@ export class NotificationCenterPanel {
             return;
 
         const panelBoxHeight = Main.layoutManager.panelBox.height || 0;
-        const width = Math.round(this._messageList.width || 380) + GLASS_PADDING * 2;
+        // The list's CSS width (.macos-notification-center .message-list) is a fixed em
+        // value, so get_preferred_width() is stable even before the panel is allocated --
+        // unlike .width, which is 0 until then. + panel padding (GLASS_PADDING*2) + 1px
+        // border each side.
+        const [, listNat] = this._messageList.get_preferred_width(-1);
+        const width = Math.round(listNat || 380) + GLASS_PADDING * 2 + 2;
         const top = monitor.y + panelBoxHeight + EDGE_MARGIN;
         const dockReserved = this._dockReservedHeight(monitor);
         const bottomReserved = dockReserved > 0 ? dockReserved + EDGE_MARGIN : EDGE_MARGIN;
@@ -444,7 +488,157 @@ export class NotificationCenterPanel {
      */
     async _sampleAdaptive() {}
 
+    // ---- Reminder re-attribution + per-card dismiss ------------------------------------
+
+    /**
+     * evolution-alarm-notify (`org.gnome.Evolution-alarm-notify`) fires calendar-event
+     * alarms for every connected calendar under one generic "Events and Tasks Reminders"
+     * identity. Rewrite that to the connected calendar (Google / iCloud / Outlook, or a
+     * plain "Calendar" when it's ambiguous) and route a click to that calendar via the
+     * open-in-best-app hierarchy instead of launching Evolution's reminder window.
+     */
+    _reattributeReminderSource(source) {
+        if (source._appId !== REMINDER_APP_ID)
+            return;
+
+        const slug = this._calendarAccounts?.resolveSlug?.() ?? 'calendar';
+        const site = WEB_APPS[slug] ?? WEB_APPS['calendar'];
+        const gicon = iconFor(slug, this._extensionPath);
+
+        // title/icon are plain MessageList.Source props here -- the SYNC_CREATE bindings in
+        // MessageHeader / NotificationMessageGroup pick the change up.
+        source.title = site.name;
+        if (gicon)
+            source.icon = gicon;
+
+        const fixNotification = n => {
+            if (n.title && GENERIC_TITLE_RE.test(n.title.trim()))
+                n.title = site.name;
+            // clear the GTK default action so activate() falls through to source.open()
+            n._defaultAction = null;
+            n._defaultActionTarget = null;
+        };
+        source.notifications.forEach(fixNotification);
+        source.connectObject('notification-added',
+            (_s, n) => fixNotification(n), source);
+
+        // GtkNotificationDaemonAppSource.open() normally does this._app.activate();
+        // replace it on the instance so a card click opens the calendar instead. Resolve
+        // the slug afresh each time so connecting an account mid-session takes effect.
+        source.open = () => {
+            openWebApp(this._calendarAccounts?.resolveSlug?.() ?? 'calendar');
+            this.close();
+        };
+    }
+
+    /**
+     * Decorate every message in a group: move the close button to the top-left, reveal it
+     * only on hover, make it (and a right-swipe) dismiss just that one notification rather
+     * than the whole collapsed group.
+     */
+    _wireGroupDecoration(source, group) {
+        const decorateAll = () => {
+            for (const [notification, message] of group._notificationToMessage)
+                this._decorateMessage(message, notification, group);
+        };
+        // The group's own 'notification-added' handler (connected in its constructor,
+        // so it runs first) has already created + registered the message by the time
+        // this fires.
+        source.connectObject('notification-added', () => decorateAll(), group);
+        decorateAll();
+    }
+
+    _decorateMessage(message, notification, group) {
+        if (!message || message._peachDecorated)
+            return;
+        message._peachDecorated = true;
+        message.add_style_class_name('macos-nc-message');
+
+        const item = message.get_parent(); // the St.Bin wrapper (ScaleLayout + pivot)
+
+        const dismiss = () => {
+            // _closed short-circuits NotificationMessage's own 'destroy' handler so it
+            // won't call message.close() -> group's collapsed "close the whole group"
+            // path. The Source's notification-removed signal then drives
+            // NotificationMessageGroup._removeNotification, which animates out just this
+            // card.
+            message._closed = true;
+            try {
+                notification.destroy(MessageTray.NotificationDestroyedReason.DISMISSED);
+            } catch (e) {
+                logError(e, '[macos-top-panel] notification dismiss failed');
+            }
+        };
+
+        // ---- close button: fresh one at the head of the header, hover-revealed --------
+        const header = message._header;
+        const oldClose = header.closeButton;
+        const closeBtn = new St.Button({
+            style_class: 'message-close-button',
+            icon_name: 'window-close-symbolic',
+            y_align: Clutter.ActorAlign.CENTER,
+            opacity: 0,
+        });
+        closeBtn.connect('clicked', () => dismiss());
+        if (oldClose) {
+            oldClose.hide();
+            header.remove_child(oldClose);
+        }
+        header.insert_child_at_index(closeBtn, 0);
+        header.closeButton = closeBtn;
+
+        message.connectObject('notify::hover', () => {
+            closeBtn.remove_all_transitions();
+            closeBtn.ease({
+                opacity: message.hover ? 255 : 0,
+                duration: 120,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        }, message);
+
+        // ---- swipe right to dismiss --------------------------------------------------
+        if (item) {
+            const pan = new Clutter.PanGesture({pan_axis: Clutter.PanAxis.X});
+            pan.set_begin_threshold(14);
+            let startX = 0;
+            pan.connect('recognize', g => {
+                startX = g.get_begin_centroid().x;
+                item.remove_all_transitions();
+            });
+            pan.connect('pan-update', g => {
+                const dx = g.get_centroid().x - startX;
+                item.translation_x = Math.max(0, dx); // right only
+            });
+            const settle = () => {
+                const dx = item.translation_x;
+                const commit = dx > Math.max(60, item.width * 0.35);
+                if (commit) {
+                    item.ease({
+                        translation_x: item.width,
+                        opacity: 0,
+                        duration: 160,
+                        mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                        onStopped: () => dismiss(),
+                    });
+                } else {
+                    item.ease({
+                        translation_x: 0,
+                        duration: 200,
+                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    });
+                }
+            };
+            pan.connect('end', settle);
+            pan.connect('cancel', settle);
+            item.add_action(pan);
+        }
+    }
+
     destroy() {
+        if (this._repositionIdleId) {
+            GLib.source_remove(this._repositionIdleId);
+            this._repositionIdleId = 0;
+        }
         if (this._capturedEventId) {
             global.stage.disconnect(this._capturedEventId);
             this._capturedEventId = 0;

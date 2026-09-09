@@ -602,7 +602,7 @@ done
 
 echo "==> Installing iCloud app desktop entries -> /usr/share/applications"
 install_icloud_desktop() {
-    local slug="$1" args="$2" name="$3"
+    local slug="$1" args="$2" name="$3" webapp="${4:-}"
     cat > "/usr/share/applications/icloud-for-linux_${slug}.desktop" <<EOF
 [Desktop Entry]
 Name=${name}
@@ -616,10 +616,17 @@ StartupWMClass=icloud-for-linux.${slug}
 Terminal=false
 StartupNotify=true
 EOF
+    # X-PeachOS-WebApp=<slug> is how a web-service wrapper (WebKitGTK, Electron, ...)
+    # declares which site it is, so notifications/widgets can open it -- see
+    # extensions/macos-top-panel@local.dev/lib/webAppLauncher.js. Any future Electron
+    # app just needs this one line; the slug matches a key in that file's WEB_APPS.
+    if [[ -n "$webapp" ]]; then
+        echo "X-PeachOS-WebApp=${webapp}" >> "/usr/share/applications/icloud-for-linux_${slug}.desktop"
+    fi
 }
 install_icloud_desktop mail      "mail Mail"                            "iCloud Mail"
 install_icloud_desktop contacts  "contacts Contacts"                    "iCloud Contacts"
-install_icloud_desktop calendar  "calendar Calendar"                    "iCloud Calendar"
+install_icloud_desktop calendar  "calendar Calendar"                    "iCloud Calendar"     icloud-calendar
 install_icloud_desktop photos    "photos Photos"                        "iCloud Photos"
 install_icloud_desktop drive     "iclouddrive Drive"                    "iCloud Drive"
 install_icloud_desktop notes     "notes Notes"                          "iCloud Notes"

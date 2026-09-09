@@ -16,6 +16,8 @@ import {installDashFilter, uninstallDashFilter} from './lib/dashFilter.js';
 import {installNotificationSlide, uninstallNotificationSlide} from './lib/notificationTray.js';
 import {NotificationCenterPanel} from './lib/notificationCenter.js';
 import {NotificationBannerGlass} from './lib/notificationBannerGlass.js';
+import {NotificationCenterGlass} from './lib/notificationCenterGlass.js';
+import {CalendarAccounts} from './lib/calendarAccounts.js';
 import {AppLauncherOverlay} from './lib/appLauncher.js';
 import {DockOrderGuard} from './lib/dockOrderGuard.js';
 import {SoundIndicator} from './lib/soundIndicator.js';
@@ -106,8 +108,10 @@ export default class MacosTopPanelExtension extends Extension {
             Main.panel.menuManager.addMenu(this._controlCenter.menu);
             Main.panel._rightBox.add_child(this._controlCenter.container);
 
-            this._notificationCenter = new NotificationCenterPanel();
+            this._calendarAccounts = new CalendarAccounts();
+            this._notificationCenter = new NotificationCenterPanel(this.path, this._calendarAccounts);
             this._notificationBannerGlass = new NotificationBannerGlass();
+            this._notificationCenterGlass = new NotificationCenterGlass();
             this._clockWidget = new ClockWidget(this._panelSettings, () => this._notificationCenter.toggle());
             Main.panel._rightBox.add_child(this._clockWidget);
 
@@ -284,6 +288,7 @@ export default class MacosTopPanelExtension extends Extension {
         // Center / notification banners too.
         this._notificationCenter?.setPanelForeground?.(foreground);
         this._notificationBannerGlass?.setPanelForeground?.(foreground);
+        this._notificationCenterGlass?.setPanelForeground?.(foreground);
     }
 
     _applyIconVisibility() {
@@ -410,6 +415,10 @@ export default class MacosTopPanelExtension extends Extension {
         this._notificationCenter = null;
         this._notificationBannerGlass?.destroy();
         this._notificationBannerGlass = null;
+        this._notificationCenterGlass?.destroy();
+        this._notificationCenterGlass = null;
+        this._calendarAccounts?.destroy();
+        this._calendarAccounts = null;
 
         this._appLauncher?.destroy();
         this._appLauncher = null;
