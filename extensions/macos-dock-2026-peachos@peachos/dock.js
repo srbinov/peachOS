@@ -243,9 +243,6 @@ export let Dock = GObject.registerClass(
           let r = this._separatorScreenRect(h.overlay);
           if (!r) continue;
           if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-            console.log(
-              `[macos-dock] separator hit button=${button} builtin=${h.isBuiltin}`
-            );
             if (button === 3) {
               this._openSeparatorMenu(h);
               return Clutter.EVENT_STOP;
@@ -327,7 +324,8 @@ export let Dock = GObject.registerClass(
       this._draggedUserSep = marker;
       marker._dragX = null;
       marker._dragAfter = marker.after || '';
-      console.log('[macos-dock] separator drag begin');
+      // kick the animator so magnification eases back down right away
+      this._beginAnimation();
       let [ox] = this.renderArea.get_transformed_position();
 
       this._sepDragCapturedId = global.stage.connect(

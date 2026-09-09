@@ -271,7 +271,9 @@ export let Animator = class {
     });
 
     let noAnimation = !dock.extension.animate_icons_unmute;
-    if (dock._dragging) {
+    if (dock._dragging || dock._draggedUserSep) {
+      // suppress hover magnification while an icon or a separator is being
+      // dragged -- it comes back the instant the drag ends
       noAnimation = true;
       isWithin = true;
     }
@@ -1216,7 +1218,13 @@ export let Animator = class {
       didScale = true;
     }
 
-    if (didFadeIn || didScale || dock._dragging || didBounce) {
+    if (
+      didFadeIn ||
+      didScale ||
+      dock._dragging ||
+      dock._draggedUserSep ||
+      didBounce
+    ) {
       dock.autohider._debounceCheckHide();
       dock._debounceEndAnimation();
     }
