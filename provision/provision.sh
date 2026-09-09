@@ -1168,6 +1168,20 @@ install -Dm644 "$REPO_DIR/provision/fontconfig/49-peachos-widgets.conf" \
     /etc/fonts/conf.d/49-peachos-widgets.conf
 fc-cache -f >/dev/null 2>&1 || true
 
+# iCloud Photos widget helper (apps/icloud-photos): signs in with pyicloud and
+# drops ~30 random photos from the library, as downscaled JPEGs, into
+# ~/.cache/peachos-widgets/icloud-photos for the desktop Photos widget. iCloud
+# has no public Photos API -- python3-pyicloud talks to the same private endpoint
+# iCloud.com uses; python3-pil downscales; libsecret (already present) holds the
+# Apple ID password. The user runs `peachos-icloud-photos auth` once (Apple ID +
+# 2FA); the timer below keeps the cache fresh.
+echo "==> Installing iCloud Photos widget helper"
+apt-get install -y --no-install-recommends python3-pyicloud python3-pil gir1.2-secret-1
+install -Dm755 "$REPO_DIR/apps/icloud-photos/peachos-icloud-photos" /usr/bin/peachos-icloud-photos
+install -Dm644 "$REPO_DIR/apps/icloud-photos/peachos-icloud-photos.service" /usr/lib/systemd/user/peachos-icloud-photos.service
+install -Dm644 "$REPO_DIR/apps/icloud-photos/peachos-icloud-photos.timer" /usr/lib/systemd/user/peachos-icloud-photos.timer
+systemctl --global enable peachos-icloud-photos.timer
+
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/

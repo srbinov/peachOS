@@ -16,6 +16,7 @@ import {CalendarWidget} from '../widgets/calendar.js';
 import {RemindersWidget} from '../widgets/reminders.js';
 import {StocksWidget} from '../widgets/stocks.js';
 import {NewsWidget} from '../widgets/news.js';
+import {PhotosWidget} from '../widgets/photos.js';
 
 export const UNIT = 170;          // square widget side, px
 export const ROW_GAP = 8;         // gap a row spans (matches widgetLayer GAP)
@@ -137,6 +138,20 @@ export const REGISTRY = {
             wide: {
                 name: 'Wide', shape: 'row',
                 make: (parent, ctx, size) => new RemindersWidget(parent, ctx, size, 'wide'),
+            },
+        },
+    },
+    photos: {
+        name: 'Photos',
+        appIcon: 'org.gnome.Photos',
+        variants: {
+            single: {
+                name: 'Photo', shape: 'square',
+                make: (parent, ctx, size) => new PhotosWidget(parent, ctx, size, 'square'),
+            },
+            grid: {
+                name: 'Featured', shape: 'grid',
+                make: (parent, ctx, size) => new PhotosWidget(parent, ctx, size, 'grid'),
             },
         },
     },

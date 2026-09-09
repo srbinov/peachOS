@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the iCloud Photos widget cache periodically
+
+[Timer]
+OnStartupSec=3min
+OnUnitActiveSec=3h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

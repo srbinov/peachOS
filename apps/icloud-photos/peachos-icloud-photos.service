@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh the iCloud Photos widget cache
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/peachos-icloud-photos sync
+# a stale/expired session just exits non-zero -- don't restart-loop, the timer
+# tries again later and the widget shows "sign in again"
+SuccessExitStatus=0 2 3 4
+Nice=10

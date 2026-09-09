@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""
+peachos-icloud-photos -- pulls random photos from your iCloud Photo Library into
+a small local cache that the desktop Photos widget rotates through.
+
+  auth      interactive sign-in (Apple ID + password + 2FA); trusts the session
+  sync      headless: refresh the random-photo cache  (the systemd timer runs this)
+  status    JSON on stdout: connected? account, library size, last sync, reauth?
+  logout    forget the account + wipe the cache
+
+iCloud has no public Photos API. This talks to the same private endpoint
+iCloud.com and the Photos app use, via pyicloud (Debian: python3-pyicloud).
+Apple can change that endpoint; pyicloud is patched when they do. The session
+trust token expires every few weeks -> run `auth` again (a fresh 2FA code).
+
+Nothing is stored in the clear: the Apple ID password goes to the login keyring
+(libsecret); the pyicloud session cookies live in ~/.local/share/peachos.
+"""
+import getpass
+import hashlib
+import io
+import json
+import os
+import random
+import sys
+import time
+
+import gi
+gi.require_version('Secret', '1')
+from gi.repository import Secret  # noqa: E402
+
+from PIL import Image  # noqa: E402
+from pyicloud import PyiCloudService  # noqa: E402
+from pyicloud.exceptions import (  # noqa: E402
+    PyiCloud2FARequiredException,
+    PyiCloud2SARequiredException,
+    PyiCloudAPIResponseException,
+    PyiCloudFailedLoginException,
+)
+from pyicloud.services.photos import DirectionEnum  # noqa: E402
+
+DATA_DIR = os.path.expanduser('~/.local/share/peachos/icloud-photos')
+SESSION_DIR = os.path.join(DATA_DIR, 'session')
+CONFIG = os.path.join(DATA_DIR, 'config.json')
+CACHE_DIR = os.path.expanduser('~/.cache/peachos-widgets/icloud-photos')
+MANIFEST = os.path.join(CACHE_DIR, 'manifest.json')
+
+POOL_SIZE = 30       # photos kept cached at once
+MAX_EDGE = 1800      # downscale the longest side to this
+JPEG_Q = 85
+
+_SCHEMA = Secret.Schema.new(
+    'org.peachos.iCloudPhotos', Secret.SchemaFlags.NONE,
+    {'account': Secret.SchemaAttributeType.STRING})
+
+
+# ---- tiny helpers -------------------------------------------------------
+
+def _secret_set(account, password):
+    Secret.password_store_sync(
+        _SCHEMA, {'account': account}, Secret.COLLECTION_DEFAULT,
+        'peachOS — iCloud Photos', password, None)
+
+
+def _secret_get(account):
+    return Secret.password_lookup_sync(_SCHEMA, {'account': account}, None)
+
+
+def _secret_clear(account):
+    try:
+        Secret.password_clear_sync(_SCHEMA, {'account': account}, None)
+    except Exception:
+        pass
+
+
+def _load_config():
+    try:
+        with open(CONFIG) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_config(cfg):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = CONFIG + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, CONFIG)
+
+
+def _read_manifest():
+    try:
+        with open(MANIFEST) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_manifest(m):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = MANIFEST + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(m, f, indent=2)
+    os.replace(tmp, MANIFEST)
+
+
+def _connect(apple_id, password=None):
+    os.makedirs(SESSION_DIR, exist_ok=True)
+    return PyiCloudService(apple_id, password, cookie_directory=SESSION_DIR)
+
+
+def _mark_reauth(needed=True):
+    cfg = _load_config()
+    if needed:
+        cfg['reauth_needed'] = True
+    else:
+        cfg.pop('reauth_needed', None)
+    _save_config(cfg)
+
+
+def _is_video(asset):
+    try:
+        if asset.item_type == 'movie':
+            return True
+        return asset.filename.lower().endswith(('.mov', '.mp4', '.m4v'))
+    except Exception:
+        return False
+
+
+def _download_jpeg(asset):
+    """iCloud stores a JPEG derivative of every photo -- prefer that, so we
+    never have to decode HEIC. `medium` is ~1600-2048px."""
+    order = ['medium', 'thumb']
+    try:
+        if asset.item_type in ('image', '') and \
+           asset.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            order.append('original')
+    except Exception:
+        pass
+    for v in order:
+        try:
+            if v in asset.versions:
+                data = asset.download(v, timeout=30)
+                if data:
+                    return data
+        except Exception:
+            continue
+    return None
+
+
+def _save_scaled(data, path):
+    im = Image.open(io.BytesIO(data))
+    im = im.convert('RGB')
+    if max(im.size) > MAX_EDGE:
+        im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
+    tmp = path + '.tmp'
+    im.save(tmp, 'JPEG', quality=JPEG_Q)
+    os.replace(tmp, path)
+    return im.size
+
+
+# ---- commands ---------------------------------------------------------
+
+def cmd_auth():
+    print('Sign in to iCloud. Your password goes to the login keyring, not a file.\n')
+    apple_id = input('Apple ID (email): ').strip()
+    if not apple_id:
+        return 1
+    password = getpass.getpass('Password: ')
+    try:
+        api = _connect(apple_id, password)
+    except PyiCloudFailedLoginException as e:
+        print(f'Sign-in failed: {e}', file=sys.stderr)
+        return 1
+
+    if api.requires_2fa:
+        code = input('Two-factor code (shown on your other Apple devices): ').strip()
+        if not api.validate_2fa_code(code):
+            print('That code was not accepted.', file=sys.stderr)
+            return 1
+        if not api.is_trusted_session:
+            api.trust_session()
+    elif api.requires_2sa:
+        dev = api.trusted_devices[0]
+        if not api.send_verification_code(dev):
+            print('Could not send a verification code.', file=sys.stderr)
+            return 1
+        code = input('Verification code: ').strip()
+        if not api.validate_verification_code(dev, code):
+            print('Code rejected.', file=sys.stderr)
+            return 1
+
+    _secret_set(apple_id, password)
+    cfg = _load_config()
+    cfg.update(apple_id=apple_id,
+               name=getattr(api, 'account_name', None) or apple_id,
+               authed_at=int(time.time()))
+    cfg.pop('reauth_needed', None)
+    _save_config(cfg)
+    print(f'\nConnected as {cfg["name"]}.')
+    return cmd_sync()
+
+
+def cmd_sync():
+    cfg = _load_config()
+    apple_id = cfg.get('apple_id')
+    if not apple_id:
+        print('Not signed in. Run:  peachos-icloud-photos auth', file=sys.stderr)
+        return 2
+
+    try:
+        api = _connect(apple_id, _secret_get(apple_id))
+        if api.requires_2fa or api.requires_2sa:
+            raise PyiCloud2FARequiredException(apple_id)
+    except (PyiCloudFailedLoginException, PyiCloud2FARequiredException,
+            PyiCloud2SARequiredException):
+        _mark_reauth(True)
+        print('iCloud session expired -- run:  peachos-icloud-photos auth',
+              file=sys.stderr)
+        return 3
+    except PyiCloudAPIResponseException as e:
+        print(f'iCloud API error: {e}', file=sys.stderr)
+        return 4
+
+    _mark_reauth(False)
+
+    try:
+        lib = api.photos.all
+        total = len(lib)
+    except Exception as e:
+        print(f'Could not read the photo library: {e}', file=sys.stderr)
+        return 4
+    if total == 0:
+        _write_manifest(dict(updated=int(time.time()), total=0, photos=[]))
+        print('The library has no photos.')
+        return 0
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    have = {p['id']: p for p in _read_manifest().get('photos', [])}
+
+    picks, seen, tries = [], set(), 0
+    while len(picks) < POOL_SIZE and tries < POOL_SIZE * 6:
+        tries += 1
+        idx = random.randrange(total)
+        if idx in seen:
+            continue
+        seen.add(idx)
+        try:
+            asset = next(lib._get_photos_at(idx, DirectionEnum.ASCENDING, 1), None)
+        except Exception:
+            asset = None
+        if asset is None or _is_video(asset):
+            continue
+        picks.append(asset)
+
+    photos, downloaded = [], 0
+    for asset in picks:
+        pid = asset.id
+        name = hashlib.sha1(pid.encode()).hexdigest()[:16] + '.jpg'
+        fpath = os.path.join(CACHE_DIR, name)
+        if pid in have and os.path.exists(fpath):
+            photos.append(have[pid])
+            continue
+        data = _download_jpeg(asset)
+        if not data:
+            continue
+        try:
+            w, h = _save_scaled(data, fpath)
+        except Exception as e:
+            print(f'  skip {asset.filename}: {e}', file=sys.stderr)
+            continue
+        try:
+            d = asset.asset_date
+            date = d.date().isoformat() if d and d.year > 1970 else None
+        except Exception:
+            date = None
+        photos.append(dict(id=pid, file=name, name=asset.filename,
+                           date=date, w=w, h=h))
+        downloaded += 1
+
+    keep = {p['file'] for p in photos}
+    for f in os.listdir(CACHE_DIR):
+        if f.endswith('.jpg') and f not in keep:
+            try:
+                os.remove(os.path.join(CACHE_DIR, f))
+            except OSError:
+                pass
+
+    _write_manifest(dict(updated=int(time.time()), total=total, photos=photos))
+    cfg['library_size'] = total
+    cfg['synced_at'] = int(time.time())
+    _save_config(cfg)
+    print(f'Cached {len(photos)} photos ({downloaded} new) of {total} in the library.')
+    return 0
+
+
+def cmd_status():
+    cfg = _load_config()
+    m = _read_manifest()
+    out = dict(
+        connected=bool(cfg.get('apple_id')),
+        account=cfg.get('name') or cfg.get('apple_id'),
+        library_size=cfg.get('library_size'),
+        cached=len(m.get('photos', [])),
+        synced_at=cfg.get('synced_at'),
+        reauth_needed=bool(cfg.get('reauth_needed')),
+        cache_dir=CACHE_DIR,
+    )
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_logout():
+    cfg = _load_config()
+    if cfg.get('apple_id'):
+        _secret_clear(cfg['apple_id'])
+    for d in (DATA_DIR, CACHE_DIR):
+        try:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
+    print('Signed out. iCloud Photos cache wiped.')
+    return 0
+
+
+def main(argv):
+    cmds = {'auth': cmd_auth, 'sync': cmd_sync, 'status': cmd_status,
+            'logout': cmd_logout}
+    if len(argv) != 2 or argv[1] not in cmds:
+        print(__doc__)
+        return 64
+    try:
+        return cmds[argv[1]]()
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
