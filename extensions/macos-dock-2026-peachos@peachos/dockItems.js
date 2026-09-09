@@ -136,6 +136,11 @@ export const DockItemDotsOverlay = GObject.registerClass(
             ? 180
             : 0,
       });
+
+      // St.DrawingArea inside the offscreen-redirected renderArea doesn't
+      // reliably regenerate its Cairo surface from set_state's queue_repaint
+      // alone -- force it each frame it's shown (cheap, few visible at once).
+      renderer._canvas.queue_repaint();
     }
   }
 );
@@ -163,10 +168,13 @@ export const DockItemBadgeOverlay = GObject.registerClass(
       renderer.set_state({
         count: noticesCount,
         text: label,
-        color: extension.notification_badge_color || [0.87, 0.19, 0.18, 1],
+        color: extension.notification_badge_color || [1.0, 0.27, 0.23, 1.0],
         style: 'number',
         size: extension.notification_badge_size || 0,
       });
+
+      // see DockItemDotsOverlay -- the DrawingArea needs an explicit repaint.
+      renderer._canvas.queue_repaint();
     }
   }
 );

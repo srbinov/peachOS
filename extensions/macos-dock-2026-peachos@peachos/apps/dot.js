@@ -370,9 +370,9 @@ const DotCanvas = GObject.registerClass(
       let label = String(state.text != null ? state.text : state.count || '');
       if (!label) return;
       Drawing.set_color(ctx, [1, 1, 1, 1], 1);
-      let fontSize = Math.round(r * (label.length > 1 ? 0.85 : 1.05));
-      ctx.moveTo(cx, cy);
-      Drawing.draw_text(ctx, label, `Inter Bold ${fontSize}`);
+      let fontSize = Math.round(r * (label.length > 1 ? 0.92 : 1.18));
+      ctx.moveTo(cx, cy - fontSize * 0.05);
+      Drawing.draw_text(ctx, label, `Inter Heavy ${fontSize}`);
     }
   }
 );

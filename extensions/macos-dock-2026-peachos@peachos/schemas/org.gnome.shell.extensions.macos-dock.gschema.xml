@@ -388,7 +388,7 @@
         <description>Customize the notification badge size.</description>
     </key>
     <key type="(dddd)" name="notification-badge-color">
-        <default>(0.87,0.19,0.18,1.0)</default>
+        <default>(1.0,0.27,0.23,1.0)</default>
         <summary>Notification badge color</summary>
         <description>Customize the notification badge color.</description>
     </key>

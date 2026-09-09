@@ -898,16 +898,16 @@ export let Animator = class {
           // D already includes hover magnification (scaleX), so DON'T also
           // set_scale the badge -- that was the old "location messed up" bug.
           let iconW = icon._renderer.width * icon._renderer.scaleX;
-          let D = iconW * 0.44;
+          let D = iconW * 0.46;
 
           badge.set_scale(1, 1);
           badge.width = D;
           badge.height = D;
           badge.update(icon, { noticesCount, size: D, extension: dock.extension });
 
-          // circle straddles the icon's top-right corner
-          badge.x = icon._renderer.x + iconW - D / 2;
-          badge.y = icon._renderer.y - D / 2;
+          // sit on the icon's top-right corner, ~⅔ overlapping it
+          badge.x = icon._renderer.x + iconW - D * 0.66;
+          badge.y = icon._renderer.y - D * 0.34;
           badge.show();
         }
       }
