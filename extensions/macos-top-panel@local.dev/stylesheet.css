@@ -223,17 +223,10 @@
     padding-bottom: 2px;
 }
 
-/* Anchor the notification list to a fixed width so lib/notificationCenter.js's
-   _reposition() and the cards agree -- the theme's own 29em + 15px .message-view
-   right margin was overflowing the panel and getting clipped (clip_to_allocation).
-   The dark-vs-light card + stacked-card backgrounds come from
+/* The theme's .message-view:ltr { margin-right: 15px } pushed the cards past the
+   panel's own clip on the right ("cut off" look). Zero it -- the panel already
+   pads the list. Card + stacked-card backgrounds come from
    lib/notificationCenterGlass.js (theme-independent), not the shell theme. */
-.macos-notification-center .message-list {
-    width: 27em;
-}
-.macos-notification-center .message-list:ltr {
-    padding-right: 0;
-}
 .macos-notification-center .message-view:ltr {
     margin-right: 0;
 }

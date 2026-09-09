@@ -66,14 +66,14 @@ export class NotificationCenterPanel {
         this._repositionIdleId = 0;
 
         this._messageList = new Calendar.CalendarMessageList();
-        // CalendarMessageList sets its own x_expand: true (see calendar.js). Its rendered
-        // width is now anchored by stylesheet.css
-        // (.macos-notification-center .message-list { width: 27em }, with the theme's own
-        // .message-view right margin zeroed), and _reposition() sizes the panel from the
-        // list's real preferred width -- so the two agree and there's no leftover space to
-        // distribute. START (not CENTER) then matches the left-aligned group headers and the
-        // Clear-button row.
-        this._messageList.x_align = Clutter.ActorAlign.START;
+        // CalendarMessageList sets its own x_expand: true (see calendar.js), but its actual
+        // rendered width is capped by the theme's .message-list width rule. Inside a
+        // BoxLayout parent that's wider than that (rounding slop between the panel's
+        // computed width and this actor's real CSS width), an expanding-but-width-capped
+        // child lands flush at the start edge; CENTER keeps it correct regardless.
+        // stylesheet.css also zeroes .message-view's own 15px right margin so the cards
+        // stop overflowing the panel's clip on the right.
+        this._messageList.x_align = Clutter.ActorAlign.CENTER;
         // St.BoxLayout sizes a vertical child to its own natural/content height by default,
         // not to the box's available space -- without an explicit FILL here, this list just
         // grew to fit every expanded notification and overflowed past the panel's own fixed
@@ -130,11 +130,21 @@ export class NotificationCenterPanel {
 
             this._notificationSourceToGroup.set(source, group);
 
-            // peachOS: rewrite evolution-alarm-notify's generic "Reminders" identity to
-            // the connected calendar (Google/iCloud/Outlook), route a click to that
-            // calendar, and give every card a hover-X + swipe-right dismiss.
-            panel._reattributeReminderSource(source);
-            panel._wireGroupDecoration(source, group);
+            // GNOME 50 bug guard: MessageView's scroll-view "highlight" FadeEffect keeps a
+            // reference to whichever group was last expanded (_highlightGroup), and nothing
+            // clears it when that group is destroyed -- so once a highlighted group goes
+            // away, vfunc_paint_target keeps poking a disposed actor every frame, which
+            // wedges the whole message-view's rendering (this is what made the panel look
+            // empty). Clear it ourselves on group destroy.
+            group.connect('destroy', () => {
+                try {
+                    const fx = messageView.get_effect?.('highlight');
+                    if (fx && fx.highlightActor === group)
+                        fx.highlightActor = null;
+                } catch (e) {
+                    // effect gone / shell shutting down
+                }
+            });
 
             // The group's own Clutter.ClickGesture (passed as `actions:` in
             // NotificationMessageGroup's constructor) is attached to the whole group actor,
@@ -182,6 +192,22 @@ export class NotificationCenterPanel {
 
             const index = this._playerToMessage.size + (group.hasUrgent ? 0 : this._nUrgent);
             this._addMessageAtIndex(group, index);
+
+            // peachOS extras run AFTER the group is in the view and are fully guarded --
+            // a failure here must never leave the Notification Center empty. Rewrite
+            // evolution-alarm-notify's generic "Reminders" identity to the connected
+            // calendar + route its click there; give every card a hover-X and a
+            // swipe-right dismiss.
+            try {
+                panel._reattributeReminderSource(source);
+            } catch (e) {
+                logError(e, '[macos-top-panel] reminder re-attribution failed');
+            }
+            try {
+                panel._wireGroupDecoration(source, group);
+            } catch (e) {
+                logError(e, '[macos-top-panel] notification decoration failed');
+            }
         };
 
         this._panel = new St.BoxLayout({
@@ -306,10 +332,9 @@ export class NotificationCenterPanel {
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
-        // _reposition() above ran while the list was still unallocated (panel hidden),
-        // so on the very first open its preferred width can read short and the panel
-        // ends up narrower than the cards (which then clip on the right). Re-run once
-        // now that the panel is visible and the list has a real measurement.
+        // Re-run once the panel is actually on screen and the list has a real
+        // allocation -- the _reposition() above ran while the panel was still hidden,
+        // so this._messageList.width was 0 and the 380 fallback was used.
         if (!this._repositionIdleId) {
             this._repositionIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 this._repositionIdleId = 0;
@@ -434,12 +459,7 @@ export class NotificationCenterPanel {
             return;
 
         const panelBoxHeight = Main.layoutManager.panelBox.height || 0;
-        // The list's CSS width (.macos-notification-center .message-list) is a fixed em
-        // value, so get_preferred_width() is stable even before the panel is allocated --
-        // unlike .width, which is 0 until then. + panel padding (GLASS_PADDING*2) + 1px
-        // border each side.
-        const [, listNat] = this._messageList.get_preferred_width(-1);
-        const width = Math.round(listNat || 380) + GLASS_PADDING * 2 + 2;
+        const width = Math.round(this._messageList.width || 380) + GLASS_PADDING * 2;
         const top = monitor.y + panelBoxHeight + EDGE_MARGIN;
         const dockReserved = this._dockReservedHeight(monitor);
         const bottomReserved = dockReserved > 0 ? dockReserved + EDGE_MARGIN : EDGE_MARGIN;
@@ -504,6 +524,7 @@ export class NotificationCenterPanel {
         const slug = this._calendarAccounts?.resolveSlug?.() ?? 'calendar';
         const site = WEB_APPS[slug] ?? WEB_APPS['calendar'];
         const gicon = iconFor(slug, this._extensionPath);
+        log(`[macos-top-panel] re-attributing reminder source -> ${site.name} (${slug})`);
 
         // title/icon are plain MessageList.Source props here -- the SYNC_CREATE bindings in
         // MessageHeader / NotificationMessageGroup pick the change up.
@@ -542,8 +563,13 @@ export class NotificationCenterPanel {
      */
     _wireGroupDecoration(source, group) {
         const decorateAll = () => {
-            for (const [notification, message] of group._notificationToMessage)
-                this._decorateMessage(message, notification, group);
+            for (const [notification, message] of group._notificationToMessage) {
+                try {
+                    this._decorateMessage(message, notification, group);
+                } catch (e) {
+                    logError(e, '[macos-top-panel] decorateMessage failed');
+                }
+            }
         };
         // The group's own 'notification-added' handler (connected in its constructor,
         // so it runs first) has already created + registered the message by the time
@@ -601,41 +627,50 @@ export class NotificationCenterPanel {
         }, message);
 
         // ---- swipe right to dismiss --------------------------------------------------
-        if (item) {
-            const pan = new Clutter.PanGesture({pan_axis: Clutter.PanAxis.X});
-            pan.set_begin_threshold(14);
-            let startX = 0;
-            pan.connect('recognize', g => {
-                startX = g.get_begin_centroid().x;
-                item.remove_all_transitions();
-            });
-            pan.connect('pan-update', g => {
-                const dx = g.get_centroid().x - startX;
-                item.translation_x = Math.max(0, dx); // right only
-            });
-            const settle = () => {
-                const dx = item.translation_x;
-                const commit = dx > Math.max(60, item.width * 0.35);
-                if (commit) {
-                    item.ease({
-                        translation_x: item.width,
-                        opacity: 0,
-                        duration: 160,
-                        mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                        onStopped: () => dismiss(),
-                    });
-                } else {
-                    item.ease({
-                        translation_x: 0,
-                        duration: 200,
-                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                    });
-                }
-            };
-            pan.connect('end', settle);
-            pan.connect('cancel', settle);
-            item.add_action(pan);
+        if (item)
+            this._addSwipeDismiss(item, dismiss);
+    }
+
+    _addSwipeDismiss(item, dismiss) {
+        let pan;
+        try {
+            pan = new Clutter.PanGesture();
+            pan.pan_axis = Clutter.PanAxis.X;
+            pan.set_begin_threshold(16);
+        } catch (e) {
+            logError(e, '[macos-top-panel] PanGesture unavailable, skipping swipe-dismiss');
+            return;
         }
+        let startX = 0;
+        pan.connect('recognize', g => {
+            startX = g.get_begin_centroid().x;
+            item.remove_all_transitions();
+        });
+        pan.connect('pan-update', g => {
+            const dx = g.get_centroid().x - startX;
+            item.translation_x = Math.max(0, dx); // right only
+        });
+        const settle = () => {
+            const commit = item.translation_x > Math.max(60, item.width * 0.35);
+            if (commit) {
+                item.ease({
+                    translation_x: item.width,
+                    opacity: 0,
+                    duration: 160,
+                    mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                    onStopped: () => dismiss(),
+                });
+            } else {
+                item.ease({
+                    translation_x: 0,
+                    duration: 200,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
+            }
+        };
+        pan.connect('end', settle);
+        pan.connect('cancel', settle);
+        item.add_action(pan);
     }
 
     destroy() {
