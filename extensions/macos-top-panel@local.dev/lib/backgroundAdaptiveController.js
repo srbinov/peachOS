@@ -27,12 +27,21 @@ export const LIGHT_LUMINANCE_THRESHOLD = 0.78;
  *     (better than translucent light glass, which washes out over either).
  */
 export class BackgroundAdaptiveController {
-    /** @param {() => ({x,y,width,height}|null)} getRegion  where the popup will render */
-    constructor(getRegion) {
+    /**
+     * @param {() => ({x,y,width,height}|null)} getRegion  where the popup will render
+     * @param {() => void} [onChange]  fired whenever the effective dark verdict flips
+     */
+    constructor(getRegion, onChange) {
         this._getRegion = getRegion;
+        this._onChange = onChange || null;
         this._actors = new Set();
         this._wallpaperForceDark = false;
         this._effective = false;
+    }
+
+    /** Whether tiles are currently getting the dark-glass (over-something-light) treatment. */
+    get isDark() {
+        return this._effective;
     }
 
     /** Call once per glass tile actor right after creating it. */
@@ -109,6 +118,7 @@ export class BackgroundAdaptiveController {
             else
                 actor.remove_style_class_name(TILE_ON_LIGHT_CLASS);
         }
+        this._onChange?.();
     }
 
     /** Call the instant the menu starts closing -- back to the default look for next time. */

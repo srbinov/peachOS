@@ -62,7 +62,8 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this.add_child(this._icon);
 
         this._tileBlur = new TileBlurController();
-        this._backgroundAdaptive = new BackgroundAdaptiveController(() => this._getBackgroundRegion());
+        this._backgroundAdaptive = new BackgroundAdaptiveController(
+            () => this._getBackgroundRegion(), () => this._applyDndFill());
         // Liquid Glass intensity slider (Settings -> Appearance -> Liquid Glass): a
         // supplementary-stylesheet-reload controller, not plain inline `.style` on these
         // tiles -- see controlCenterGlass.js's own docstring for why that approach broke
@@ -340,7 +341,14 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._backgroundAdaptive.register(this._pencilCircle.button);
         this._utilityRow.add_child(this._pencilCircle.button);
 
-        this._dndCircle = this._createCircleButton('notifications-symbolic', () => this._dnd.toggle());
+        // Same crescent glyph the Dynamic Island's DND toast uses (assets/dnd-*.png):
+        // white when off, its own purple when on -- and when on, _applyDndFill() gives
+        // the circle behind it a solid fill so the purple reads against the glass.
+        this._dndGiconOff = Gio.icon_new_for_string(
+            GLib.build_filenamev([this._extensionPath, 'assets', 'dnd-off.png']));
+        this._dndGiconOn = Gio.icon_new_for_string(
+            GLib.build_filenamev([this._extensionPath, 'assets', 'dnd-on.png']));
+        this._dndCircle = this._createCircleButton(this._dndGiconOff, () => this._dnd.toggle());
         this._tileBlur.register(this._dndCircle.button);
         this._backgroundAdaptive.register(this._dndCircle.button);
         this._utilityRow.add_child(this._dndCircle.button);
@@ -675,6 +683,10 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._appearanceCircle.icon.gicon = isDarkMode
             ? this._appearanceGiconDark
             : (useDark ? this._appearanceGiconLowglassDark : this._appearanceGiconLight);
+
+        // DND's "on" fill (white vs black) rides the same cutoff -- keep it in sync
+        // when the Liquid Glass slider or system dark/light mode changes.
+        this._applyDndFill();
     }
 
     /**
@@ -727,11 +739,42 @@ class ControlCenterIndicator extends PanelMenu.Button {
     }
 
     _updateDnd(state) {
-        this._dndCircle.icon.icon_name = state.dnd ? 'weather-clear-night-symbolic' : 'notifications-symbolic';
+        this._dndOn = state.dnd;
+        this._dndCircle.icon.gicon = state.dnd ? this._dndGiconOn : this._dndGiconOff;
         if (state.dnd)
             this._dndCircle.button.add_style_class_name('on');
         else
             this._dndCircle.button.remove_style_class_name('on');
+        this._applyDndFill();
+    }
+
+    /**
+     * DND off: nothing special, the circle is the same translucent glass as its
+     * neighbours. DND on: the crescent keeps its purple, and the circle holding it
+     * fills solid so that purple reads -- white normally, black whenever the popup
+     * is showing its dark-glass treatment: either the static shouldUseDarkContent
+     * cutoff (low Liquid Glass in light mode) or the runtime "sitting over something
+     * light" verdict from BackgroundAdaptiveController. Inline style so it beats the
+     * dynamic !important glass stylesheet from controlCenterGlass.js.
+     */
+    _applyDndFill() {
+        if (!this._dndCircle)
+            return;
+        if (!this._dndOn) {
+            this._dndCircle.button.set_style(null);
+            return;
+        }
+        const intensity = this._panelSettings.get_int('liquid-glass-intensity');
+        const isDarkMode = this._interfaceSettings.get_string('color-scheme') === 'prefer-dark';
+        const dark = shouldUseDarkContent(intensity, isDarkMode) ||
+            !!this._backgroundAdaptive?.isDark;
+        const fill = dark ? '#000000' : '#ffffff';
+        this._dndCircle.button.set_style(
+            `background-color: ${fill}; ` +
+            `background-gradient-direction: vertical; ` +
+            `background-gradient-start: ${fill}; ` +
+            `background-gradient-end: ${fill}; ` +
+            `border-color: ${fill};`);
     }
 
     _updateMedia(state) {
