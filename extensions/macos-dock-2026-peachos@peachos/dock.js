@@ -223,10 +223,12 @@ export let Dock = GObject.registerClass(
       this.animator.disable();
     }
 
-    _onButtonPressEvent(evt) {
+    _onButtonPressEvent(obj, evt) {
+      // Signal handler is called (actor, event) -- see _onScrollEvent(obj, evt).
       // Separator interactions: the reactive ghost dash sits above renderArea, so
       // the separator overlays can't get events themselves -- hit-test here.
       try {
+        if (!evt || !evt.get_coords) return Clutter.EVENT_PROPAGATE;
         let [x, y] = evt.get_coords();
         let button = evt.get_button ? evt.get_button() : 1;
 
@@ -241,6 +243,9 @@ export let Dock = GObject.registerClass(
           let r = this._separatorScreenRect(h.overlay);
           if (!r) continue;
           if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+            console.log(
+              `[macos-dock] separator hit button=${button} builtin=${h.isBuiltin}`
+            );
             if (button === 3) {
               this._openSeparatorMenu(h);
               return Clutter.EVENT_STOP;
@@ -319,6 +324,9 @@ export let Dock = GObject.registerClass(
     _beginSeparatorDrag(marker) {
       if (this._draggedUserSep || !marker) return;
       this._draggedUserSep = marker;
+      marker._dragX = null;
+      marker._dragAfter = marker.after || '';
+      console.log('[macos-dock] separator drag begin');
       let [ox] = this.renderArea.get_transformed_position();
 
       this._sepDragCapturedId = global.stage.connect(
@@ -339,6 +347,15 @@ export let Dock = GObject.registerClass(
             t === Clutter.EventType.BUTTON_RELEASE ||
             t === Clutter.EventType.TOUCH_END
           ) {
+            this._endSeparatorDrag();
+            return Clutter.EVENT_STOP;
+          }
+          if (
+            t === Clutter.EventType.KEY_PRESS &&
+            event.get_key_symbol() === Clutter.KEY_Escape
+          ) {
+            // cancel: keep the original anchor
+            if (this._draggedUserSep) this._draggedUserSep._dragAfter = null;
             this._endSeparatorDrag();
             return Clutter.EVENT_STOP;
           }
