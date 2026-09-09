@@ -198,14 +198,20 @@ export class DynamicIsland {
         // callback once synchronously from its own constructor to report the current state;
         // that first call is the startup value, not a toggle, so it must not toast (the
         // _dndInitialized latch -- undefined/false on that first synchronous call).
+        // The crescent icon keeps its purple when turning DND ON, goes white when OFF.
+        this._dndOnGicon = Gio.icon_new_for_string(
+            GLib.build_filenamev([this._path, 'assets', 'dnd-on.png']));
+        this._dndOffGicon = Gio.icon_new_for_string(
+            GLib.build_filenamev([this._path, 'assets', 'dnd-off.png']));
         this._dndController = new DndController(({dnd}) => {
             if (!this._dndInitialized) {
                 this._dndInitialized = true;
                 return;
             }
             this._showTransient(
-                'weather-clear-night-symbolic',
-                dnd ? 'Do Not Disturb On' : 'Do Not Disturb Off', ACCENT.purple);
+                null, dnd ? 'Do Not Disturb On' : 'Do Not Disturb Off',
+                ACCENT.purple,
+                {gicon: dnd ? this._dndOnGicon : this._dndOffGicon, iconSize: 18});
         });
 
         this._powerProfileWatcher = new PowerProfileWatcher(profileId => {

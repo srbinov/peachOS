@@ -1080,6 +1080,18 @@ install -Dm644 "$REPO_DIR/assets/topbar-icons/peachos-dictation-topbar.svg" \
     "/usr/share/icons/MacTahoe/status/32/peachos-dictation-topbar.svg"
 install -Dm644 "$REPO_DIR/assets/topbar-icons/peachos-dictation-topbar.svg" \
     "/usr/share/icons/hicolor/scalable/status/peachos-dictation-topbar.svg"
+
+# "View Windows" top-bar button icon (macos-top-panel/lib/viewWindowsIndicator.js)
+# -- a real "-symbolic" glyph, so St recolours it to the bar's black/white
+# foreground automatically. status/symbolic is Size=16 (the exact symbolic match).
+echo "==> Installing View Windows top-bar icon -> MacTahoe + hicolor"
+install -Dm644 "$REPO_DIR/assets/topbar-icons/view-windows-symbolic.svg" \
+    "/usr/share/icons/MacTahoe/status/symbolic/view-windows-symbolic.svg"
+install -Dm644 "$REPO_DIR/assets/topbar-icons/view-windows-symbolic.svg" \
+    "/usr/share/icons/MacTahoe/status/16/view-windows-symbolic.svg"
+install -Dm644 "$REPO_DIR/assets/topbar-icons/view-windows-symbolic.svg" \
+    "/usr/share/icons/hicolor/scalable/status/view-windows-symbolic.svg"
+
 gtk-update-icon-cache -f -t /usr/share/icons/MacTahoe >/dev/null 2>&1 || true
 gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
 

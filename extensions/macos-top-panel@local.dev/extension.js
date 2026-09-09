@@ -11,6 +11,7 @@ import {BatteryIndicator} from './lib/batteryIndicator.js';
 import {WifiIndicator} from './lib/wifiIndicator.js';
 import {BluetoothIndicator} from './lib/bluetoothIndicator.js';
 import {SearchIndicator} from './lib/searchIndicator.js';
+import {ViewWindowsIndicator} from './lib/viewWindowsIndicator.js';
 import {installDashFilter, uninstallDashFilter} from './lib/dashFilter.js';
 import {installNotificationSlide, uninstallNotificationSlide} from './lib/notificationTray.js';
 import {NotificationCenterPanel} from './lib/notificationCenter.js';
@@ -82,6 +83,9 @@ export default class MacosTopPanelExtension extends Extension {
             this._searchIndicator = new SearchIndicator();
             Main.panel._rightBox.add_child(this._searchIndicator.container);
             installDashFilter();
+
+            this._viewWindowsIndicator = new ViewWindowsIndicator();
+            Main.panel._rightBox.add_child(this._viewWindowsIndicator.container);
 
             installNotificationSlide(Main.messageTray);
 
@@ -269,6 +273,7 @@ export default class MacosTopPanelExtension extends Extension {
         this._wifiIndicator?.setForeground?.(foreground);
         this._bluetoothIndicator?.setForeground?.(foreground);
         this._searchIndicator?.setForeground?.(foreground);
+        this._viewWindowsIndicator?.setForeground?.(foreground);
         this._soundIndicator?.setForeground?.(foreground);
         // Dynamic Island deliberately does NOT track the bar's adaptive foreground -- real
         // Dynamic Island is always a fixed near-black pill regardless of light/dark context,
@@ -433,6 +438,8 @@ export default class MacosTopPanelExtension extends Extension {
         // dontCreateMenu=true, so there's no this._searchIndicator.menu to remove.
         this._searchIndicator?.destroy();
         this._searchIndicator = null;
+        this._viewWindowsIndicator?.destroy();
+        this._viewWindowsIndicator = null;
         uninstallDashFilter();
         uninstallNotificationSlide();
 
