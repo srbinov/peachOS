@@ -514,6 +514,10 @@ export class NotificationCenterPanel {
         const fixNotification = n => {
             if (n.title && GENERIC_TITLE_RE.test(n.title.trim()))
                 n.title = site.name;
+            // the big per-card icon is notification.gicon (e-a-n sends its own generic
+            // one) -- point it at the calendar icon too, not just source.icon.
+            if (gicon)
+                n.gicon = gicon;
             // clear the GTK default action so activate() falls through to source.open()
             n._defaultAction = null;
             n._defaultActionTarget = null;
