@@ -16,12 +16,32 @@ ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data'
 # sign-in dialog is delegated to `gnome-control-center online-accounts` -- once
 # the account is added there it shows up in the list below and works everywhere.
 SYSTEM_ACCOUNT_PROVIDERS = [
-    ('Google', 'goa-account-google-symbolic'),
-    ('Microsoft 365', 'goa-account-ms-graph-symbolic'),
-    ('Microsoft Exchange', 'goa-account-exchange-symbolic'),
-    ('Nextcloud', 'goa-account-owncloud-symbolic'),
-    ('Kerberos', 'goa-account-kerberos-symbolic'),
+    ('Google', 'account_google.svg'),
+    ('Microsoft 365', 'account_ms365.svg'),
+    ('Microsoft Exchange', 'account_exchange.svg'),
+    ('Nextcloud', 'account_nextcloud.svg'),
 ]
+
+
+def _file_icon(name: str, px: int = 28) -> Gtk.Image:
+    """A brand logo from data/icons/, sized like the themed icons it replaces."""
+    gicon = Gio.FileIcon.new(Gio.File.new_for_path(os.path.join(ICON_DIR, name)))
+    img = Gtk.Image.new_from_gicon(gicon)
+    img.set_pixel_size(px)
+    return img
+
+
+def _dark_mode() -> bool:
+    try:
+        return (Gio.Settings.new('org.gnome.desktop.interface')
+                .get_string('color-scheme') == 'prefer-dark')
+    except Exception:
+        return False
+
+
+def _apple_icon_file() -> str:
+    # iCloud row uses the Apple mark -- white on dark, black on light.
+    return 'account_apple_white.svg' if _dark_mode() else 'account_apple_black.svg'
 
 
 def _open_system_accounts() -> None:
@@ -311,9 +331,15 @@ class _AddAccountDialog(Gtk.Window):
         ic_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         for m in ('start', 'end', 'top', 'bottom'):
             getattr(ic_content, f'set_margin_{m}')(8)
-        ic_icon = Gtk.Image.new_from_icon_name('applications-internet')
-        ic_icon.set_pixel_size(28)
-        ic_content.append(ic_icon)
+        self._icloud_icon = _file_icon(_apple_icon_file(), 28)
+        ic_content.append(self._icloud_icon)
+        # keep the Apple mark right for the current theme, live
+        self._iface_settings = Gio.Settings.new('org.gnome.desktop.interface')
+        self._scheme_handler = self._iface_settings.connect(
+            'changed::color-scheme',
+            lambda *_a: self._icloud_icon.set_from_gicon(Gio.FileIcon.new(
+                Gio.File.new_for_path(os.path.join(ICON_DIR, _apple_icon_file())))))
+        self.connect('destroy', lambda *_a: self._iface_settings.disconnect(self._scheme_handler))
         ic_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
         ic_text.append(Gtk.Label(label='iCloud', xalign=0))
         ic_text.append(Gtk.Label(label='Calendar, Reminders, Contacts', xalign=0,
@@ -324,7 +350,7 @@ class _AddAccountDialog(Gtk.Window):
         box.append(icloud_row)
 
         native_google = google_signin.goa_google_creds() is not None
-        for provider_name, icon_name in SYSTEM_ACCOUNT_PROVIDERS:
+        for provider_name, icon_file in SYSTEM_ACCOUNT_PROVIDERS:
             is_google = provider_name == 'Google'
             prov_row = Gtk.Button(css_classes=['flat'])
             content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -332,9 +358,7 @@ class _AddAccountDialog(Gtk.Window):
             content.set_margin_end(8)
             content.set_margin_top(8)
             content.set_margin_bottom(8)
-            icon = Gtk.Image.new_from_icon_name(icon_name)
-            icon.set_pixel_size(28)
-            content.append(icon)
+            content.append(_file_icon(icon_file, 28))
             text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
             text_box.append(Gtk.Label(label=provider_name, xalign=0))
             text_box.append(Gtk.Label(
