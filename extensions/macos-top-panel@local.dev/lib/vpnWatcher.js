@@ -24,7 +24,7 @@ export class VpnWatcher {
 
         try {
             this._proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
+                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
                 NM_NAME, NM_PATH, NM_IFACE, null);
             this._refresh(true);
             this._signalId = this._proxy.connect('g-properties-changed', (_proxy, changed) => {
@@ -42,7 +42,7 @@ export class VpnWatcher {
 
     _connProxy(path) {
         return Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
+            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
             NM_NAME, path, ACTIVE_IFACE, null);
     }
 

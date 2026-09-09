@@ -30,29 +30,45 @@ export class PowerProfileWatcher {
         this._current = null;
         this._proxy = null;
         this._signalId = 0;
+        this._destroyed = false;
 
-        try {
-            this._proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
-                BUS_NAME, OBJECT_PATH, IFACE, null);
-            this._current = this._proxy.get_cached_property('ActiveProfile')?.unpack() ?? null;
-            this._signalId = this._proxy.connect('g-properties-changed', (_proxy, changed) => {
-                const dict = changed.deep_unpack();
-                if (!('ActiveProfile' in dict))
+        // Async + DO_NOT_AUTO_START: power-profiles-daemon is frequently absent (server
+        // installs, TLP setups, some laptops). A sync proxy with auto-start there blocks
+        // the shell's main loop for the full 25s D-Bus activation timeout -- a hard
+        // freeze on first boot. Async means we never block; DO_NOT_AUTO_START means the
+        // proxy just reports "no owner" instantly instead of trying to launch it.
+        Gio.DBusProxy.new_for_bus(
+            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
+            BUS_NAME, OBJECT_PATH, IFACE, null,
+            (_src, res) => {
+                if (this._destroyed)
                     return;
-                const next = dict.ActiveProfile.unpack();
-                if (next === this._current)
+                let proxy;
+                try {
+                    proxy = Gio.DBusProxy.new_for_bus_finish(res);
+                } catch (e) {
+                    logError(e, 'powerProfileWatcher: failed to connect to power-profiles-daemon');
                     return;
-                this._current = next;
-                this._onProfileChanged(next);
+                }
+                if (!proxy.get_name_owner())
+                    return; // p-p-d not running -- toast just never fires
+                this._proxy = proxy;
+                this._current = proxy.get_cached_property('ActiveProfile')?.unpack() ?? null;
+                this._signalId = proxy.connect('g-properties-changed', (_proxy, changed) => {
+                    const dict = changed.deep_unpack();
+                    if (!('ActiveProfile' in dict))
+                        return;
+                    const next = dict.ActiveProfile.unpack();
+                    if (next === this._current)
+                        return;
+                    this._current = next;
+                    this._onProfileChanged(next);
+                });
             });
-        } catch (e) {
-            // power-profiles-daemon not running -- toast just never fires.
-            logError(e, 'powerProfileWatcher: failed to connect to power-profiles-daemon');
-        }
     }
 
     destroy() {
+        this._destroyed = true;
         if (this._signalId && this._proxy)
             this._proxy.disconnect(this._signalId);
         this._signalId = 0;

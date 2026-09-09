@@ -427,7 +427,7 @@ export class DynamicIsland {
     _subscribeToDaemon() {
         try {
             this._daemonProxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, null,
+                Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
                 DAEMON_BUS_NAME, DAEMON_OBJECT_PATH, DAEMON_BUS_NAME, null,
             );
             this._daemonSignalId = this._daemonProxy.connect('g-signal', (_proxy, _sender, signalName, params) => {

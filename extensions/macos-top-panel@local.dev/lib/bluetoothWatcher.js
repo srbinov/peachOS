@@ -6,6 +6,8 @@
 // ("<name> connected").
 import Gio from 'gi://Gio';
 
+import {hasBluetoothAdapter} from './bluetoothData.js';
+
 const BLUEZ_NAME = 'org.bluez';
 const DEVICE_IFACE = 'org.bluez.Device1';
 
@@ -19,9 +21,16 @@ export class BluetoothWatcher {
         // re-asserts the current value (BlueZ is chatty) doesn't double-fire.
         this._connected = new Map();
 
+        // No radio -> don't touch BlueZ (a proxy would block the shell 25s). Toasts
+        // just never fire, which is correct on a machine with no Bluetooth.
+        if (!hasBluetoothAdapter())
+            return;
+
         try {
+            // DO_NOT_AUTO_START: fail instantly if bluez isn't up rather than eat a
+            // 25s D-Bus activation timeout on the main loop.
             this._manager = Gio.DBusObjectManagerClient.new_for_bus_sync(
-                Gio.BusType.SYSTEM, Gio.DBusObjectManagerClientFlags.NONE,
+                Gio.BusType.SYSTEM, Gio.DBusObjectManagerClientFlags.DO_NOT_AUTO_START,
                 BLUEZ_NAME, '/', null, null);
 
             for (const obj of this._manager.get_objects()) {

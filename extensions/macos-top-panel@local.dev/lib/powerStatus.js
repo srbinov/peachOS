@@ -40,7 +40,7 @@ export class PowerStatusWatcher {
 
         try {
             this._proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
+                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
                 UPOWER_BUS_NAME, DISPLAY_DEVICE_PATH, DEVICE_IFACE, null);
             this._lastState = this._proxy.get_cached_property('State')?.unpack() ?? null;
             this._lastWarningLevel = this._proxy.get_cached_property('WarningLevel')?.unpack() ?? null;

@@ -1,7 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {parseBluetoothState, sortBluetoothDevices} from './bluetoothData.js';
+import {parseBluetoothState, sortBluetoothDevices, hasBluetoothAdapter} from './bluetoothData.js';
 
 const BLUEZ_BUS_NAME = 'org.bluez';
 const OBJECT_MANAGER_IFACE = 'org.freedesktop.DBus.ObjectManager';
@@ -45,6 +45,13 @@ export class BluetoothController {
         this._adapterPath = null;
         this._signalIds = [];
         this._isDestroyed = false;
+
+        // No Bluetooth controller on this machine -> stay entirely off BlueZ. The pill
+        // shows "Bluetooth Off" (the powered:false default) and never opens a proxy.
+        if (!hasBluetoothAdapter()) {
+            this._onChange(parseBluetoothState({powered: false, connectedDeviceName: null}));
+            return;
+        }
 
         // DO_NOT_AUTO_START: without it, creating this proxy actively asks D-Bus to launch
         // bluez if it isn't already running, and on hardware where bluez never actually comes
@@ -168,7 +175,7 @@ export class BluetoothController {
     _trackAdapter(path) {
         this._adapterPath = path;
         Gio.DBusProxy.new(
-            Gio.DBus.system, Gio.DBusProxyFlags.NONE, null,
+            Gio.DBus.system, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
             BLUEZ_BUS_NAME, path, ADAPTER_IFACE, null,
             (source, result) => {
                 try {

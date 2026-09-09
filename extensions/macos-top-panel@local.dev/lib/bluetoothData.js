@@ -1,3 +1,22 @@
+import Gio from 'gi://Gio';
+
+// True only when the machine actually has a Bluetooth controller. Same gate
+// bluetooth.service itself uses (ConditionPathIsDirectory=/sys/class/bluetooth).
+// Without this, a BlueZ D-Bus proxy on a BT-less box eats a 25s StartServiceByName
+// activation timeout -- and on the shell's own main loop that's a 25s freeze
+// (confirmed on a Dell mini PC with no radio: no top panel, only the cursor moved).
+export function hasBluetoothAdapter() {
+    try {
+        const en = Gio.File.new_for_path('/sys/class/bluetooth')
+            .enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        const present = en.next_file(null) !== null;
+        en.close(null);
+        return present;
+    } catch (e) {
+        return false; // dir absent -> no Bluetooth
+    }
+}
+
 /** @param {{powered: boolean, connectedDeviceName: string|null}} props */
 export function parseBluetoothState(props) {
     const powered = props.powered;

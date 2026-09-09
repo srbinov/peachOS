@@ -19,7 +19,7 @@ export class NightLightWatcher {
 
         try {
             this._proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, null,
+                Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
                 BUS_NAME, OBJECT_PATH, IFACE, null);
             this._active = Boolean(this._proxy.get_cached_property('NightLightActive')?.unpack());
             this._signalId = this._proxy.connect('g-properties-changed', (_proxy, changed) => {
