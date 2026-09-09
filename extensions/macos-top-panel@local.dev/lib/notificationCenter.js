@@ -381,18 +381,15 @@ export class NotificationCenterPanel {
         }
     }
 
-    // Only handles Escape now -- collapses whatever's currently expanded (there can be
-    // several, since stacks are independent now), or closes the whole panel if nothing is.
-    // There used to also be a "click outside an expanded group collapses it" branch here
-    // (mirroring CalendarMessageList's own maybeCollapseMessageGroupForEvent), but under
-    // independent multi-expand that was actively wrong: clicking a *second* stack's cover to
-    // expand it is, from the first stack's point of view, a click "outside" it -- so that
-    // logic was collapsing the first stack the instant you tried to open a second one, which
-    // is the exact bug this whole patch exists to fix. Each group already handles its own
-    // click-to-toggle (see the expand-toggle-requested handler above); a click truly outside
-    // the panel entirely still closes it via the scrim's own button-press-event.
+    // Escape collapses whatever's currently expanded (there can be several, since stacks
+    // are independent now) or closes the whole panel; a pointer press anywhere outside the
+    // panel closes it (the scrim behind it is a backstop -- reactive chrome doesn't reliably
+    // intercept presses over a real window on Wayland, so this stage-level capture is what
+    // actually makes "click anywhere else to dismiss" work).
     _onCapturedEvent(_actor, event) {
-        if (event.type() === Clutter.EventType.KEY_PRESS &&
+        const type = event.type();
+
+        if (type === Clutter.EventType.KEY_PRESS &&
             event.get_key_symbol() === Clutter.KEY_Escape) {
             const expanded = this._messageList._messageView.messages.filter(m => m.expanded && m.collapse);
             if (expanded.length > 0) {
@@ -401,6 +398,29 @@ export class NotificationCenterPanel {
             }
             this.close();
             return Clutter.EVENT_STOP;
+        }
+
+        if (type === Clutter.EventType.BUTTON_PRESS || type === Clutter.EventType.TOUCH_BEGIN) {
+            // Presses on the top bar are left alone -- the clock widget there is what
+            // toggles this panel, and closing here would fight its own toggle (close +
+            // immediate reopen).
+            let src = event.get_source?.();
+            while (src) {
+                if (src === Main.panel)
+                    return Clutter.EVENT_PROPAGATE;
+                src = src.get_parent?.();
+            }
+
+            const [x, y] = event.get_coords();
+            const [px, py] = this._panel.get_transformed_position();
+            const [pw, ph] = this._panel.get_transformed_size();
+            const inside = x >= px && x <= px + pw && y >= py && y <= py + ph;
+            if (!inside) {
+                this.close();
+                // Let the press also reach whatever's underneath -- matches macOS, where
+                // clicking out of Notification Center still acts on what you clicked.
+                return Clutter.EVENT_PROPAGATE;
+            }
         }
 
         return Clutter.EVENT_PROPAGATE;
@@ -583,6 +603,8 @@ export class NotificationCenterPanel {
             return;
         message._peachDecorated = true;
         message.add_style_class_name('macos-nc-message');
+        message.track_hover = true; // Message (St.Button) doesn't set this itself
+        log('[macos-top-panel] decorating notification message');
 
         const item = message.get_parent(); // the St.Bin wrapper (ScaleLayout + pivot)
 
@@ -617,26 +639,31 @@ export class NotificationCenterPanel {
         header.insert_child_at_index(closeBtn, 0);
         header.closeButton = closeBtn;
 
-        message.connectObject('notify::hover', () => {
+        const revealClose = show => {
             closeBtn.remove_all_transitions();
             closeBtn.ease({
-                opacity: message.hover ? 255 : 0,
+                opacity: show ? 255 : 0,
                 duration: 120,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
-        }, message);
+        };
+        // notify::hover is the canonical path; enter/leave-event is a belt-and-suspenders
+        // backup in case hover tracking isn't firing for this actor.
+        message.connect('notify::hover', () => revealClose(message.hover));
+        message.connect('enter-event', () => revealClose(true));
+        message.connect('leave-event', () => revealClose(false));
 
         // ---- swipe right to dismiss --------------------------------------------------
         if (item)
-            this._addSwipeDismiss(item, dismiss);
+            this._addSwipeDismiss(message, item, dismiss);
     }
 
-    _addSwipeDismiss(item, dismiss) {
+    _addSwipeDismiss(message, item, dismiss) {
         let pan;
         try {
-            pan = new Clutter.PanGesture();
+            pan = new Clutter.PanGesture({min_n_points: 1, max_n_points: 0});
             pan.pan_axis = Clutter.PanAxis.X;
-            pan.set_begin_threshold(16);
+            pan.set_begin_threshold(18);
         } catch (e) {
             logError(e, '[macos-top-panel] PanGesture unavailable, skipping swipe-dismiss');
             return;
@@ -670,7 +697,9 @@ export class NotificationCenterPanel {
         };
         pan.connect('end', settle);
         pan.connect('cancel', settle);
-        item.add_action(pan);
+        // On the message (St.Button) itself, not the item wrapper -- a gesture on the
+        // parent doesn't reliably see presses that land on the button child.
+        message.add_action(pan);
     }
 
     destroy() {
