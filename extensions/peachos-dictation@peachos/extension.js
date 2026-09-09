@@ -231,7 +231,7 @@ export default class PeachIntelligenceExtension extends Extension {
     _callDaemon(method) {
         try {
             const proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, null,
+                Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, null,
                 DAEMON_BUS_NAME, DAEMON_OBJECT_PATH, DAEMON_BUS_NAME, null,
             );
             proxy.call_sync(method, null, Gio.DBusCallFlags.NONE, 2000, null);
