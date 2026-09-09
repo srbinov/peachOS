@@ -13,11 +13,12 @@ const UPOWER_BUS_NAME = 'org.freedesktop.UPower';
 const DISPLAY_DEVICE_PATH = '/org/freedesktop/UPower/devices/DisplayDevice';
 const DISPLAY_DEVICE_IFACE = 'org.freedesktop.UPower.Device';
 
-// Logical (1x) size of the drawn glyph -- matches batteryCanvas.js's own GLYPH_WIDTH/HEIGHT
-// aspect ratio (22x13), scaled up slightly from that authoring size to read at the same
-// visual weight the old 1.8em-icon-size PNG did next to the other panel icons.
+// Logical (1x) allocation for the drawn glyph -- scaled up from batteryCanvas.js's own
+// 22-wide authoring size to read at the same visual weight the old 1.8em-icon-size PNG
+// did next to the other panel icons. Height trimmed ~15% (user request) to match the
+// shorter glyph in batteryCanvas.js; width unchanged.
 const GLYPH_WIDTH = 25;
-const GLYPH_HEIGHT = 15;
+const GLYPH_HEIGHT = 13;
 
 export const BatteryIndicator = GObject.registerClass(
 class BatteryIndicator extends PanelMenu.Button {

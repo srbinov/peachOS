@@ -9,10 +9,11 @@
 // (ubuntu-dock@ubuntu.com/appIconIndicators.js), not guessed.
 const {cairo: Cairo} = imports;
 
-// All authored for a 22x13 glyph; drawBattery() scales to whatever pixel size it's
-// actually asked to render at.
+// All authored for a 22-wide glyph; drawBattery() scales to whatever pixel size it's
+// actually asked to render at. Height is ~15% shorter than the classic 22x13 macOS
+// battery aspect (user request) -- width unchanged.
 const GLYPH_WIDTH = 22;
-const GLYPH_HEIGHT = 13;
+const GLYPH_HEIGHT = 11;
 const NUB_WIDTH = 2;
 const NUB_HEIGHT_RATIO = 0.42;
 const OUTLINE_WIDTH = 1.3;
