@@ -306,11 +306,12 @@ export let Dock = GObject.registerClass(
       menu.actor.hide();
       this._sepMenuManager.addMenu(menu);
 
-      let afterId = h.isBuiltin
-        ? this._iconIdentity(h.marker._prev)
-        : h.marker.after || '';
+      // anchor icon = the one just left of this separator
+      let anchorIcon = this._iconIdentity(h.marker._prev);
 
-      menu.addAction('Add separator', () => this.addSeparator(afterId));
+      menu.addAction('Add separator', () =>
+        this.addSeparatorNear(anchorIcon, h.isBuiltin)
+      );
       if (!h.isBuiltin) {
         menu.addAction('Delete separator', () =>
           this.removeSeparator(h.marker.id)
@@ -338,8 +339,14 @@ export let Dock = GObject.registerClass(
             t === Clutter.EventType.TOUCH_UPDATE
           ) {
             let [px] = global.get_pointer();
-            marker._dragX = px - ox;
-            marker._dragAfter = this._nearestGapIdentity(px);
+            let g = this._nearestValidGapIdentity(px, marker.id);
+            if (g) {
+              marker._dragAfter = g.id;
+              // magnetically snap the overlay to the target gap centre
+              marker._dragX = g.x - ox;
+            } else {
+              marker._dragX = px - ox;
+            }
             this._beginAnimation();
             return Clutter.EVENT_STOP;
           }
@@ -371,42 +378,85 @@ export let Dock = GObject.registerClass(
       }
       let marker = this._draggedUserSep;
       this._draggedUserSep = null;
+      if (marker) marker._dragX = null;
       if (!marker) return;
       let after =
         marker._dragAfter != null ? marker._dragAfter : marker.after || '';
+      if (after === (marker.after || '')) {
+        // nothing changed -- just re-render to drop the drag visuals
+        this._icons = null;
+        this._beginAnimation();
+        return;
+      }
       let list = this.extension.customSeparators.map((s) =>
         s.id === marker.id ? { ...s, after } : s
       );
       this.extension.setCustomSeparators(list); // -> refresh via change dispatch
     }
 
-    // Identity of the icon just left of the gap the pointer X is closest to
-    // ("" == front of the dock).
-    _nearestGapIdentity(px) {
-      let icons = (this._icons || []).filter((c) => c._renderer);
-      if (!icons.length) return '';
+    // App-icon identities in visual (left-to-right) order.
+    _orderedIconIds() {
+      return (this._dashItems || [])
+        .filter((it) => it._icon && !it._userSeparator)
+        .map((it) => this._iconIdentity(it));
+    }
+
+    // Would a separator anchored `after afterId` be legal? Illegal if it would
+    // sit directly next to another separator (built-in or user) with no icon
+    // between them, or float at an edge with nothing on either side.
+    // `excludeSepId` drops that user separator from the check (for drag).
+    _gapIsValid(afterId, excludeSepId = null) {
+      let kindOf = (it) =>
+        it._userSeparator || it._cls === 'dash-separator'
+          ? 'sep'
+          : it._icon
+            ? 'icon'
+            : 'other';
+      let seq = (this._dashItems || []).filter(
+        (it) => !(it._userSeparator && it.id === excludeSepId)
+      );
+
+      let idx;
+      if (!afterId) {
+        idx = 0;
+      } else {
+        let ai = seq.findIndex(
+          (it) => kindOf(it) === 'icon' && this._iconIdentity(it) === afterId
+        );
+        if (ai < 0) return false;
+        idx = ai + 1;
+      }
+
+      let leftKind = idx > 0 ? kindOf(seq[idx - 1]) : 'edge';
+      let rightKind = idx < seq.length ? kindOf(seq[idx]) : 'edge';
+      if (leftKind === 'sep' || rightKind === 'sep') return false;
+      if (leftKind === 'edge' && rightKind === 'edge') return false;
+      return true;
+    }
+
+    // Nearest gap (by pointer X) that _gapIsValid accepts -- null if none.
+    _nearestValidGapIdentity(px, excludeSepId) {
+      let icons = (this._icons || []).filter(
+        (c) => c._renderer && c._renderer.visible
+      );
+      if (!icons.length) return null;
       let [ox] = this.renderArea.get_transformed_position();
-      let edges = icons.map((c) => {
+
+      let gaps = [{ id: '', x: ox + icons[0]._renderer.x }];
+      icons.forEach((c, i) => {
         let rr = c._renderer;
-        let left = ox + rr.x;
         let right = ox + rr.x + rr.width * (rr.scaleX || 1);
-        return { c, left, right };
+        let gx =
+          i < icons.length - 1
+            ? (right + ox + icons[i + 1]._renderer.x) / 2
+            : right;
+        gaps.push({ id: this._iconIdentity(c), x: gx });
       });
 
-      let best = '';
-      let bestDist = Math.abs(px - edges[0].left);
-      for (let i = 0; i < edges.length; i++) {
-        let gapX =
-          i < edges.length - 1
-            ? (edges[i].right + edges[i + 1].left) / 2
-            : edges[i].right;
-        let d = Math.abs(px - gapX);
-        if (d < bestDist) {
-          bestDist = d;
-          best = this._iconIdentity(edges[i].c);
-        }
-      }
-      return best;
+      let valid = gaps.filter((g) => this._gapIsValid(g.id, excludeSepId));
+      if (!valid.length) return null;
+      valid.sort((a, b) => Math.abs(px - a.x) - Math.abs(px - b.x));
+      return valid[0]; // { id, x }  (x is screen-space)
     }
 
     _onMotionEvent(evt) {
@@ -1070,7 +1120,7 @@ export let Dock = GObject.registerClass(
                 .some((it) => it.label?.text === 'Add separator here');
               if (menu && menu.addAction && !has) {
                 menu.addAction('Add separator here', () =>
-                  this.addSeparator(this._iconIdentity(c))
+                  this.addSeparatorNear(this._iconIdentity(c), false)
                 );
               }
             } catch (err) {
@@ -1153,11 +1203,44 @@ export let Dock = GObject.registerClass(
       });
     }
 
-    addSeparator(afterIdentity) {
+    // Add a separator near a given app icon. Tries the gap to its right first
+    // (or to its left when preferLeft -- e.g. right-clicking a built-in
+    // separator, or the right-most pinned app), then searches outward for the
+    // first gap that _gapIsValid accepts. No-op if there's nowhere legal.
+    addSeparatorNear(afterIdentity, preferLeft = false) {
+      let ids = this._orderedIconIds();
+      let anchorIdx = afterIdentity ? ids.indexOf(afterIdentity) : ids.length;
+
+      // candidate "after" anchors, closest-first
+      let cands = [];
+      let right = afterIdentity || (ids.length ? ids[ids.length - 1] : '');
+      let left = anchorIdx > 0 ? ids[anchorIdx - 1] : '';
+      cands.push(preferLeft ? left : right);
+      cands.push(preferLeft ? right : left);
+      for (let d = 2; d < ids.length + 2; d++) {
+        let li = anchorIdx - d;
+        let ri = anchorIdx + d - 1;
+        if (li >= 0) cands.push(ids[li]);
+        else if (li === -1) cands.push('');
+        if (ri >= 0 && ri < ids.length) cands.push(ids[ri]);
+      }
+
+      let seen = new Set();
+      let chosen;
+      for (let c of cands) {
+        if (c === undefined || seen.has(c)) continue;
+        seen.add(c);
+        if (this._gapIsValid(c, null)) {
+          chosen = c;
+          break;
+        }
+      }
+      if (chosen === undefined) return;
+
       let list = this.extension.customSeparators;
       list.push({
         id: 'sep-' + Math.random().toString(36).slice(2, 10),
-        after: afterIdentity || '',
+        after: chosen,
       });
       this.extension.setCustomSeparators(list);
     }
