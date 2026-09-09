@@ -1,5 +1,8 @@
 // Render a Lottie loop to a grid sprite-sheet PNG. See README.md.
-//   node bake.mjs <input.json> <output.png> [frames=40] [cols=8] [cellW=400]
+//   node bake.mjs <input.json> <output.png> [frames=40] [cols=8] [cellW=400] [endFrac=1]
+// endFrac < 1 stops sampling before the source's end -- use it to drop an
+// intro-only animation's trailing fade-out / disassembly so loop:false can
+// hold cleanly on the finished state.
 // Writes <output>.png and <output>.json ({frames,cols,rows,cellW,cellH,durationMs}).
 import fs from 'fs';
 import { createRequire } from 'module';
@@ -20,10 +23,11 @@ dom.window.document.createElement = (name) =>
 
 const lottie = require('lottie-web');
 
-const [inPath, outPath, framesArg, colsArg, cellWArg] = process.argv.slice(2);
+const [inPath, outPath, framesArg, colsArg, cellWArg, endFracArg] = process.argv.slice(2);
 const FRAMES = Number(framesArg) || 40;
 const COLS = Number(colsArg) || 8;
 const CELL_W = Number(cellWArg) || 360;
+const END_FRAC = endFracArg ? Number(endFracArg) : 1;
 const ROWS = Math.ceil(FRAMES / COLS);
 
 const data = JSON.parse(fs.readFileSync(inPath, 'utf8'));
@@ -47,7 +51,7 @@ const rendered = [];
 let minX = renderW, minY = renderH, maxX = 0, maxY = 0;
 
 for (let i = 0; i < FRAMES; i++) {
-    const f = (i / FRAMES) * totalFrames;
+    const f = (i / FRAMES) * totalFrames * END_FRAC;
     anim.goToAndStop(f, true);
     const img = ctx.getImageData(0, 0, renderW, renderH);
     rendered.push(img);
@@ -82,7 +86,7 @@ fs.writeFileSync(outPath, sheet.toBuffer('image/png'));
 const meta = {
     frames: FRAMES, cols: COLS, rows: ROWS,
     cellW: cropW, cellH: cropH,
-    durationMs: Math.round(((data.op - data.ip) / data.fr) * 1000),
+    durationMs: Math.round(((data.op - data.ip) / data.fr) * 1000 * END_FRAC),
 };
 fs.writeFileSync(outPath.replace(/\.png$/, '.json'), JSON.stringify(meta, null, 2) + '\n');
 console.log('wrote', outPath, JSON.stringify(meta), 'sheet', sheet.width + 'x' + sheet.height);

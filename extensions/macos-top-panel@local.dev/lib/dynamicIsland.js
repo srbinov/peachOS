@@ -19,6 +19,8 @@
 //     - a screenshot / recording was saved                        (Screenshots folder monitor)
 //     - Night Light turned on or off                              (gnome-settings-daemon Color)
 //     - a VPN connected or disconnected                           (NetworkManager)
+//     - Wi-Fi joined or dropped                                   (NetworkManager)
+//     - something was copied to the clipboard                     (Meta selection owner-changed)
 //     - a file arrived over LocalSend                             (Downloads folder monitor)
 //
 // Deliberately NOT attempted: phone-style calls, turn-by-turn navigation, ride-share/delivery
@@ -36,6 +38,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 import {SpriteAnimation, loadSpriteMeta} from './spriteAnimation.js';
@@ -49,6 +52,7 @@ import {BluetoothWatcher} from './bluetoothWatcher.js';
 import {ScreenshotWatcher} from './screenshotWatcher.js';
 import {NightLightWatcher} from './nightLightWatcher.js';
 import {VpnWatcher} from './vpnWatcher.js';
+import {WifiWatcher} from './wifiWatcher.js';
 import {ScreenRecordingWatcher} from './screenRecordingWatcher.js';
 
 const DICTATION_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-dictation';
@@ -191,7 +195,8 @@ export class DynamicIsland {
         });
 
         this._localSendWatcher = new LocalSendWatcher(filename => {
-            this._showTransient('folder-download-symbolic', `Received "${filename}"`, ACCENT.blue);
+            this._showTransient(null, `Received "${filename}"`, ACCENT.green,
+                {anim: 'localsend'});
         });
 
         // Do Not Disturb toggled -> a brief toast, on and off. DndController fires its
@@ -248,9 +253,46 @@ export class DynamicIsland {
         });
 
         this._vpnWatcher = new VpnWatcher({
-            onConnected: name => this._showTransient('network-vpn-symbolic', `${name} connected`, ACCENT.green),
-            onDisconnected: name => this._showTransient('network-vpn-symbolic', `${name} disconnected`, ACCENT.green),
+            onConnected: () => this._showTransient(null, 'VPN Connected', ACCENT.indigo,
+                {anim: 'vpn'}),
+            onDisconnected: () => this._showTransient(null, 'VPN Disconnected', ACCENT.indigo,
+                {anim: 'vpn'}),
         });
+
+        // Wi-Fi joined / dropped -> a brief toast with the network name. The disconnect
+        // reads "Disconnected from <ssid>" with "Disconnected" in red (see the wifi mockup);
+        // the connect is plain white. WifiWatcher's first pass is silent, so joining a
+        // network before login doesn't toast on startup.
+        this._wifiWatcher = new WifiWatcher({
+            onConnected: ssid => this._showTransient(
+                null, `Connected to ${ssid}`, ACCENT.blue, {anim: 'wifi'}),
+            onDisconnected: ssid => this._showTransient(
+                null, `Disconnected from ${ssid}`, ACCENT.blue,
+                {anim: 'wifi',
+                 markup: `<span foreground="#ff453a">Disconnected</span> from ${GLib.markup_escape_text(ssid, -1)}`}),
+        });
+
+        // "Copied to clipboard" -- the clipboard selection changed owner. There's no
+        // "who/what copied" signal, so this fires for every copy from any app; a cooldown
+        // keeps a burst (e.g. a script hammering the clipboard) to one toast, and the
+        // first owner-changed at login (the shell claiming the selection) is swallowed by
+        // the same latch.
+        this._clipboardSelection = global.display.get_selection();
+        this._clipboardOwnerChangedId = this._clipboardSelection.connect('owner-changed',
+            (_sel, type) => {
+                if (type !== Meta.SelectionType.SELECTION_CLIPBOARD)
+                    return;
+                if (!this._clipboardInitialized) {
+                    this._clipboardInitialized = true;
+                    return;
+                }
+                const now = GLib.get_monotonic_time();
+                if (this._clipboardCooldownUntil && now < this._clipboardCooldownUntil)
+                    return;
+                this._clipboardCooldownUntil = now + 3 * 1000 * 1000; // 3s
+                this._showTransient(null, 'Copied to clipboard', ACCENT.green,
+                    {anim: 'clipboard'});
+            });
 
         this._recordingWatcher = new ScreenRecordingWatcher(recording => {
             if (recording === this._screenRecording)
@@ -387,16 +429,22 @@ export class DynamicIsland {
         // where _transientIcon is; whichever is active draws, the rest hide.
         // Keyed by the name passed as _showTransient(..., {anim: <key>}).
         this._toastAnims = {};
-        for (const [key, file, w, h, dur] of [
-            ['charge', 'charging', 20, 20, 1900],
-            ['lowbat', 'low-battery', 27, 16, 1700],
+        for (const [key, file, w, h, dur, loop] of [
+            ['charge', 'charging', 20, 20, 1900, false],
+            ['lowbat', 'low-battery', 27, 16, 1700, false],
+            // From the icons repo (wifi/clipboard/localsend/vpn *_animation.json),
+            // baked + recoloured for the dark pill by tools/lottie-bake.
+            ['wifi', 'wifi', 22, 17, 1600, false],
+            ['clipboard', 'clipboard', 18, 18, 1800, false],
+            ['localsend', 'localsend', 20, 18, 1500, true],
+            ['vpn', 'vpn', 22, 17, 2600, false],
         ]) {
             try {
                 const meta = loadSpriteMeta(
                     GLib.build_filenamev([this._path, 'assets', `${file}.json`]));
                 const sprite = new SpriteAnimation(
                     GLib.build_filenamev([this._path, 'assets', `${file}.png`]),
-                    meta, {width: w, height: h, loop: false, durationMs: dur});
+                    meta, {width: w, height: h, loop, durationMs: dur});
                 sprite.actor.visible = false;
                 this._transientBox.insert_child_at_index(sprite.actor, 0);
                 this._toastAnims[key] = sprite;
@@ -578,7 +626,15 @@ export class DynamicIsland {
                 this._transientIcon.set_style(`color: ${accentColor};`);
             }
         }
-        this._transientLabel.set_text(text);
+        // opts.markup: Pango markup for a two-colour label (e.g. WiFi "Disconnected"
+        // in red, the rest white) -- see the wifi mockup. Plain text otherwise.
+        if (opts.markup) {
+            this._transientLabel.clutter_text.set_use_markup(true);
+            this._transientLabel.clutter_text.set_markup(opts.markup);
+        } else {
+            this._transientLabel.clutter_text.set_use_markup(false);
+            this._transientLabel.set_text(text);
+        }
         this._transientLabel.set_style('color: #ffffff;');
         this._container.set_style(null);
 
@@ -746,6 +802,13 @@ export class DynamicIsland {
         this._nightLightWatcher = null;
         this._vpnWatcher?.destroy();
         this._vpnWatcher = null;
+        this._wifiWatcher?.destroy();
+        this._wifiWatcher = null;
+        if (this._clipboardOwnerChangedId && this._clipboardSelection) {
+            this._clipboardSelection.disconnect(this._clipboardOwnerChangedId);
+            this._clipboardOwnerChangedId = 0;
+        }
+        this._clipboardSelection = null;
         this._recordingWatcher?.destroy();
         this._recordingWatcher = null;
         if (this._mediaEqTimerId) {

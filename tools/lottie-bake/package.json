@@ -6,7 +6,11 @@
   "scripts": {
     "bake:pi-voice": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.lottie.json ../../extensions/macos-top-panel@local.dev/assets/peach-intelligence-voice.png 40 8 400",
     "bake:charging": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/charging.lottie.json ../../extensions/macos-top-panel@local.dev/assets/charging.png 48 8 220",
-    "bake:low-battery": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/low-battery.lottie.json ../../extensions/macos-top-panel@local.dev/assets/low-battery.png 48 8 240"
+    "bake:low-battery": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/low-battery.lottie.json ../../extensions/macos-top-panel@local.dev/assets/low-battery.png 48 8 240",
+    "bake:wifi": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/wifi.lottie.json ../../extensions/macos-top-panel@local.dev/assets/wifi.png 40 8 200",
+    "bake:clipboard": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/clipboard.lottie.json ../../extensions/macos-top-panel@local.dev/assets/clipboard.png 24 8 200 0.82",
+    "bake:localsend": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/localsend.lottie.json ../../extensions/macos-top-panel@local.dev/assets/localsend.png 40 8 200",
+    "bake:vpn": "node bake.mjs ../../extensions/macos-top-panel@local.dev/assets/vpn.lottie.json ../../extensions/macos-top-panel@local.dev/assets/vpn.png 24 8 200 0.60"
   },
   "dependencies": {
     "canvas": "^3.2.3",
