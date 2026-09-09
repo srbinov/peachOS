@@ -145,27 +145,27 @@ export const DockItemBadgeOverlay = GObject.registerClass(
   class DockItemBadgeOverlay extends DockItemOverlay {
     update(icon, data) {
       let renderer = this.renderer;
-      let { noticesCount, position, vertical, extension, scale } = data;
+      let { noticesCount, size, extension } = data;
 
-      renderer.width = icon._icon.width;
-      renderer.height = icon._icon.height;
-      let canvasScale = renderer.width / renderer._canvas.width;
+      // `size` is the on-screen badge diameter the animator computed (already
+      // magnification-aware). Fit the Dot's fixed canvas to it.
+      let D = size || icon._icon.width;
+      renderer.width = D;
+      renderer.height = D;
+      let canvasScale = D / renderer._canvas.width;
       renderer._canvas.set_scale(canvasScale, canvasScale);
+      renderer.translationX = 0;
+      renderer.translationY = 0;
 
-      let options = extension.notification_badge_style_options;
-      let notification_badge_style =
-        options[extension.notification_badge_style];
-      let notification_badge_color = extension.notification_badge_color;
-
-      renderer.translationX = renderer.width / 1.5;
-      // renderer.translationY = icon._icon.translationY;
+      // Fixed circle + centred number; >9 collapses to "9+" (never grows the circle).
+      let label = noticesCount > 9 ? '9+' : String(noticesCount);
 
       renderer.set_state({
         count: noticesCount,
-        color: notification_badge_color || [1, 1, 1, 1],
-        style: notification_badge_style || 'default',
+        text: label,
+        color: extension.notification_badge_color || [0.87, 0.19, 0.18, 1],
+        style: 'number',
         size: extension.notification_badge_size || 0,
-        translate: [0, -0.85],
       });
     }
   }

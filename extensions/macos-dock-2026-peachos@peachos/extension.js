@@ -306,6 +306,25 @@ export default class Dash2DockLiteExt extends Extension {
     });
   }
 
+  // User-created dock separators. Stored as a JSON string in the
+  // `custom-separators` gsetting: [{ id, after }] where `after` is the identity
+  // of the icon immediately to the separator's left (see Dock._iconIdentity).
+  get customSeparators() {
+    try {
+      let arr = JSON.parse(this.custom_separators || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  setCustomSeparators(arr) {
+    this._settings.set_string(
+      'custom-separators',
+      JSON.stringify(Array.isArray(arr) ? arr : [])
+    );
+  }
+
   // This is needed. Each dock has a autohider class.
   // This informs everyone to re-check overlaps
   // TODO use signals
@@ -527,6 +546,10 @@ export default class Dash2DockLiteExt extends Extension {
         case 'running-indicator-color':
         case 'running-indicator-style': {
           this.animate();
+          break;
+        }
+        case 'custom-separators': {
+          this.animate({ refresh: true });
           break;
         }
         case 'clock-style':

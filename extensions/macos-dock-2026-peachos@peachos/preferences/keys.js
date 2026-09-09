@@ -390,8 +390,12 @@ export const SettingsKeys = () => {
       test: { values: [0, 1, 2, 3, 4, 5] },
     },
     'notification-badge-color': {
-      default_value: [1, 1, 1, 1],
+      default_value: [0.87, 0.19, 0.18, 1.0],
       widget_type: 'color',
+    },
+    'custom-separators': {
+      default_value: '[]',
+      widget_type: 'string',
     },
     'preferred-monitor': {
       default_value: 0,

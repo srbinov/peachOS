@@ -388,9 +388,14 @@
         <description>Customize the notification badge size.</description>
     </key>
     <key type="(dddd)" name="notification-badge-color">
-        <default>(1.,1.,1.,1.)</default>
+        <default>(0.87,0.19,0.18,1.0)</default>
         <summary>Notification badge color</summary>
         <description>Customize the notification badge color.</description>
+    </key>
+    <key type="s" name="custom-separators">
+        <default>"[]"</default>
+        <summary>User-created dock separators</summary>
+        <description>JSON array of {id, after} for user-added dock separators. `after` is the identity of the icon immediately to the separator's left.</description>
     </key>
     <key type="d" name="icon-size">
         <default>0.2</default>

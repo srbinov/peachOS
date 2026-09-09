@@ -56,7 +56,8 @@ const DotCanvas = GObject.registerClass(
         this.state.rotate != s.rotate ||
         this.state.translate != s.translate ||
         this.state.scale != s.scale ||
-        this.state.size != s.size
+        this.state.size != s.size ||
+        this.state.text != s.text
       ) {
         this.state = s;
         this.redraw();
@@ -346,6 +347,32 @@ const DotCanvas = GObject.registerClass(
 
     _draw_dot(ctx, state) {
       this._draw_dots(ctx, { ...state, count: 1 });
+    }
+
+    // peachOS notification badge: a solid coloured circle with a centred bold
+    // white number. The circle size is FIXED regardless of the label -- counts
+    // over 9 are shown as "9+" by the caller, never by growing the circle.
+    _draw_number(ctx, state) {
+      let [size, _] = this.get_surface_size();
+      let cx = size / 2;
+      let cy = size / 2;
+      let r = size * 0.46; // near-full canvas; the canvas IS the badge
+
+      Drawing.set_color(
+        ctx,
+        state.color,
+        (state.color && state.color[3]) != null ? state.color[3] : 1
+      );
+      ctx.newSubPath();
+      ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+      ctx.fill();
+
+      let label = String(state.text != null ? state.text : state.count || '');
+      if (!label) return;
+      Drawing.set_color(ctx, [1, 1, 1, 1], 1);
+      let fontSize = Math.round(r * (label.length > 1 ? 0.85 : 1.05));
+      ctx.moveTo(cx, cy);
+      Drawing.draw_text(ctx, label, `Inter Bold ${fontSize}`);
     }
   }
 );

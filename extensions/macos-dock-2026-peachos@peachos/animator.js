@@ -8,7 +8,7 @@ import Gio from 'gi://Gio';
 const Point = Graphene.Point;
 
 import { Dot } from './apps/dot.js';
-import { DockPosition } from './dock.js';
+import { DockPosition, SEP_GAP } from './dock.js';
 import { Vector } from './vector.js';
 import { separatorOverlayStyle, separatorOverlaySize } from './iconGeometry.js';
 
@@ -42,6 +42,7 @@ export let Animator = class {
       this._dots = [];
       this._badges = [];
       this._separatorRenderers = [];
+      this._userSeparatorRenderers = [];
     }
     this._computed = null;
   }
@@ -55,6 +56,7 @@ export let Animator = class {
       this._dots = [];
       this._badges = [];
       this._separatorRenderers = [];
+      this._userSeparatorRenderers = [];
     }
   }
 
@@ -69,9 +71,11 @@ export let Animator = class {
       this._dots = [];
       this._badges = [];
       this._separatorRenderers = [];
+      this._userSeparatorRenderers = [];
     }
     this._target = dock.renderArea;
     this._separatorRenderers = this._separatorRenderers || [];
+    this._userSeparatorRenderers = this._userSeparatorRenderers || [];
 
     while (this._renderers.length < count) {
       // renderer
@@ -116,6 +120,26 @@ export let Animator = class {
     }
     for (let i = separatorCount; i < this._separatorRenderers.length; i++) {
       this._separatorRenderers[i].visible = false;
+    }
+
+    // hit-testing for right-click / drag is done in dock._onButtonPressEvent
+    // against these overlays' rects (renderArea is behind the reactive ghost
+    // dash, so a reactive child here would never see the press).
+    let userSeparatorCount = (dock._userSeparators || []).length;
+    while (this._userSeparatorRenderers.length < userSeparatorCount) {
+      let sep = new St.Widget({
+        name: 'd2daUserSeparator',
+        reactive: false,
+      });
+      dock.renderArea.add_child(sep);
+      this._userSeparatorRenderers.push(sep);
+    }
+    for (
+      let i = userSeparatorCount;
+      i < this._userSeparatorRenderers.length;
+      i++
+    ) {
+      this._userSeparatorRenderers[i].visible = false;
     }
 
     return true;
@@ -684,6 +708,23 @@ export let Animator = class {
         let scaleToTarget = targetSize / baseSize;
         renderer.set_scale(scaleToTarget, scaleToTarget);
 
+        // Gap opened up by user separators to this icon's left. Applied as a
+        // post-layout translation on the ghost container itself (not just the
+        // renderer) so its reactive hit area moves with it -- get_transformed_
+        // position() below then already includes it.
+        let sepShift = (icon._sepShift || 0) * scaleFactor;
+        let sepSign = vertical
+          ? dock._position == DockPosition.TOP
+            ? -1
+            : 1
+          : dock._position == DockPosition.RIGHT
+            ? -1
+            : 1;
+        let wantX = vertical ? 0 : sepShift * sepSign;
+        let wantY = vertical ? sepShift * sepSign : 0;
+        if (icon.translation_x != wantX) icon.translation_x = wantX;
+        if (icon.translation_y != wantY) icon.translation_y = wantY;
+
         let p = icon.get_transformed_position();
         let adjustX = icon.width / 2 - targetSize / 2;
         let adjustY = icon.height / 2 - targetSize / 2;
@@ -841,40 +882,30 @@ export let Animator = class {
 
       let posFlags = flags[dock._position];
 
-      // badges
-      //! ***badge location at scaling is messed up***
+      // notification badge -- a red circle + count pinned to the icon's
+      // top-right corner, overflowing it slightly (iOS/macOS style).
       let badge = this._badges[icon._idx];
       badge.hide();
       if (icon != dock._dragged) {
         let appNotices = icon._appwell
           ? dock.extension.services._appNotices[icon._appwell.app.get_id()]
           : null;
-        let noticesCount = 0;
-        if (appNotices) {
-          noticesCount = appNotices.count;
-        }
-        // noticesCount = 1;
-        let target = dock.renderArea;
+        let noticesCount = appNotices ? appNotices.count : 0;
+
         if (badge && noticesCount > 0) {
-          badge.update(icon, {
-            noticesCount,
-            position: dock._position,
-            vertical,
-            extension: dock.extension,
-          });
-          // badge.x = icon._renderer.x + 3 * icon._scale;
-          // badge.y = icon._renderer.y - 3 * icon._scale;
+          // D already includes hover magnification (scaleX), so DON'T also
+          // set_scale the badge -- that was the old "location messed up" bug.
+          let iconW = icon._renderer.width * icon._renderer.scaleX;
+          let D = iconW * 0.44;
 
-          // if (dock._position == DockPosition.TOP) {
-          //   badge.y = icon._renderer.y + (icon.height - 6) * icon._scale;
-          // }
+          badge.set_scale(1, 1);
+          badge.width = D;
+          badge.height = D;
+          badge.update(icon, { noticesCount, size: D, extension: dock.extension });
 
-          badge.width = icon._renderer.width * icon._renderer.scaleX;
-          badge.height = badge.width;
-          badge.x = icon._renderer.x;
-          badge.y = icon._renderer.y;
-
-          badge.set_scale(icon._scale, icon._scale);
+          // circle straddles the icon's top-right corner
+          badge.x = icon._renderer.x + iconW - D / 2;
+          badge.y = icon._renderer.y - D / 2;
           badge.show();
         }
       }
@@ -980,6 +1011,63 @@ export let Animator = class {
       } else {
         overlay.visible = false;
       }
+
+      // let dock._onButtonPressEvent hit-test against this rect
+      actor._overlay = overlay;
+    });
+
+    // user-created separators -- same look as the built-ins, positioned in the
+    // gap that dock._sepShift opened up (see dock.js _findIcons).
+    let userGap = SEP_GAP * scaleFactor;
+    (dock._userSeparators || []).forEach((marker, i) => {
+      let overlay = this._userSeparatorRenderers[i];
+      if (!overlay) return;
+      marker._overlay = overlay;
+
+      if (thickness <= 0) {
+        overlay.visible = false;
+        return;
+      }
+
+      let size = separatorOverlaySize(iconSize, thickness, vertical, scaleFactor);
+      overlay.width = size.width;
+      overlay.height = size.height;
+      overlay.style = separatorOverlayStyle(separatorRgba);
+      overlay.opacity = 255;
+
+      let prevR = marker._prev && marker._prev._renderer;
+      let firstR = dock._icons[0] && dock._icons[0]._renderer;
+
+      let centerX;
+      let baseY;
+      if (dock._draggedUserSep === marker && marker._dragX != null) {
+        centerX = marker._dragX;
+        baseY = firstR ? firstR.y : 0;
+      } else if (prevR && prevR.visible) {
+        centerX =
+          prevR.x + prevR.width * (prevR.scaleX || 1) + userGap / 2;
+        baseY = prevR.y;
+      } else if (firstR && firstR.visible) {
+        centerX = firstR.x - userGap / 2;
+        baseY = firstR.y;
+      } else {
+        overlay.visible = false;
+        return;
+      }
+
+      let refH = (prevR || firstR).height * ((prevR || firstR).scaleY || 1);
+      if (!vertical) {
+        overlay.x = centerX - overlay.width / 2;
+        overlay.y = baseY + (refH - overlay.height) / 2;
+      } else {
+        overlay.y = centerX - overlay.height / 2;
+        overlay.x =
+          (prevR || firstR).x +
+          ((prevR || firstR).width * ((prevR || firstR).scaleX || 1) -
+            overlay.width) /
+            2;
+      }
+      overlay.visible = true;
     });
 
     let targetX = 0;

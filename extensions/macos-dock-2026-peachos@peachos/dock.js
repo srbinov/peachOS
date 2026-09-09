@@ -3,6 +3,8 @@
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Fav from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 
 import Shell from 'gi://Shell';
 import GObject from 'gi://GObject';
@@ -51,6 +53,10 @@ export const DockAlignment = {
 
 const PREVIEW_FRAMES = 64;
 const ANIM_DEBOUNCE_END_DELAY = 750;
+
+// Extra unscaled px of gap a user-created separator opens up between the icons
+// on either side of it (matches the feel of the built-in "apps | Downloads" one).
+export const SEP_GAP = 18;
 
 const MIN_SCROLL_RESOLUTION = 4;
 const MAX_SCROLL_RESOLUTION = 10;
@@ -202,6 +208,13 @@ export let Dock = GObject.registerClass(
     }
 
     undock() {
+      this._endSeparatorDrag();
+      if (this._sepMenu) {
+        try {
+          this._sepMenu.destroy();
+        } catch (e) {}
+        this._sepMenu = null;
+      }
       this._destroyList();
       this._endAnimation();
       this.dash._box.remove_effect_by_name('icon-effect');
@@ -211,7 +224,172 @@ export let Dock = GObject.registerClass(
     }
 
     _onButtonPressEvent(evt) {
+      // Separator interactions: the reactive ghost dash sits above renderArea, so
+      // the separator overlays can't get events themselves -- hit-test here.
+      try {
+        let [x, y] = evt.get_coords();
+        let button = evt.get_button ? evt.get_button() : 1;
+
+        let builtin = (this._separators || [])
+          .map((a) => ({ marker: a, isBuiltin: true, overlay: a._overlay }))
+          .filter((h) => h.overlay && h.overlay.visible);
+        let user = (this._userSeparators || [])
+          .map((m) => ({ marker: m, isBuiltin: false, overlay: m._overlay }))
+          .filter((h) => h.overlay && h.overlay.visible);
+
+        for (let h of [...user, ...builtin]) {
+          let r = this._separatorScreenRect(h.overlay);
+          if (!r) continue;
+          if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+            if (button === 3) {
+              this._openSeparatorMenu(h);
+              return Clutter.EVENT_STOP;
+            }
+            if (button === 1 && !h.isBuiltin) {
+              this._beginSeparatorDrag(h.marker);
+              return Clutter.EVENT_STOP;
+            }
+          }
+        }
+      } catch (err) {
+        console.log(err);
+      }
       return Clutter.EVENT_PROPAGATE;
+    }
+
+    // Screen-space rect of a separator overlay, padded out to a comfortable
+    // click/grab target (the visible line is only ~1px wide).
+    _separatorScreenRect(overlay) {
+      if (!overlay) return null;
+      let [ox, oy] = this.renderArea.get_transformed_position();
+      let padX = 9;
+      let padY = 6;
+      return {
+        x: ox + overlay.x - padX,
+        y: oy + overlay.y - padY,
+        w: overlay.width + padX * 2,
+        h: overlay.height + padY * 2,
+      };
+    }
+
+    _openSeparatorMenu(h) {
+      if (this._sepMenu) {
+        this._sepMenu.destroy();
+        this._sepMenu = null;
+      }
+      if (!this._sepMenuManager) {
+        this._sepMenuManager = new PopupMenu.PopupMenuManager(this);
+      }
+
+      // anchor the popup at the separator via the shared dummy cursor
+      let r = this._separatorScreenRect(h.overlay);
+      if (r) {
+        Main.layoutManager.setDummyCursorGeometry(
+          r.x + r.w / 2,
+          r.y + r.h / 2,
+          0,
+          0
+        );
+      }
+
+      let menu = new PopupMenu.PopupMenu(
+        Main.layoutManager.dummyCursor,
+        0.5,
+        this._position === DockPosition.BOTTOM ? St.Side.BOTTOM : St.Side.TOP
+      );
+      Main.uiGroup.add_child(menu.actor);
+      menu.actor.hide();
+      this._sepMenuManager.addMenu(menu);
+
+      let afterId = h.isBuiltin
+        ? this._iconIdentity(h.marker._prev)
+        : h.marker.after || '';
+
+      menu.addAction('Add separator', () => this.addSeparator(afterId));
+      if (!h.isBuiltin) {
+        menu.addAction('Delete separator', () =>
+          this.removeSeparator(h.marker.id)
+        );
+      }
+
+      this._sepMenu = menu;
+      menu.open(BoxPointer.PopupAnimation.FULL);
+    }
+
+    _beginSeparatorDrag(marker) {
+      if (this._draggedUserSep || !marker) return;
+      this._draggedUserSep = marker;
+      let [ox] = this.renderArea.get_transformed_position();
+
+      this._sepDragCapturedId = global.stage.connect(
+        'captured-event',
+        (a, event) => {
+          let t = event.type();
+          if (
+            t === Clutter.EventType.MOTION ||
+            t === Clutter.EventType.TOUCH_UPDATE
+          ) {
+            let [px] = global.get_pointer();
+            marker._dragX = px - ox;
+            marker._dragAfter = this._nearestGapIdentity(px);
+            this._beginAnimation();
+            return Clutter.EVENT_STOP;
+          }
+          if (
+            t === Clutter.EventType.BUTTON_RELEASE ||
+            t === Clutter.EventType.TOUCH_END
+          ) {
+            this._endSeparatorDrag();
+            return Clutter.EVENT_STOP;
+          }
+          return Clutter.EVENT_PROPAGATE;
+        }
+      );
+    }
+
+    _endSeparatorDrag() {
+      if (this._sepDragCapturedId) {
+        global.stage.disconnect(this._sepDragCapturedId);
+        this._sepDragCapturedId = 0;
+      }
+      let marker = this._draggedUserSep;
+      this._draggedUserSep = null;
+      if (!marker) return;
+      let after =
+        marker._dragAfter != null ? marker._dragAfter : marker.after || '';
+      let list = this.extension.customSeparators.map((s) =>
+        s.id === marker.id ? { ...s, after } : s
+      );
+      this.extension.setCustomSeparators(list); // -> refresh via change dispatch
+    }
+
+    // Identity of the icon just left of the gap the pointer X is closest to
+    // ("" == front of the dock).
+    _nearestGapIdentity(px) {
+      let icons = (this._icons || []).filter((c) => c._renderer);
+      if (!icons.length) return '';
+      let [ox] = this.renderArea.get_transformed_position();
+      let edges = icons.map((c) => {
+        let rr = c._renderer;
+        let left = ox + rr.x;
+        let right = ox + rr.x + rr.width * (rr.scaleX || 1);
+        return { c, left, right };
+      });
+
+      let best = '';
+      let bestDist = Math.abs(px - edges[0].left);
+      for (let i = 0; i < edges.length; i++) {
+        let gapX =
+          i < edges.length - 1
+            ? (edges[i].right + edges[i + 1].left) / 2
+            : edges[i].right;
+        let d = Math.abs(px - gapX);
+        if (d < bestDist) {
+          bestDist = d;
+          best = this._iconIdentity(edges[i].c);
+        }
+      }
+      return best;
     }
 
     _onMotionEvent(evt) {
@@ -857,7 +1035,38 @@ export let Dock = GObject.registerClass(
             this._icons = null;
           });
         }
+
+        // "Add separator here" on every app icon's context menu -- the always-
+        // available entry point. App icons use the stock AppIconMenu; wrap
+        // popupMenu once so the item is appended after the menu is (re)built.
+        let appwell = c.child;
+        if (appwell && appwell.popupMenu && !appwell._peachSepMenuWrapped) {
+          appwell._peachSepMenuWrapped = true;
+          let origPopupMenu = appwell.popupMenu.bind(appwell);
+          appwell.popupMenu = (...args) => {
+            let ret = origPopupMenu(...args);
+            try {
+              let menu = appwell._menu;
+              // stock AppIconMenu may rebuild its items -- re-add if absent
+              let has = menu
+                ?._getMenuItems?.()
+                .some((it) => it.label?.text === 'Add separator here');
+              if (menu && menu.addAction && !has) {
+                menu.addAction('Add separator here', () =>
+                  this.addSeparator(this._iconIdentity(c))
+                );
+              }
+            } catch (err) {
+              console.log(err);
+            }
+            return ret;
+          };
+        }
       });
+
+      // splice user-created separator markers into _dashItems so the link-list
+      // below hands each one its _prev / _next for free
+      this._buildUserSeparators();
 
       // link list the dash items
       //! optimize this. there has to be a better way to get the separators _prev and _next
@@ -870,7 +1079,75 @@ export let Dock = GObject.registerClass(
         prev = c;
       });
 
+      // per-icon cumulative gap opened up by every user separator to its left
+      let shift = 0;
+      this._dashItems.forEach((it) => {
+        if (it._userSeparator) {
+          shift += SEP_GAP;
+          it._sepShift = shift; // used to place the separator in its gap
+        } else if (it._icon) {
+          it._sepShift = shift;
+        }
+      });
+
       return this._icons;
+    }
+
+    // A stable identity string for a dock item -- an app's .desktop id for app
+    // icons, a ":name" token for the peachOS special icons. Used as the anchor
+    // (`after`) for user separators.
+    _iconIdentity(c) {
+      if (!c) return '';
+      if (c === this.dash?._showAppsIcon) return ':showapps';
+      if (c === this._trashIcon) return ':trash';
+      if (c === this._downloadsIcon) return ':downloads';
+      if (c === this._recentFilesIcon) return ':recent';
+      if (c === this._documentsIcon) return ':documents';
+      let app = c._appwell?.app;
+      if (app && app.get_id) return app.get_id();
+      return '';
+    }
+
+    _buildUserSeparators() {
+      this._userSeparators = [];
+      let stored = this.extension.customSeparators || [];
+      if (!stored.length) return;
+
+      stored.forEach((entry) => {
+        if (!entry || typeof entry.id !== 'string') return;
+        let after = entry.after || '';
+        let marker = { _userSeparator: true, id: entry.id, after };
+
+        // find where in _dashItems this separator sits
+        let insertAt = 0; // front ("" anchor)
+        if (after) {
+          let anchorIdx = this._dashItems.findIndex(
+            (it) => !it._userSeparator && this._iconIdentity(it) === after
+          );
+          if (anchorIdx < 0) {
+            // anchor icon isn't present right now -- drop the marker for this
+            // pass, but keep it in the setting so it comes back if the app does
+            return;
+          }
+          insertAt = anchorIdx + 1;
+        }
+        this._dashItems.splice(insertAt, 0, marker);
+        this._userSeparators.push(marker);
+      });
+    }
+
+    addSeparator(afterIdentity) {
+      let list = this.extension.customSeparators;
+      list.push({
+        id: 'sep-' + Math.random().toString(36).slice(2, 10),
+        after: afterIdentity || '',
+      });
+      this.extension.setCustomSeparators(list);
+    }
+
+    removeSeparator(id) {
+      let list = this.extension.customSeparators.filter((s) => s.id !== id);
+      this.extension.setCustomSeparators(list);
     }
 
     /**
@@ -1196,6 +1473,8 @@ export let Dock = GObject.registerClass(
         // (this.animated ? iconSizeSpaced : 0) +
         iconSizeSpaced * (this._icons.length > 3 ? this._icons.length : 3);
       projectedWidth += iconMargins;
+      // room for the gap each user separator opens up
+      projectedWidth += (this._userSeparators?.length || 0) * SEP_GAP;
 
       let scaleDown = 1.0;
       let limit = vertical ? 0.96 : 0.98; // use dock_size_limit
