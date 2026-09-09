@@ -370,7 +370,8 @@ const DotCanvas = GObject.registerClass(
       let label = String(state.text != null ? state.text : state.count || '');
       if (!label) return;
       Drawing.set_color(ctx, [1, 1, 1, 1], 1);
-      let fontSize = Math.round(r * (label.length > 1 ? 0.92 : 1.18));
+      // same digit size whether it's "3" or the "9" in "9+"
+      let fontSize = Math.round(r * 0.95);
       ctx.moveTo(cx, cy - fontSize * 0.05);
       Drawing.draw_text(ctx, label, `Inter Heavy ${fontSize}`);
     }
