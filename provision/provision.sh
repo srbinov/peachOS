@@ -231,8 +231,11 @@ systemctl --global enable peachos-dictation-daemon.service
 #   gir1.2-goa-1.0          Internet Accounts (GNOME Online Accounts)
 #   gir1.2-gnomedesktop-4.0 Keyboard > Input Sources (XkbInfo layout list)
 #   gir1.2-nm-1.0           Network panel (NetworkManager device/VPN list)
+#   gir1.2-webkit-6.0       Internet Accounts > iCloud -- embeds Apple's own web
+#                           sign-in (icloud_webauth.py) so 2FA works, harvests
+#                           the session cookies for the Photos widget's pyicloud
 echo "==> Installing Settings app runtime dependencies"
-apt-get install -y --no-install-recommends gir1.2-goa-1.0 gir1.2-gnomedesktop-4.0 gir1.2-nm-1.0
+apt-get install -y --no-install-recommends gir1.2-goa-1.0 gir1.2-gnomedesktop-4.0 gir1.2-nm-1.0 gir1.2-webkit-6.0
 
 # Extension Manager (com.mattjakeman.ExtensionManager) -- browse/install/configure GNOME
 # Shell extensions with a real GUI. peachOS's app-grid folder (provision/dconf/01-peachos)

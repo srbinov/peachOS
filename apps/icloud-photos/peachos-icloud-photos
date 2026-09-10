@@ -107,7 +107,13 @@ def _write_manifest(m):
 
 def _connect(apple_id, password=None):
     os.makedirs(SESSION_DIR, exist_ok=True)
-    return PyiCloudService(apple_id, password, cookie_directory=SESSION_DIR)
+    # No password on the browser sign-in path -- pyicloud authenticates from the
+    # cookies the Settings app harvested (its .session stub has session_token set,
+    # so authenticate() tries _validate_token first, which only needs the
+    # X-APPLE-WEBAUTH-TOKEN cookie). A dummy keeps the SRP fallback from crashing
+    # on None if those cookies have since expired -> clean PyiCloudFailedLogin.
+    return PyiCloudService(apple_id, password or 'browser-session',
+                           cookie_directory=SESSION_DIR)
 
 
 def _mark_reauth(needed=True):

@@ -21,6 +21,11 @@ except Exception:  # pyicloud not installed -> iCloud Photos step is skipped
     PyiCloudService = None
     PyiCloudFailedLoginException = PyiCloudException = Exception
 
+try:
+    from icloud_webauth import ICloudWebAuth
+except Exception:  # WebKit 6.0 gir missing -> fall straight to the app-password step
+    ICloudWebAuth = None
+
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
 # Shared with the peachos-icloud-photos helper (apps/icloud-photos) -- these must
@@ -40,9 +45,12 @@ _APP_PW_URL = 'https://account.apple.com/account/manage'
 
 
 def _icloud_store_session(apple_id, password, name):
-    Secret.password_store_sync(
-        _ICLOUD_SCHEMA, {'account': apple_id}, Secret.COLLECTION_DEFAULT,
-        'peachOS — iCloud Photos', password, None)
+    # password=None for the browser sign-in path -- there's no password to keep,
+    # pyicloud authenticates from the harvested cookies alone.
+    if password:
+        Secret.password_store_sync(
+            _ICLOUD_SCHEMA, {'account': apple_id}, Secret.COLLECTION_DEFAULT,
+            'peachOS — iCloud Photos', password, None)
     os.makedirs(_ICLOUD_DATA, exist_ok=True)
     try:
         with open(_ICLOUD_CONFIG) as f:
@@ -245,22 +253,23 @@ class _AddMailAccountDialog(Gtk.Window):
 class _AddICloudDialog(Gtk.Window):
     """One iCloud sign-in that wires up both halves:
 
-      - Photos  -> a pyicloud session (real Apple ID password + a 2FA code),
-        stored for the peachos-icloud-photos helper / desktop Photos widget.
-      - Calendar / Reminders / Contacts -> GOA WebDAV (CalDAV + CardDAV) with an
-        *app-specific* password (Apple blocks the main password for those).
+      - Photos -> a pyicloud session, seeded from cookies harvested from Apple's
+        own web sign-in (icloud_webauth.ICloudWebAuth) so 2FA works reliably.
+      - Calendar / Reminders / Contacts + Mail -> GOA CalDAV/CardDAV + IMAP with
+        an *app-specific* password (Apple blocks the main password for those).
 
-    Steps: sign in -> two-factor (if asked) -> app-specific password -> done.
-    Without pyicloud installed it degrades to just the app-specific step.
+    Steps: browser sign-in -> app-specific password -> done. Without WebKit or
+    pyicloud it degrades to just the app-specific step.
     """
+
+    _WEBAUTH_OK = ICloudWebAuth is not None and PyiCloudService is not None
 
     def __init__(self, parent, on_added):
         super().__init__(title='Sign in to iCloud', transient_for=parent,
                          modal=True, default_width=440, resizable=False)
+        self._parent = parent
         self._on_added = on_added
-        self._api = None           # live PyiCloudService, kept across the 2FA step
         self._apple_id = ''
-        self._password = ''
         self._photos_ok = False
         self._caldav_ok = False
 
@@ -268,12 +277,11 @@ class _AddICloudDialog(Gtk.Window):
             transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.set_child(self._stack)
         self._stack.add_named(self._page_signin(), 'signin')
-        self._stack.add_named(self._page_2fa(), '2fa')
         self._stack.add_named(self._page_caldav(), 'caldav')
         self._stack.add_named(self._page_done(), 'done')
 
         self._stack.set_visible_child_name(
-            'caldav' if PyiCloudService is None else 'signin')
+            'signin' if self._WEBAUTH_OK else 'caldav')
 
     # ---- shared chrome -------------------------------------------------
 
@@ -295,21 +303,19 @@ class _AddICloudDialog(Gtk.Window):
             row.append(b)
         return row
 
-    # ---- step 1: sign in --------------------------------------------
+    # ---- step 1: browser sign-in (Photos) -------------------------
 
     def _page_signin(self):
         box = self._shell(
             'Sign in to iCloud',
-            'Connects your Photos. Your password goes to the login keyring, '
-            'never a file.')
+            "Opens Apple's own sign-in page. The verification code shows "
+            'on your Apple devices as normal; peachOS only keeps the '
+            'resulting session, never your password.')
         box.append(Gtk.Label(label='Apple ID', xalign=0))
         self._id_entry = Gtk.Entry(placeholder_text='you@icloud.com',
                                    input_purpose=Gtk.InputPurpose.EMAIL)
+        self._id_entry.connect('activate', lambda *_a: self._on_signin())
         box.append(self._id_entry)
-        box.append(Gtk.Label(label='Password', xalign=0))
-        self._pw_entry = Gtk.PasswordEntry(show_peek_icon=True)
-        self._pw_entry.connect('activate', lambda *_a: self._on_signin())
-        box.append(self._pw_entry)
 
         self._signin_err = Gtk.Label(wrap=True, xalign=0, css_classes=['error'],
                                      visible=False)
@@ -317,193 +323,67 @@ class _AddICloudDialog(Gtk.Window):
         self._signin_spin = Gtk.Spinner()
         box.append(self._signin_spin)
 
-        skip = Gtk.Button(label='Skip — Calendar & Contacts only',
-                          css_classes=['flat'])
-        skip.connect('clicked', lambda *_a: self._stack.set_visible_child_name('caldav'))
         cancel = Gtk.Button(label='Cancel')
         cancel.connect('clicked', lambda *_a: self.close())
-        self._signin_btn = Gtk.Button(label='Continue',
+        self._signin_btn = Gtk.Button(label='Sign In',
                                       css_classes=['suggested-action'])
         self._signin_btn.connect('clicked', lambda *_a: self._on_signin())
-        box.append(self._footer(skip, cancel, self._signin_btn))
+        box.append(self._footer(cancel, self._signin_btn))
         return box
 
     def _on_signin(self):
         apple_id = self._id_entry.get_text().strip()
-        password = self._pw_entry.get_text()
-        if not apple_id or not password:
-            self._signin_err.set_label('Enter your Apple ID and password.')
+        if not apple_id or '@' not in apple_id:
+            self._signin_err.set_label('Enter your Apple ID (an email address).')
             self._signin_err.set_visible(True)
             return
-        self._apple_id, self._password = apple_id, password
+        self._apple_id = apple_id
         self._signin_err.set_visible(False)
         self._signin_btn.set_sensitive(False)
         self._signin_spin.start()
-        threading.Thread(target=self._do_signin, args=(apple_id, password),
-                         daemon=True).start()
+        # Clean slate so the harvested session isn't mixed with a stale one.
+        shutil.rmtree(_ICLOUD_SESSION, ignore_errors=True)
+        os.makedirs(_ICLOUD_SESSION, exist_ok=True)
+        ICloudWebAuth(self, apple_id, _ICLOUD_SESSION,
+                      self._webauth_done).present()
 
-    def _do_signin(self, apple_id, password):
-        try:
-            # Start from a clean session every time the dialog is used. A leftover
-            # half-finished session (scnt / session_id / auth_attributes from an
-            # earlier attempt where the 2FA code was never entered) makes Apple
-            # treat the next signin/complete as a *resumed* challenge and NOT push
-            # a fresh code -- the "I never got a code" case. A successful sign-in
-            # rewrites the trusted session here for the photos helper to reuse.
-            shutil.rmtree(_ICLOUD_SESSION, ignore_errors=True)
-            os.makedirs(_ICLOUD_SESSION, exist_ok=True)
-            api = PyiCloudService(apple_id, password,
-                                  cookie_directory=_ICLOUD_SESSION)
-        except PyiCloudFailedLoginException:
-            GLib.idle_add(self._signin_done, None,
-                          'Sign-in failed. Check your Apple ID and password.')
-            return
-        except Exception as e:
-            GLib.idle_add(self._signin_done, None, str(e))
-            return
-        GLib.idle_add(self._signin_done, api, None)
-
-    def _signin_done(self, api, error):
+    def _webauth_done(self, ok, detail):
         self._signin_spin.stop()
         self._signin_btn.set_sensitive(True)
-        if error:
-            on_2fa = self._stack.get_visible_child_name() == '2fa'
-            target = self._twofa_err if on_2fa else self._signin_err
-            target.set_label(error)
-            target.set_visible(True)
-            if on_2fa:
-                self._twofa_hint.set_label(
-                    'Enter the six-digit code from your other Apple devices.')
-            return
-        self._api = api
-        if api.requires_2fa or api.requires_2sa:
-            try:
-                mode = (getattr(api, '_auth_data', {}) or {}).get('mode', '')
-            except Exception:
-                mode = ''
-            if mode == 'sms':
-                self._twofa_hint.set_label(
-                    'Apple just sent a six-digit code to your trusted phone '
-                    'number by text message.')
-            else:
-                self._twofa_hint.set_label(
-                    'A "Sign-In Requested" notification with a six-digit code '
-                    'should now be on your other Apple devices. If nothing came '
-                    'through, use "Resend code" below.')
-            self._twofa_err.set_visible(False)
-            self._code_entry.set_text('')
-            self._stack.set_visible_child_name('2fa')
-        else:
-            self._photos_connected()
-
-    # ---- step 2: two-factor ----------------------------------------
-
-    def _page_2fa(self):
-        box = self._shell('Two-Factor Authentication')
-        self._twofa_hint = Gtk.Label(
-            xalign=0, wrap=True, css_classes=['dim-label'],
-            label='Enter the six-digit code from your other Apple devices.')
-        box.append(self._twofa_hint)
-
-        self._code_entry = Gtk.Entry(placeholder_text='000000', max_length=8,
-                                     input_purpose=Gtk.InputPurpose.DIGITS,
-                                     xalign=0.5)
-        self._code_entry.connect('activate', lambda *_a: self._on_verify())
-        box.append(self._code_entry)
-        self._twofa_err = Gtk.Label(wrap=True, xalign=0, css_classes=['error'],
-                                    visible=False)
-        box.append(self._twofa_err)
-        self._twofa_spin = Gtk.Spinner()
-        box.append(self._twofa_spin)
-
-        self._resend_btn = Gtk.Button(label='Resend code', css_classes=['flat'],
-                                      halign=Gtk.Align.START)
-        self._resend_btn.connect('clicked', lambda *_a: self._on_resend())
-        box.append(self._resend_btn)
-
-        back = Gtk.Button(label='Back')
-        back.connect('clicked',
-                     lambda *_a: self._stack.set_visible_child_name('signin'))
-        self._verify_btn = Gtk.Button(label='Verify',
-                                      css_classes=['suggested-action'])
-        self._verify_btn.connect('clicked', lambda *_a: self._on_verify())
-        box.append(self._footer(back, self._verify_btn))
-        return box
-
-    def _on_resend(self):
-        # A fresh sign-in wipes the half-finished session (see _do_signin), so
-        # Apple pushes a new code instead of treating it as a resumed challenge.
-        self._resend_btn.set_sensitive(False)
-        self._twofa_err.set_visible(False)
-        self._twofa_hint.set_label('Requesting a new code…')
-        self._twofa_spin.start()
-
-        def done():
-            self._twofa_spin.stop()
-            self._resend_btn.set_sensitive(True)
-            return GLib.SOURCE_REMOVE
-
-        def work():
-            self._do_signin(self._apple_id, self._password)
-            GLib.idle_add(done)
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _on_verify(self):
-        code = self._code_entry.get_text().strip().replace(' ', '')
-        if len(code) < 6:
-            self._twofa_err.set_label('Enter the six-digit code.')
-            self._twofa_err.set_visible(True)
-            return
-        self._twofa_err.set_visible(False)
-        self._verify_btn.set_sensitive(False)
-        self._twofa_spin.start()
-        threading.Thread(target=self._do_verify, args=(code,), daemon=True).start()
-
-    def _do_verify(self, code):
-        try:
-            ok = self._api.validate_2fa_code(code)
-            if ok and not self._api.is_trusted_session:
-                self._api.trust_session()
-        except Exception as e:
-            GLib.idle_add(self._verify_done, False, str(e))
-            return
-        GLib.idle_add(self._verify_done, ok,
-                      None if ok else 'That code was not accepted.')
-
-    def _verify_done(self, ok, error):
-        self._twofa_spin.stop()
-        self._verify_btn.set_sensitive(True)
         if not ok:
-            self._twofa_err.set_label(error or 'Verification failed.')
-            self._twofa_err.set_visible(True)
+            if detail and detail != 'cancelled':
+                self._signin_err.set_label(f'Sign-in failed: {detail}')
+                self._signin_err.set_visible(True)
             return
         self._photos_connected()
+        return GLib.SOURCE_REMOVE
 
     # ---- photos side is done -> persist + move on ------------------
 
     def _photos_connected(self):
         self._photos_ok = True
         try:
-            name = getattr(self._api, 'account_name', None) or self._apple_id
-            _icloud_store_session(self._apple_id, self._password, name)
+            _icloud_store_session(self._apple_id, None, self._apple_id)
             _icloud_kick_sync()
         except Exception:
             pass
         self._id2_entry.set_text(self._apple_id)
+        self._appw_entry.grab_focus()
         self._stack.set_visible_child_name('caldav')
+
 
     # ---- step 3: app-specific password (CalDAV / CardDAV) ---------
 
     def _page_caldav(self):
         box = self._shell(
-            'Calendar, Reminders & Contacts',
-            'These sync over CalDAV/CardDAV, which Apple only allows with an '
-            'app-specific password — not your main one.')
+            'Calendar, Reminders, Contacts & Mail',
+            'These sync over CalDAV/CardDAV/IMAP, which Apple only allows with '
+            'an app-specific password — not your main one. You’re already '
+            'signed in, so creating one takes a few seconds.')
 
         link = Gtk.LinkButton(
             uri=_APP_PW_URL,
-            label='Create an app-specific password at appleid.apple.com')
+            label='Create an app-specific password at account.apple.com →')
         link.set_halign(Gtk.Align.START)
         box.append(link)
 
@@ -523,7 +403,7 @@ class _AddICloudDialog(Gtk.Window):
         self._caldav_spin = Gtk.Spinner()
         box.append(self._caldav_spin)
 
-        skip = Gtk.Button(label='Skip', css_classes=['flat'])
+        skip = Gtk.Button(label='Not now', css_classes=['flat'])
         skip.connect('clicked', lambda *_a: self._finish())
         self._caldav_btn = Gtk.Button(label='Connect',
                                       css_classes=['suggested-action'])
@@ -608,11 +488,14 @@ class _AddICloudDialog(Gtk.Window):
         return self._done_box
 
     def _finish(self):
-        bits = []
-        bits.append(f'{"✓" if self._photos_ok else "—"}  Photos')
         mark = "✓" if self._caldav_ok else "—"
-        bits.append(f'{mark}  Calendar\n{mark}  Reminders\n{mark}  Contacts')
-        self._done_list.set_label('\n'.join(bits))
+        self._done_list.set_label('\n'.join([
+            f'{"✓" if self._photos_ok else "—"}  Photos',
+            f'{mark}  Calendar',
+            f'{mark}  Reminders',
+            f'{mark}  Contacts',
+            f'{mark}  Mail',
+        ]))
         self._stack.set_visible_child_name('done')
         self._on_added()
 
