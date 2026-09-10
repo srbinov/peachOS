@@ -1,16 +1,16 @@
 """Browser-based iCloud sign-in for peachOS Settings.
 
 Apple has no OAuth for third-party iCloud access, so the Photos widget uses
-pyicloud (a reverse-engineered private API). Doing pyicloud's SRP + 2FA flow
-from headless Python is unreliable -- Apple's risk engine often just doesn't
-push a code. Instead, embed Apple's OWN web sign-in in a WebKitGTK view: 2FA
-works natively there, then harvest the authenticated cookies and drop them
-where pyicloud looks (`<session_dir>/<sanitised_apple_id>.cookiejar` + a stub
-`.session`).
+pyicloud (a reverse-engineered private API). pyicloud's own SRP + 2FA flow from
+headless Python is unreliable -- Apple's risk engine often just doesn't push a
+code. Instead, embed Apple's OWN web sign-in in a WebKitGTK view: 2FA works
+natively there, then harvest the session cookies, confirm them against
+setup.icloud.com (which also tells us the Apple ID), and drop everything where
+pyicloud looks: `<session_dir>/<sanitised_apple_id>.cookiejar` + a stub
+`.session`.
 
 Apple's login is cross-site (idmsa.apple.com authenticates, *.icloud.com holds
-the session), so ITP and third-party-cookie blocking BOTH have to be off or the
-session cookie never reaches icloud.com.
+the session), so ITP and third-party-cookie blocking BOTH have to be off.
 """
 
 import http.cookiejar
@@ -20,10 +20,12 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
+import urllib.request
 import uuid
 
-# Belt-and-suspenders for old GPUs (see the HardwareAccelerationPolicy note in
-# ICloudWebAuth) -- must be set before WebKit's compositor initialises.
+# Belt-and-suspenders for old GPUs -- must be set before WebKit's compositor
+# initialises (see the HardwareAccelerationPolicy note in ICloudWebAuth).
 os.environ.setdefault('WEBKIT_DISABLE_DMABUF_RENDERER', '1')
 
 import gi
@@ -33,14 +35,11 @@ gi.require_version('WebKit', '6.0')
 from gi.repository import Gtk, WebKit, GLib  # noqa: E402
 
 ICLOUD_URL = 'https://www.icloud.com/'
-# Cookie domains that together make up an authenticated iCloud session.
-COOKIE_URLS = ['https://www.icloud.com/', 'https://setup.icloud.com/',
-               'https://p.icloud.com/', 'https://idmsa.apple.com/',
-               'https://account.apple.com/', 'https://appleid.apple.com/']
-# Any of these present (with a value) => the web session is authenticated.
-AUTH_COOKIES = ('X-APPLE-WEBAUTH-TOKEN', 'X-APPLE-WEBAUTH-USER',
-                'X-APPLE-WEBAUTH-HSA-TRUST')
-
+VALIDATE_URL = 'https://setup.icloud.com/setup/ws/1/validate'
+# Any of these present (with a value) => the web session is probably ready.
+AUTH_COOKIES = ('X-APPLE-WEBAUTH-TOKEN', 'X-APPLE-WEBAUTH-USER')
+# Only cookies from these domains are worth keeping.
+KEEP_DOMAIN_RE = re.compile(r'(^|\.)(icloud\.com|apple\.com)$')
 
 _LOGFILE = os.path.expanduser('~/.cache/peachos/icloud-webauth.log')
 
@@ -60,20 +59,12 @@ def _sanitise(apple_id: str) -> str:
     return ''.join(c for c in apple_id if re.match(r'\w', c))
 
 
-def _write_pyicloud_session(session_dir: str, apple_id: str, soup_cookies) -> int:
-    """Write the files pyicloud loads on next run. Returns how many cookies."""
-    os.makedirs(session_dir, exist_ok=True)
-    base = os.path.join(session_dir, _sanitise(apple_id))
-
-    jar = http.cookiejar.LWPCookieJar(base + '.cookiejar')
-    trust_token = ''
-    n = 0
+def _jar_from_soup(soup_cookies) -> http.cookiejar.LWPCookieJar:
+    jar = http.cookiejar.LWPCookieJar()
     for c in soup_cookies:
-        name, value, domain = c.get_name(), c.get_value(), c.get_domain()
-        if not name:
+        name, value, domain = c.get_name(), c.get_value(), c.get_domain() or ''
+        if not name or not KEEP_DOMAIN_RE.search(domain.lstrip('.')):
             continue
-        if name == 'X-APPLE-WEBAUTH-HSA-TRUST':
-            trust_token = value
         expires = c.get_expires()
         jar.set_cookie(http.cookiejar.Cookie(
             version=0, name=name, value=value or '',
@@ -87,45 +78,63 @@ def _write_pyicloud_session(session_dir: str, apple_id: str, soup_cookies) -> in
             comment=None, comment_url=None,
             rest={'HttpOnly': None} if c.get_http_only() else {},
         ))
-        n += 1
-    jar.save(ignore_discard=True, ignore_expires=True)
+    return jar
 
-    # Stub session: session_token only needs to be truthy so authenticate()
-    # tries _validate_token() (cookie-only) before the SRP path.
+
+def _validate(jar):
+    """POST setup.icloud.com/validate with the harvested cookies (same call
+    pyicloud's _validate_token makes). Returns the Apple ID on success, else
+    raises."""
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    req = urllib.request.Request(
+        VALIDATE_URL, data=b'null', method='POST',
+        headers={'Content-Type': 'text/plain',
+                 'Origin': 'https://www.icloud.com',
+                 'Referer': 'https://www.icloud.com/',
+                 'User-Agent': 'Mozilla/5.0'})
+    with opener.open(req, timeout=25) as resp:
+        data = json.load(resp)
+    apple_id = (data.get('dsInfo') or {}).get('appleId')
+    if not apple_id:
+        raise RuntimeError('session did not validate (no dsInfo.appleId)')
+    return apple_id
+
+
+def _write_session(session_dir, apple_id, jar) -> None:
+    os.makedirs(session_dir, exist_ok=True)
+    base = os.path.join(session_dir, _sanitise(apple_id))
+    jar.filename = base + '.cookiejar'
+    jar.save(ignore_discard=True, ignore_expires=True)
+    trust = ''
+    for c in jar:
+        if c.name == 'X-APPLE-WEBAUTH-HSA-TRUST':
+            trust = c.value
     with open(base + '.session', 'w', encoding='utf-8') as f:
-        json.dump({
-            'session_token': 'web',
-            'client_id': 'auth-%s' % uuid.uuid4(),
-            'account_country': 'USA',
-            'trust_token': trust_token,
-            'trust_eligible': True,
-        }, f)
-    return n
+        # session_token only needs to be truthy so pyicloud's authenticate()
+        # tries the cookie-only _validate_token() before the SRP path.
+        json.dump({'session_token': 'web', 'client_id': 'auth-%s' % uuid.uuid4(),
+                   'account_country': 'USA', 'trust_token': trust,
+                   'trust_eligible': True}, f)
 
 
 class ICloudWebAuth(Gtk.Window):
-    """`on_done(ok: bool, detail: str)` -- detail = '' on success, else an error
-    ('cancelled' when the user just closed the window)."""
+    """`on_done(ok: bool, detail: str)` -- on success detail is the Apple ID;
+    on failure it's an error string ('cancelled' if the user closed the window)."""
 
-    def __init__(self, parent, apple_id: str, session_dir: str, on_done):
+    def __init__(self, parent, session_dir: str, on_done):
         super().__init__(title='Sign in to iCloud', transient_for=parent,
                          modal=True, default_width=980, default_height=760)
-        self._apple_id = apple_id
         self._session_dir = session_dir
         self._on_done = on_done
         self._finished = False
         self._poll_id = 0
         self._tmp = tempfile.mkdtemp(prefix='peachos-icloud-web-')
 
-        # Persistent (not ephemeral) session in a throwaway dir: ephemeral
-        # sessions are flakier for get_all_cookies and impossible to inspect.
+        # Persistent (not ephemeral) session in a throwaway dir.
         self._net = WebKit.NetworkSession.new(self._tmp, self._tmp)
         self._net.set_itp_enabled(False)               # cross-site: idmsa -> icloud
         self._cookies = self._net.get_cookie_manager()
         self._cookies.set_accept_policy(WebKit.CookieAcceptPolicy.ALWAYS)
-        self._cookies.set_persistent_storage(
-            os.path.join(self._tmp, 'cookies.sqlite'),
-            WebKit.CookiePersistentStorage.SQLITE)
 
         self._web = WebKit.WebView(network_session=self._net)
         self._web.set_vexpand(True)
@@ -155,15 +164,14 @@ class ICloudWebAuth(Gtk.Window):
         self.set_child(self._web)
         self.connect('close-request', self._on_close)
         self._web.load_uri(ICLOUD_URL)
-
         self._poll_id = GLib.timeout_add_seconds(2, self._poll)
 
-    # ---- detect / harvest -------------------------------------------------
+    # ---- detect ---------------------------------------------------------
 
     def _poll(self):
         if self._finished:
             return GLib.SOURCE_REMOVE
-        self._cookies.get_all_cookies(ICLOUD_URL, None, self._probe_done)
+        self._cookies.get_all_cookies(None, self._probe_done)
         return GLib.SOURCE_CONTINUE
 
     def _probe_done(self, mgr, res):
@@ -173,8 +181,10 @@ class ICloudWebAuth(Gtk.Window):
             return
         names = {c.get_name() for c in cookies if c.get_value()}
         if names & set(AUTH_COOKIES):
-            _log('auth cookie seen:', sorted(names & set(AUTH_COOKIES)))
+            _log('auto: saw', sorted(names & set(AUTH_COOKIES)))
             self._harvest('auto')
+
+    # ---- harvest + validate (off the UI thread) -----------------------
 
     def _harvest(self, how):
         if self._finished:
@@ -183,51 +193,42 @@ class ICloudWebAuth(Gtk.Window):
         if self._poll_id:
             GLib.source_remove(self._poll_id)
             self._poll_id = 0
-        self._status.set_label('Finishing…')
+        self._status.set_label('Checking the session…')
         self._continue_btn.set_sensitive(False)
         _log('harvest (%s)' % how)
-        self._all = []
-        self._pending = list(COOKIE_URLS)
-        self._collect_next()
+        self._cookies.get_all_cookies(None, self._got_all)
 
-    def _collect_next(self):
-        if not self._pending:
-            self._write_and_done()
-            return
-        self._cookies.get_all_cookies(self._pending.pop(), None, self._collected)
-
-    def _collected(self, mgr, res):
+    def _got_all(self, mgr, res):
         try:
-            self._all.extend(mgr.get_all_cookies_finish(res))
-        except GLib.Error:
-            pass
-        self._collect_next()
-
-    def _write_and_done(self):
-        seen = {}
-        for c in self._all:
-            if c.get_value():
-                seen[(c.get_name(), c.get_domain())] = c
-        cookies = list(seen.values())
-        names = {c.get_name() for c in cookies}
-        _log('harvested %d cookies:' % len(cookies), sorted(names))
-
-        if not names & set(AUTH_COOKIES):
+            cookies = list(mgr.get_all_cookies_finish(res))
+        except GLib.Error as e:
+            self._deliver(False, str(e))
+            return
+        jar = _jar_from_soup(cookies)
+        names = sorted({c.name for c in jar})
+        _log('kept %d apple cookies:' % len(names), names)
+        if not set(names) & set(AUTH_COOKIES):
             self._deliver(
                 False,
                 'The sign-in didn’t finish — no iCloud session cookie was set. '
-                'Make sure you completed two-factor and "Trust this browser", '
-                'then use "I’ve signed in".')
+                'Complete two-factor and "Trust this browser", then press '
+                '"I’ve signed in".')
             return
-        try:
-            n = _write_pyicloud_session(self._session_dir, self._apple_id, cookies)
-            _log('wrote session, %d cookies in the jar' % n)
-        except Exception as e:  # noqa: BLE001
-            self._deliver(False, str(e))
-            return
-        self._deliver(True, '')
 
-    # ---- teardown ------------------------------------------------------
+        def work():
+            try:
+                apple_id = _validate(jar)
+                _write_session(self._session_dir, apple_id, jar)
+                _log('validated as', apple_id)
+                GLib.idle_add(self._deliver, True, apple_id)
+            except Exception as e:  # noqa: BLE001
+                _log('validate failed:', repr(e))
+                GLib.idle_add(
+                    self._deliver, False,
+                    'Could not confirm the iCloud session. Try signing in again.')
+        threading.Thread(target=work, daemon=True).start()
+
+    # ---- teardown ----------------------------------------------------
 
     def _deliver(self, ok, detail):
         if self._poll_id:
@@ -236,12 +237,13 @@ class ICloudWebAuth(Gtk.Window):
         self._finished = True
         shutil.rmtree(self._tmp, ignore_errors=True)
         on_done, self._on_done = self._on_done, None
-        self.destroy()
+        try:
+            self.destroy()
+        except Exception:
+            pass
         if on_done:
-            def _fire():
-                on_done(ok, detail)
-                return GLib.SOURCE_REMOVE
-            GLib.idle_add(_fire)
+            on_done(ok, detail)
+        return GLib.SOURCE_REMOVE
 
     def _on_close(self, *_a):
         if not self._finished:

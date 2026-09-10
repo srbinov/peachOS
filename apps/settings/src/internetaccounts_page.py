@@ -308,14 +308,9 @@ class _AddICloudDialog(Gtk.Window):
     def _page_signin(self):
         box = self._shell(
             'Sign in to iCloud',
-            "Opens Apple's own sign-in page. The verification code shows "
-            'on your Apple devices as normal; peachOS only keeps the '
+            "Opens Apple's own sign-in page. Sign in there with your Apple ID "
+            'and the code from your Apple devices — peachOS only keeps the '
             'resulting session, never your password.')
-        box.append(Gtk.Label(label='Apple ID', xalign=0))
-        self._id_entry = Gtk.Entry(placeholder_text='you@icloud.com',
-                                   input_purpose=Gtk.InputPurpose.EMAIL)
-        self._id_entry.connect('activate', lambda *_a: self._on_signin())
-        box.append(self._id_entry)
 
         self._signin_err = Gtk.Label(wrap=True, xalign=0, css_classes=['error'],
                                      visible=False)
@@ -325,27 +320,20 @@ class _AddICloudDialog(Gtk.Window):
 
         cancel = Gtk.Button(label='Cancel')
         cancel.connect('clicked', lambda *_a: self.close())
-        self._signin_btn = Gtk.Button(label='Sign In',
+        self._signin_btn = Gtk.Button(label='Sign In to iCloud',
                                       css_classes=['suggested-action'])
         self._signin_btn.connect('clicked', lambda *_a: self._on_signin())
         box.append(self._footer(cancel, self._signin_btn))
         return box
 
     def _on_signin(self):
-        apple_id = self._id_entry.get_text().strip()
-        if not apple_id or '@' not in apple_id:
-            self._signin_err.set_label('Enter your Apple ID (an email address).')
-            self._signin_err.set_visible(True)
-            return
-        self._apple_id = apple_id
         self._signin_err.set_visible(False)
         self._signin_btn.set_sensitive(False)
         self._signin_spin.start()
         # Clean slate so the harvested session isn't mixed with a stale one.
         shutil.rmtree(_ICLOUD_SESSION, ignore_errors=True)
         os.makedirs(_ICLOUD_SESSION, exist_ok=True)
-        ICloudWebAuth(self, apple_id, _ICLOUD_SESSION,
-                      self._webauth_done).present()
+        ICloudWebAuth(self, _ICLOUD_SESSION, self._webauth_done).present()
 
     def _webauth_done(self, ok, detail):
         self._signin_spin.stop()
@@ -355,8 +343,8 @@ class _AddICloudDialog(Gtk.Window):
                 self._signin_err.set_label(f'Sign-in failed: {detail}')
                 self._signin_err.set_visible(True)
             return
+        self._apple_id = detail          # the web auth resolved the Apple ID
         self._photos_connected()
-        return GLib.SOURCE_REMOVE
 
     # ---- photos side is done -> persist + move on ------------------
 
