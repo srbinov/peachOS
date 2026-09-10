@@ -57,7 +57,7 @@ LIVE_WALLPAPERS = [
 ]
 
 # (display name, preview image, light wallpaper filename, dark wallpaper filename)
-# peachOS Nectar first per the reference layout / the distro's own default.
+# peachOS Savannah first per the reference layout / the distro's own default.
 #
 # preview_file used to point at the full-resolution wallpaper itself (two of these were a
 # full-5K SVG with an embedded raster image, 9-11MB each) -- decoded fresh on every single
@@ -66,7 +66,7 @@ LIVE_WALLPAPERS = [
 # provision/wallpaper-previews/gen_wallpaper_previews.py), matching the pattern
 # LIVE_WALLPAPERS already used correctly.
 DYNAMIC_WALLPAPERS = [
-    ('peachOS Nectar', 'peachOS_Nectar.jpg', 'peachOS_Nectar_Light.jpg', 'peachOS_Nectar_Dark.jpg'),
+    ('peachOS Savannah', 'peachOS_Savannah.jpg', 'peachOS_Savannah_Light.png', 'peachOS_Savannah_Dark.png'),
     ('macOS Tahoe', 'macOS_Tahoe.jpg', 'macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
     ('macOS Sonoma', 'macOS_Sonoma.jpg', 'macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
     ('macOS Sequoia', 'macOS_Sequoia.jpg', 'macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),
@@ -78,7 +78,7 @@ DYNAMIC_WALLPAPERS = [
 # a presets/ subdirectory of the same wallpaper dir so provisioning can keep
 # treating "the wallpaper dir" as one thing.
 PRESET_WALLPAPERS = [
-    ('Nectar Island', 'nectar_island.jpg'),
+    ('Savannah Island', 'savannah_island.jpg'),
     ('Tahoe Beach (Dawn)', 'tahoe_beach_dawn.jpg'),
     ('Tahoe Beach (Day)', 'tahoe_beach_day.jpg'),
     ('Tahoe Beach (Dusk)', 'tahoe_beach_dusk.jpg'),
@@ -114,7 +114,7 @@ PRESET_WALLPAPERS = [
 
 
 def _wallpaper_dir() -> str:
-    if os.path.isfile(os.path.join(SYSTEM_WALLPAPER_DIR, 'peachOS_Nectar_Light.jpg')):
+    if os.path.isfile(os.path.join(SYSTEM_WALLPAPER_DIR, 'peachOS_Savannah_Light.png')):
         return SYSTEM_WALLPAPER_DIR
     return REPO_WALLPAPER_DIR
 

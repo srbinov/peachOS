@@ -3,7 +3,7 @@ import re
 
 from gi.repository import Gio, GLib, Gtk
 
-from widgets import make_hero_header
+from widgets import device_icon_path, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -98,7 +98,7 @@ class GeneralAboutPage(Gtk.Box):
 
     def _build_ui(self):
         self.append(make_hero_header(
-            os.path.join(ICON_DIR, 'laptop.svg'), 'computer-symbolic',
+            device_icon_path(ICON_DIR), 'computer-symbolic',
             'About', 'An overview of the hardware and software running this computer.',
             icon_size=88,
         ))

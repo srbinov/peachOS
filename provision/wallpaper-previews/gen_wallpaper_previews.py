@@ -13,7 +13,7 @@ PREVIEW_DIR = '/home/user/peachOS/apps/settings/data/wallpaper-previews'
 TILE_W, TILE_H = 224, 126  # 2x the 112x63 on-screen tile size, for HiDPI sharpness
 
 PRESET_FILES = [
-    'nectar_island.jpg', 'tahoe_beach_dawn.jpg', 'tahoe_beach_day.jpg', 'tahoe_beach_dusk.jpg',
+    'savannah_island.jpg', 'tahoe_beach_dawn.jpg', 'tahoe_beach_day.jpg', 'tahoe_beach_dusk.jpg',
     'tahoe_beach_night.jpg', 'apple_event_2021.jpg', 'bigsur_coastline.jpg', 'bigsur_layers.jpg',
     'bigsur_sunrise.jpg', 'catalina_island.jpg', 'leopard.jpg', 'lion_andromeda.jpg',
     'lion_beach.jpg', 'lion_tranquil.jpg', 'lion_twilight.jpg', 'mavericks_tide.jpg',
@@ -23,8 +23,9 @@ PRESET_FILES = [
     'monterey_wwdc.jpg', 'sequoia_forest.jpg', 'sierra_peak.jpg', 'sonoma.jpg',
 ]
 
+# peachOS_Savannah.jpg is a hand-made light/dark split (see gen_split_previews.py),
+# not a single-mode crop, so it's not listed here.
 DYNAMIC_SOURCES = {
-    'peachOS_Nectar.jpg': 'peachOS_Nectar_Light.jpg',
     'macOS_Tahoe.jpg': 'macOS_Tahoe_Light.jpg',
     'macOS_Sonoma.jpg': 'macOS_Sonoma_Light.jpg',
     'macOS_Sequoia.jpg': 'macOS_Sequoia_Light.jpg',

@@ -28,6 +28,28 @@ def load_extension_settings(uuid: str, schema_id: str):
     return None
 
 
+# SMBIOS chassis types for portable machines (laptop, notebook, hand-held,
+# sub-notebook, tablet, convertible, detachable). Mirrors the same set in
+# macos-top-panel's app/aboutWindow.js so the device icon matches everywhere.
+_LAPTOP_CHASSIS_TYPES = {8, 9, 10, 11, 14, 30, 31, 32}
+
+
+def is_laptop() -> bool:
+    """True on a portable machine, per the DMI chassis type. Defaults to
+    False (desktop) when the field is missing or unreadable."""
+    try:
+        with open('/sys/devices/virtual/dmi/id/chassis_type') as f:
+            return int(f.read().strip()) in _LAPTOP_CHASSIS_TYPES
+    except (OSError, ValueError):
+        return False
+
+
+def device_icon_path(icon_dir: str) -> str:
+    """laptop.svg on a portable, desktop.svg otherwise -- for the hardware
+    hero icon on the About and Displays pages."""
+    return os.path.join(icon_dir, 'laptop.svg' if is_laptop() else 'desktop.svg')
+
+
 def load_sized_image(path: str, pixel_size: int) -> Gtk.Image:
     """Gtk.Image.new_from_file() routes local SVGs through GTK4's sandboxed
     glycin loader -- confirmed live at ~0.7s PER ICON in this environment

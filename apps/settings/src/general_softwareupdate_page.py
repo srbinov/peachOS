@@ -16,10 +16,10 @@ class GeneralSoftwareUpdatePage(Gtk.Box):
             valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER, vexpand=True,
         )
 
-        icon = load_sized_image(os.path.join(ICON_DIR, 'peachos_nectar.svg'), 96)
+        icon = load_sized_image(os.path.join(ICON_DIR, 'peachos_savannah.svg'), 96)
         self.append(icon)
 
-        self.append(Gtk.Label(label=f'peachOS Nectar {PEACHOS_VERSION}', css_classes=['title-1'], margin_top=12))
+        self.append(Gtk.Label(label=f'peachOS Savannah {PEACHOS_VERSION}', css_classes=['title-1'], margin_top=12))
 
         status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.CENTER)
         status_row.append(Gtk.Image.new_from_icon_name('emblem-ok-symbolic'))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Regenerates dynamic-wallpaper preview thumbnails as a light/dark split composite,
-matching the convention peachOS_Nectar_DynamicPreview.svg established (left half = light
+matching the convention peachOS_Savannah_DynamicPreview.svg established (left half = light
 variant, right half = dark variant, same crop region so the artwork lines up continuously
 across the seam) -- the old giant per-wallpaper SVGs (deleted for being 9-11MB each, see
 gen_wallpaper_previews.py) turned out to have had this same split treatment; replacing them
@@ -15,6 +15,7 @@ PREVIEW_DIR = '/home/user/peachOS/apps/settings/data/wallpaper-previews'
 TILE_W, TILE_H = 224, 126
 
 SPLITS = {
+    'peachOS_Savannah.jpg': ('peachOS_Savannah_Light.png', 'peachOS_Savannah_Dark.png'),
     'macOS_Tahoe.jpg': ('macOS_Tahoe_Light.jpg', 'macOS_Tahoe_Dark.jpg'),
     'macOS_Sonoma.jpg': ('macOS_Sonoma_Light.jpg', 'macOS_Sonoma_Dark.jpg'),
     'macOS_Sequoia.jpg': ('macOS_Sequoia_Light.jpg', 'macOS_Sequoia_Dark.jpg'),

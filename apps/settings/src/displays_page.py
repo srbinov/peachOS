@@ -3,7 +3,7 @@ import os
 
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk, Pango, PangoCairo
 
-from widgets import load_sized_image, make_hero_header
+from widgets import device_icon_path, load_sized_image, make_hero_header
 
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'icons')
 
@@ -617,9 +617,9 @@ class DisplaysPage(Gtk.Box):
 
         # Single-display header icon (kept from the original single-monitor page).
         self._single_header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
-        laptop_icon = os.path.join(ICON_DIR, 'laptop.svg')
-        if os.path.isfile(laptop_icon):
-            self._single_header.append(load_sized_image(laptop_icon, 110))
+        device_icon = device_icon_path(ICON_DIR)
+        if os.path.isfile(device_icon):
+            self._single_header.append(load_sized_image(device_icon, 110))
         else:
             img = Gtk.Image.new_from_icon_name('video-display-symbolic')
             img.set_pixel_size(96)

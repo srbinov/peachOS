@@ -31,8 +31,8 @@ cat > /etc/os-release <<'EOF'
 PRETTY_NAME="peachOS 10.0"
 NAME="peachOS"
 VERSION_ID="10.0"
-VERSION="10.0 (Nectar)"
-VERSION_CODENAME=nectar
+VERSION="10.0 (Savannah)"
+VERSION_CODENAME=savannah
 ID=peachos
 ID_LIKE="ubuntu debian"
 HOME_URL="https://github.com/srbinov/peachOS"
@@ -45,7 +45,7 @@ EOF
 cat > /etc/lsb-release <<'EOF'
 DISTRIB_ID=peachOS
 DISTRIB_RELEASE=10.0
-DISTRIB_CODENAME=nectar
+DISTRIB_CODENAME=savannah
 DISTRIB_DESCRIPTION="peachOS 10.0"
 EOF
 

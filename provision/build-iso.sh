@@ -262,7 +262,7 @@ ISO=$(find "$EGGS_WORK" -maxdepth 2 -name '*.iso' -printf '%T@ %p\n' 2>/dev/null
 
 # eggs names the file egg-of-<id>-<codename>-<host>-<arch>-<date>.iso. Give the
 # distributable a clean name (the volume id inside still reflects eggs' scheme).
-CLEAN="$(dirname "$ISO")/peachos-${VERSION_CODENAME:-nectar}-amd64-$(date +%Y%m%d).iso"
+CLEAN="$(dirname "$ISO")/peachos-${VERSION_CODENAME:-savannah}-amd64-$(date +%Y%m%d).iso"
 if [[ "$ISO" != "$CLEAN" ]]; then
     mv -f "$ISO" "$CLEAN"
     [[ -f "$ISO.md5" ]] && mv -f "$ISO.md5" "$CLEAN.md5"

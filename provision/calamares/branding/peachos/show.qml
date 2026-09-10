@@ -4,7 +4,7 @@ import calamares.slideshow 1.0;
 // Text-over-background slides rather than fully pre-baked marketing images (the convention
 // most Calamares themes use, e.g. Kubuntu's own show.qml) -- keeps this maintainable without
 // needing a full graphic-design pass just to update copy, and reuses real peachOS assets
-// (the Nectar wallpaper, the peach mark) already shipped elsewhere in this repo instead of
+// (the Savannah wallpaper, the peach mark) already shipped elsewhere in this repo instead of
 // inventing new ones.
 Presentation
 {
