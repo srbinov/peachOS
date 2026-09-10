@@ -231,21 +231,29 @@
     margin-right: 0;
 }
 
-/* Per-card dismiss (lib/notificationCenter.js _decorateMessage): the close button is
-   moved to the head of the header (top-left) and its opacity is driven from JS on
-   hover, so no :hover rule here -- just make it a compact chip that doesn't reserve
-   width while invisible. */
+/* Per-card dismiss (lib/notificationCenter.js _decorateMessage): a ✕ chip pinned to
+   the card's top-left corner (negative margin pulls it out of the header row into the
+   corner), hidden until the card is hovered. Reveal is pure CSS via the St.Button
+   :hover pseudo-class on .macos-nc-message -- reliable, unlike the old JS notify::hover
+   path through the scaled St.Bin wrapper, which never fired. */
 .macos-notification-center .macos-nc-message .message-header {
     spacing: 6px;
 }
 .macos-notification-center .macos-nc-message .message-close-button {
-    margin: 0 2px 0 0;
+    margin: -7px 4px 0 -7px;
     padding: 3px;
     border-radius: 999px;
-    background-color: rgba(120, 120, 128, 0.30);
+    color: #ffffff;
+    background-color: rgba(58, 58, 64, 0.82);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transition-duration: 140ms;
+}
+.macos-notification-center .macos-nc-message:hover .message-close-button {
+    opacity: 1;
 }
 .macos-notification-center .macos-nc-message .message-close-button:hover {
-    background-color: rgba(120, 120, 128, 0.50);
+    background-color: rgba(84, 84, 92, 0.95);
 }
 
 /* Battery icon: an St.DrawingArea now (lib/batteryCanvas.js draws a real macOS-style

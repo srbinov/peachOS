@@ -210,6 +210,24 @@ export class NotificationCenterPanel {
             }
         };
 
+        // Sources that already existed when the extension loaded -- persisted GTK
+        // notifications the shell restores at startup, which for a machine with a
+        // connected calendar always includes evolution-alarm-notify -- were added
+        // to this fresh MessageView by its own constructor BEFORE the patch above,
+        // so they were never re-attributed or decorated. Do both now, once.
+        for (const [source, group] of messageView._notificationSourceToGroup) {
+            try {
+                panel._reattributeReminderSource(source);
+            } catch (e) {
+                logError(e, '[macos-top-panel] reminder re-attribution (existing source) failed');
+            }
+            try {
+                panel._wireGroupDecoration(source, group);
+            } catch (e) {
+                logError(e, '[macos-top-panel] notification decoration (existing source) failed');
+            }
+        }
+
         this._panel = new St.BoxLayout({
             style_class: 'macos-notification-center',
             orientation: Clutter.Orientation.VERTICAL,
@@ -622,14 +640,19 @@ export class NotificationCenterPanel {
             }
         };
 
-        // ---- close button: fresh one at the head of the header, hover-revealed --------
+        // ---- close button: a fresh ✕ chip pinned to the card's top-left corner --------
+        // Replaces the native close button (whose baked-in 'clicked' handler closes the
+        // whole collapsed group) with one that dismisses just this card. Visibility is
+        // pure CSS -- `.macos-nc-message:hover .message-close-button` -- because the
+        // St.Button `:hover` pseudo-class is far more dependable than chasing
+        // notify::hover / enter-event through a scaled, stacked St.Bin (which is why the
+        // old JS-opacity version never appeared).
         const header = message._header;
         const oldClose = header.closeButton;
         const closeBtn = new St.Button({
             style_class: 'message-close-button',
-            icon_name: 'window-close-symbolic',
-            y_align: Clutter.ActorAlign.CENTER,
-            opacity: 0,
+            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 14}),
+            y_align: Clutter.ActorAlign.START,
         });
         closeBtn.connect('clicked', () => dismiss());
         if (oldClose) {
@@ -638,20 +661,7 @@ export class NotificationCenterPanel {
         }
         header.insert_child_at_index(closeBtn, 0);
         header.closeButton = closeBtn;
-
-        const revealClose = show => {
-            closeBtn.remove_all_transitions();
-            closeBtn.ease({
-                opacity: show ? 255 : 0,
-                duration: 120,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        };
-        // notify::hover is the canonical path; enter/leave-event is a belt-and-suspenders
-        // backup in case hover tracking isn't firing for this actor.
-        message.connect('notify::hover', () => revealClose(message.hover));
-        message.connect('enter-event', () => revealClose(true));
-        message.connect('leave-event', () => revealClose(false));
+        message.track_hover = true;
 
         // ---- swipe right to dismiss --------------------------------------------------
         if (item)
@@ -661,37 +671,60 @@ export class NotificationCenterPanel {
     _addSwipeDismiss(message, item, dismiss) {
         let pan;
         try {
-            pan = new Clutter.PanGesture({min_n_points: 1, max_n_points: 0});
+            pan = new Clutter.PanGesture({min_n_points: 1, max_n_points: 1});
             pan.pan_axis = Clutter.PanAxis.X;
-            pan.set_begin_threshold(18);
+            pan.set_begin_threshold(16);
         } catch (e) {
             logError(e, '[macos-top-panel] PanGesture unavailable, skipping swipe-dismiss');
             return;
         }
-        let startX = 0;
+
+        let originX = 0;   // centroid x at the moment the pan is recognised
+        let settled = false;
+
         pan.connect('recognize', g => {
-            startX = g.get_begin_centroid().x;
+            settled = false;
+            // Start tracking from HERE, not from where the finger first touched down
+            // (which is ~threshold px back) -- otherwise the card jumps sideways the
+            // instant the swipe is recognised.
+            originX = g.get_centroid().x;
             item.remove_all_transitions();
+            item.set_pivot_point(0.5, 0.5);
         });
+
         pan.connect('pan-update', g => {
-            const dx = g.get_centroid().x - startX;
-            item.translation_x = Math.max(0, dx); // right only
+            const dx = Math.max(0, g.get_centroid().x - originX); // right only
+            item.translation_x = dx;
+            // Light fade as it goes, like macOS -- purely cosmetic feedback.
+            item.opacity = Math.round(255 * (1 - 0.45 * Math.min(1, dx / Math.max(1, item.width))));
         });
-        const settle = () => {
-            const commit = item.translation_x > Math.max(60, item.width * 0.35);
+
+        const settle = g => {
+            if (settled)
+                return;
+            settled = true;
+            const dx = item.translation_x;
+            let vx = 0;
+            try {
+                vx = g?.get_velocity?.()?.[0] ?? 0;   // px/ms, +ve = rightward
+            } catch (e) {
+                // no velocity accessor on this Clutter -- distance-only
+            }
+            const commit = dx > Math.max(64, item.width * 0.33) || vx > 0.9;
             if (commit) {
                 item.ease({
-                    translation_x: item.width,
+                    translation_x: item.width + 24,
                     opacity: 0,
-                    duration: 160,
-                    mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                    duration: 180,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                     onStopped: () => dismiss(),
                 });
             } else {
                 item.ease({
                     translation_x: 0,
-                    duration: 200,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    opacity: 255,
+                    duration: 220,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                 });
             }
         };

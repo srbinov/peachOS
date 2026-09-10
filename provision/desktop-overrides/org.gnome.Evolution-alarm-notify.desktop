@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+# evolution-alarm-notify (EDS reminders daemon) fires calendar-event alarms for
+# every connected calendar through this one GApplication. Stock name is "Events
+# and Tasks Reminders" with a generic bell icon -- GNOME Shell reads BOTH the
+# notification-source title and its Settings > Notifications entry straight from
+# app.get_name()/get_icon() here (see GtkNotificationDaemonAppSource), so this
+# /usr/local override (ahead of /usr/share in XDG_DATA_DIRS) rebrands it to the
+# calendar the user actually connected. Clicking a reminder opens Google
+# Calendar. lib/notificationCenter.js still refines this per-source at runtime
+# for a multi-account setup.
+Name=Google Calendar
+Comment=Calendar event reminders
+Icon=google-calendar
+Exec=xdg-open https://calendar.google.com/
+Terminal=false
+NoDisplay=true
+X-GNOME-UsesNotifications=true
+Categories=Calendar;Office;
+X-Ubuntu-Gettext-Domain=evolution-data-server
