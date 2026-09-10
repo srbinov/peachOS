@@ -72,16 +72,19 @@
 
 .peachos-picker-search {
     background-color: rgba(0, 0, 0, 0.28);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 9px;
-    padding: 5px 9px;
-    margin-bottom: 8px;
+    /* the ring follows Settings -> Appearance accent, like macOS */
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-color: -st-accent-color;
+    border-radius: 10px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
     font-size: 12px;
     color: #ffffff;
 }
 
 .peachos-picker-search:focus {
-    border-color: rgba(255, 255, 255, 0.35);
+    border-color: -st-accent-color;
+    background-color: rgba(0, 0, 0, 0.36);
 }
 
 .peachos-picker-search StIcon {
@@ -100,7 +103,7 @@
 .peachos-picker-side-item-box {
     spacing: 10px;
     padding: 7px 10px;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .peachos-picker-side-item:hover {
@@ -126,16 +129,39 @@
     font-weight: 700;
 }
 
-.peachos-picker-close {
-    width: 26px;
-    height: 26px;
-    border-radius: 13px;
-    color: #ffffff;
-    background-color: rgba(255, 255, 255, 0.12);
+/* full-width action bar pinned to the bottom edge of the panel. The panel
+   bleeds ~44px past the screen, so the strip carries an extra 44px of bottom
+   padding to lift its content (hint + Done) back into the visible area. */
+.peachos-picker-footer {
+    padding: 13px 22px 57px 22px;
+    spacing: 12px;
+    background-color: rgba(0, 0, 0, 0.32);
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-.peachos-picker-close:hover {
-    background-color: rgba(255, 255, 255, 0.24);
+.peachos-picker-footer-hint {
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+.peachos-picker-done {
+    background-color: rgba(255, 255, 255, 0.2);
+    background-color: -st-accent-color;
+    color: -st-accent-fg-color;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 6px 22px;
+    min-height: 22px;
+}
+
+.peachos-picker-done:hover {
+    background-color: -st-accent-color;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.peachos-picker-done:active {
+    background-color: -st-accent-color;
 }
 
 .peachos-picker-section {
@@ -190,12 +216,42 @@
     -st-vfade-offset: 22px;
 }
 
+/* thin, rounded, accent-tinted scrollbars (both panes) -- macOS style */
+.peachos-picker-scroll StScrollBar,
+.peachos-picker-side-scroll StScrollBar {
+    padding: 0;
+    width: 8px;
+}
+
+.peachos-picker-scroll StScrollBar StBin#trough,
+.peachos-picker-side-scroll StScrollBar StBin#trough {
+    background-color: transparent;
+    border: none;
+}
+
+.peachos-picker-scroll StScrollBar StButton#vhandle,
+.peachos-picker-side-scroll StScrollBar StButton#vhandle {
+    background-color: rgba(255, 255, 255, 0.28);
+    background-color: -st-accent-color;
+    border: none;
+    border-radius: 999px;
+    margin: 2px 2px;
+    min-width: 4px;
+}
+
+.peachos-picker-scroll StScrollBar StButton#vhandle:hover,
+.peachos-picker-side-scroll StScrollBar StButton#vhandle:hover {
+    background-color: -st-accent-color;
+    margin: 2px 1px;
+}
+
 .peachos-picker-grid {
     spacing: 0;
     padding-top: 4px;
-    /* the panel bleeds ~44px past the screen edge (+ main bottom padding) --
-       keep the last row of previews clear of the cut when scrolled fully */
-    padding-bottom: 84px;
+    /* the panel bleeds ~44px past the screen edge and the footer action bar
+       overlays the bottom ~62px -- keep the last row of previews scrollable
+       clear of both */
+    padding-bottom: 122px;
 }
 
 .peachos-picker-grid-row {

@@ -158,7 +158,7 @@ export const REGISTRY = {
     },
     gmail: {
         name: 'Gmail',
-        appIcon: 'icons/app/mail-gmail.svg',
+        appIcon: 'icons/app/mail-gmail.png',
         variants: {
             row: {
                 name: 'Inbox', shape: 'row',
@@ -190,7 +190,7 @@ export const REGISTRY = {
     },
     outlook: {
         name: 'Outlook',
-        appIcon: 'icons/app/mail-outlook.svg',
+        appIcon: 'icons/app/mail-outlook.png',
         variants: {
             row: {
                 name: 'Inbox', shape: 'row',

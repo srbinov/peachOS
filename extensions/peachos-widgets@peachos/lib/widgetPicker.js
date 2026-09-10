@@ -25,7 +25,7 @@ function iconGicon(ctxPath, name) {
 const PU = 100;        // preview size for a square widget (px)
 const PGAP = 8;        // gap inside a preview footprint (matches the desktop grid)
 const CARD_GAP = 16;   // gap between previews
-const SIDEBAR_W = 236;
+const SIDEBAR_W = 214;
 const PLACE_MODE = 'dark';
 const CENTER = Clutter.ActorAlign.CENTER;
 
@@ -297,19 +297,7 @@ class WidgetPicker extends Clutter.Actor {
             x_expand: true, y_align: CENTER,
         });
         head.add_child(this._title);
-        const close = new St.Button({
-            style_class: 'peachos-picker-close',
-            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 15}),
-            can_focus: true,
-        });
-        close.connect('clicked', () => this._callbacks.onDone());
-        head.add_child(close);
         main.add_child(head);
-
-        main.add_child(new St.Label({
-            text: 'Drag a widget onto the desktop',
-            style_class: 'peachos-picker-hint',
-        }));
 
         this._weatherLoc = this._buildWeatherLoc();
         main.add_child(this._weatherLoc);
@@ -326,6 +314,25 @@ class WidgetPicker extends Clutter.Actor {
         });
         this._scroll.set_child(this._grid);
         main.add_child(this._scroll);
+
+        // ---- footer action bar (overlays the bottom edge) -----------
+        const footer = new St.BoxLayout({
+            style_class: 'peachos-picker-footer',
+            x_expand: true, x_align: Clutter.ActorAlign.FILL,
+            y_align: Clutter.ActorAlign.END,
+        });
+        footer.add_child(new St.Label({
+            text: 'Drag a widget to place it on the desktop…',
+            style_class: 'peachos-picker-footer-hint',
+            x_expand: true, y_align: CENTER,
+        }));
+        const done = new St.Button({
+            style_class: 'peachos-picker-done',
+            label: 'Done', can_focus: true, y_align: CENTER,
+        });
+        done.connect('clicked', () => this._callbacks.onDone());
+        footer.add_child(done);
+        this._glass.content.add_child(footer);
     }
 
     _sideItem(type, label, icon) {
@@ -341,7 +348,7 @@ class WidgetPicker extends Clutter.Actor {
         const gi = iconGicon(this._ctx.path, icon);
         box.add_child(new St.Icon({
             gicon: gi, icon_name: gi ? null : icon,
-            icon_size: 18, y_align: CENTER,
+            icon_size: 24, y_align: CENTER,
         }));
         box.add_child(new St.Label({
             text: label, x_expand: true, y_align: CENTER,

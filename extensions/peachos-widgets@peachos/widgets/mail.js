@@ -29,7 +29,7 @@ const ACCENTS = {
 
 const NAMES = {google: 'Gmail', apple: 'iCloud Mail', microsoft: 'Outlook'};
 const ACCOUNT = {google: 'Google', apple: 'iCloud', microsoft: 'Microsoft'};
-const ICON = {google: 'mail-gmail.svg', apple: 'mail-icloud.svg', microsoft: 'mail-outlook.svg'};
+const ICON = {google: 'mail-gmail.png', apple: 'mail-icloud.svg', microsoft: 'mail-outlook.png'};
 const WEBMAIL = {
     google: 'https://mail.google.com/',
     apple: 'https://www.icloud.com/mail/',
