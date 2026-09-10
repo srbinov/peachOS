@@ -33,15 +33,19 @@
     </key>
 
     <key name="weather-latitude" type="d">
-      <default>37.3230</default>
+      <default>32.08354</default>
       <summary>Weather latitude</summary>
+      <description>
+        Used when weather-auto-location is off, and as the fallback when IP
+        geolocation fails at boot. Default: Savannah, Georgia.
+      </description>
     </key>
     <key name="weather-longitude" type="d">
-      <default>-122.0322</default>
+      <default>-81.09983</default>
       <summary>Weather longitude</summary>
     </key>
     <key name="weather-location-name" type="s">
-      <default>'Cupertino'</default>
+      <default>'Savannah, Georgia, United States'</default>
       <summary>Weather location label</summary>
     </key>
     <key name="weather-unit" type="s">

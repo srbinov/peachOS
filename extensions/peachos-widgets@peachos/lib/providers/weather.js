@@ -202,7 +202,20 @@ export class WeatherProvider {
         }
         const tryNext = i => {
             if (i >= GEOIP_SOURCES.length) {
-                this.refresh(); // fall back to whatever coords settings hold
+                // Every source failed (usually no network this early in the
+                // boot). Fall back to the settings coords -- Savannah, GA out
+                // of the box -- and retry geolocation shortly so a transient
+                // failure doesn't pin the widget there until the 6 h relocate.
+                this.refresh();
+                if (!this._geoipRetryId) {
+                    this._geoipRetryId = GLib.timeout_add_seconds(
+                        GLib.PRIORITY_LOW, 120, () => {
+                            this._geoipRetryId = 0;
+                            if (this._auto && !this._loc)
+                                this._resolveLocation();
+                            return GLib.SOURCE_REMOVE;
+                        });
+                }
                 return;
             }
             const src = GEOIP_SOURCES[i];
@@ -460,6 +473,9 @@ export class WeatherProvider {
         if (this._relocateId)
             GLib.source_remove(this._relocateId);
         this._relocateId = 0;
+        if (this._geoipRetryId)
+            GLib.source_remove(this._geoipRetryId);
+        this._geoipRetryId = 0;
         this._settings.disconnectObject(this);
         this._session.abort();
         this._listeners.clear();

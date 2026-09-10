@@ -228,9 +228,19 @@ cupertino-lockscreen-message-enable=false
 cupertino-lockscreen-message-text=''
 
 [org/gnome/shell/extensions/peachos-widgets]
+# Out-of-the-box desktop: a light-mode Weather "conditions" tile, a glass
+# analog "dial" clock beside it, and a dark Stocks "watchlist" row below --
+# same layout/style john-doe runs. Users rearrange or remove these in the
+# widget picker (Control Center -> Manage Widgets).
+widgets='[{"id":"weather-conditions-mtrmfy12","type":"weather","variant":"conditions","mode":"light","monitor":0,"xRel":0.004629629629629629,"yRel":0.044444444444444446},{"id":"clock-dial-mtrmg8fc","type":"clock","variant":"dial","mode":"glass","monitor":0,"xRel":0.1076388888888889,"yRel":0.044444444444444446},{"id":"stocks-row-mtt3ijiu","type":"stocks","variant":"row","mode":"dark","monitor":0,"xRel":0.004629629629629629,"yRel":0.20925925925925926}]'
 # Weather geolocates by public IP out of the box; the user can switch to a
-# manual city in the widget picker.
+# manual city in the widget picker. If geolocation fails at boot (no network
+# yet, IP won't resolve) the widget falls back to these coords -- Savannah, GA.
 weather-auto-location=true
+weather-latitude=32.08354
+weather-longitude=-81.09983
+weather-location-name='Savannah, Georgia, United States'
+weather-unit='fahrenheit'
 
 [org/gnome/shell/extensions/rounded-windows]
 keep-rounded-maximized=true

@@ -69,7 +69,8 @@ export function buildConnectCard(o) {
         sub.clutter_text.line_wrap = true;
         sub.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         sub.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        sub.clutter_text.line_alignment = Pango.Alignment.CENTER;
+        sub.clutter_text.justify = false;               // else lines full-justify
+        sub.clutter_text.line_alignment = Pango.Alignment.CENTER;  // centre each line
 
         // Reserve up to 3 lines and centre the (1-3 line) text within it, so a
         // longer string can never be clipped by the column.
