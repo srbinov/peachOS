@@ -273,9 +273,11 @@ fi
 log "ISO ready"
 printf '  path   : %s\n' "$ISO"
 printf '  size   : %s\n' "$(du -h "$ISO" | cut -f1)"
-printf '  sha256 : '
-sha256sum "$ISO" | cut -d' ' -f1
-sha256sum "$ISO" > "$ISO.sha256"
+# Hash once; write the sidecar with just the basename so it verifies from the
+# same directory (`sha256sum -c *.sha256`).
+ISO_SHA=$(sha256sum "$ISO" | cut -d' ' -f1)
+printf '  sha256 : %s\n' "$ISO_SHA"
+printf '%s  %s\n' "$ISO_SHA" "$(basename "$ISO")" > "$ISO.sha256"
 echo
 echo "Boot-test it (software GPU, proves it's not tied to this machine's nvidia):"
 echo "  qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 -cdrom '$ISO' -boot d -vga virtio"
