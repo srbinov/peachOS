@@ -10,6 +10,7 @@ gi.require_version('Secret', '1')
 from gi.repository import Gio, GLib, Goa, Gtk, Secret
 
 import google_signin
+import microsoft_signin
 from widgets import make_hero_header
 
 try:
@@ -68,16 +69,17 @@ def _mail_kick_sync():
     except GLib.Error:
         pass
 
-# Providers whose sign-in needs an OAuth2 browser flow (Google) or realm/server
-# details GOA's public AddAccount D-Bus call doesn't cover. Their real client
-# credentials live inside gnome-control-center / libgoa-backend, so the actual
-# sign-in dialog is delegated to `gnome-control-center online-accounts` -- once
-# the account is added there it shows up in the list below and works everywhere.
+# OAuth2 providers signed in entirely in-app: peachOS runs the browser
+# authorization-code + PKCE flow itself (google_signin.py / microsoft_signin.py),
+# reusing GNOME's own OAuth client from libgoa-backend, then hands the tokens to
+# GOA via Manager.AddAccount. No gnome-control-center window.
+#
+# Exchange (EWS autodiscover) and Nextcloud are intentionally NOT here yet --
+# rather than ship a half-working realm/server form or shell out to
+# gnome-control-center, they're left out until they get a proper in-app dialog.
 SYSTEM_ACCOUNT_PROVIDERS = [
     ('Google', 'account_google.svg'),
     ('Microsoft 365', 'account_ms365.svg'),
-    ('Microsoft Exchange', 'account_exchange.svg'),
-    ('Nextcloud', 'account_nextcloud.svg'),
 ]
 
 
@@ -100,17 +102,6 @@ def _dark_mode() -> bool:
 def _apple_icon_file() -> str:
     # iCloud row uses the Apple mark -- white on dark, black on light.
     return 'account_apple_white.svg' if _dark_mode() else 'account_apple_black.svg'
-
-
-def _open_system_accounts() -> None:
-    """Launch GNOME's Online Accounts panel for the OAuth2 sign-in step."""
-    try:
-        Gio.Subprocess.new(
-            ['gnome-control-center', 'online-accounts'],
-            Gio.SubprocessFlags.NONE,
-        )
-    except GLib.Error:
-        pass
 
 
 def _account_icon(account: Goa.Account) -> Gtk.Image:
@@ -627,10 +618,15 @@ class _AddAccountDialog(Gtk.Window):
         icloud_row.connect('clicked', self._on_icloud_clicked)
         box.append(icloud_row)
 
-        native_google = google_signin.goa_google_creds() is not None
+        oauth = {
+            'Google': (google_signin.goa_google_creds() is not None,
+                       google_signin.GoogleSignIn, 'Google'),
+            'Microsoft 365': (microsoft_signin.goa_ms_graph_client_id() is not None,
+                              microsoft_signin.MicrosoftSignIn, 'Microsoft'),
+        }
         for provider_name, icon_file in SYSTEM_ACCOUNT_PROVIDERS:
-            is_google = provider_name == 'Google'
-            prov_row = Gtk.Button(css_classes=['flat'])
+            available, signin_cls, label = oauth.get(provider_name, (False, None, ''))
+            prov_row = Gtk.Button(css_classes=['flat'], sensitive=available)
             content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             content.set_margin_start(8)
             content.set_margin_end(8)
@@ -640,16 +636,16 @@ class _AddAccountDialog(Gtk.Window):
             text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
             text_box.append(Gtk.Label(label=provider_name, xalign=0))
             text_box.append(Gtk.Label(
-                label='Sign in with your browser' if (is_google and native_google)
-                else 'Opens System Accounts to sign in',
+                label='Sign in with your browser' if available
+                else 'Currently unavailable',
                 xalign=0, css_classes=['caption', 'dim-label']))
             content.append(text_box)
             content.append(Gtk.Image.new_from_icon_name('external-link-symbolic'))
             prov_row.set_child(content)
-            if is_google and native_google:
-                prov_row.connect('clicked', self._on_google_clicked)
-            else:
-                prov_row.connect('clicked', self._on_system_clicked)
+            if available:
+                prov_row.connect(
+                    'clicked',
+                    lambda _b, c=signin_cls, l=label: self._start_oauth(c, l))
             box.append(prov_row)
 
     def _on_mail_clicked(self, _btn):
@@ -661,19 +657,18 @@ class _AddAccountDialog(Gtk.Window):
         self.close()
         _AddICloudDialog(self._parent, on_added=self._on_added).present()
 
-    def _on_system_clicked(self, _btn):
-        self.close()
-        _open_system_accounts()
+    # --- native browser OAuth sign-in (Google, Microsoft) ----------------
 
-    # --- native Google sign-in ---------------------------------------
-
-    def _on_google_clicked(self, _btn):
-        self._stack.add_named(self._build_status_page(), 'status')
+    def _start_oauth(self, signin_cls, label):
+        old = self._stack.get_child_by_name('status')
+        if old is not None:
+            self._stack.remove(old)
+        self._stack.add_named(self._build_status_page(label), 'status')
         self._stack.set_visible_child_name('status')
-        self._signin = google_signin.GoogleSignIn(on_done=self._on_google_done)
+        self._signin = signin_cls(on_done=self._on_oauth_done)
         self._signin.start()
 
-    def _build_status_page(self):
+    def _build_status_page(self, label):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
                       valign=Gtk.Align.CENTER)
         box.set_margin_start(28)
@@ -687,7 +682,7 @@ class _AddAccountDialog(Gtk.Window):
         box.append(Gtk.Label(label='Continue in your browser',
                              css_classes=['title-4']))
         box.append(Gtk.Label(
-            label='A Google sign-in page has opened. Come back here when '
+            label=f'A {label} sign-in page has opened. Come back here when '
                   'you’re done.',
             wrap=True, justify=Gtk.Justification.CENTER, css_classes=['dim-label']))
         self._status_error = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
@@ -695,16 +690,16 @@ class _AddAccountDialog(Gtk.Window):
         box.append(self._status_error)
         cancel = Gtk.Button(label='Cancel', halign=Gtk.Align.CENTER,
                             css_classes=['flat'])
-        cancel.connect('clicked', lambda _b: self._cancel_google())
+        cancel.connect('clicked', lambda _b: self._cancel_oauth())
         box.append(cancel)
         return box
 
-    def _cancel_google(self):
+    def _cancel_oauth(self):
         if self._signin:
             self._signin.cancel()
         self.close()
 
-    def _on_google_done(self, ok, detail):
+    def _on_oauth_done(self, ok, detail):
         if ok:
             self._on_added()
             self.close()
