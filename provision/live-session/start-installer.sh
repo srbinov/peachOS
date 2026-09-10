@@ -20,20 +20,23 @@ grep -qw 'boot=live' /proc/cmdline 2>/dev/null || exit 0
 ONCE=0
 [ "${1:-}" = "--once" ] && ONCE=1
 
-# The live session is GNOME/Wayland (Ubuntu 26.04 ships no Xorg session), and
-# Calamares runs as root. pkexec scrubs the environment, so a bare
-# `pkexec eggs sysinstall calamares` leaves Calamares (Qt) with no display at
-# all ("qt.qpa.xcb: could not connect to display"). Re-export the Wayland bits
-# through `env` -- pkexec is still authorised without a prompt by
-# 49-peachos-live.rules (user "live" -> YES for every action) -- and let Qt
-# fall back to xcb/Xwayland if the wayland plugin can't bind.
+# Launch Calamares directly (not `eggs sysinstall`, which regenerates its own
+# generic config under /etc/penguins-eggs.d/installer.d and ignores peachOS's
+# hand-built /etc/calamares -- branding, QML sidebar, module sequence). The
+# eggs live-boot mounts the squashfs where our unpackfs.conf expects it
+# (/run/live/medium/live/filesystem.squashfs), so /etc/calamares is complete
+# on its own.
+#
+# It has to run as root, and the live session is GNOME/Wayland (Ubuntu 26.04
+# ships no Xorg session). pkexec scrubs the environment, so re-export the
+# display bits through `env` -- pkexec is still prompt-free via
+# 49-peachos-live.rules (user "live" -> YES for every action). qt6-wayland
+# isn't installed, so Qt uses xcb; xhost + the XAUTHORITY below let the root
+# process reach the user's Xwayland (and starting xhost brings Xwayland up).
 _uid=$(id -u)
 : "${XDG_RUNTIME_DIR:=/run/user/$_uid}"
 : "${WAYLAND_DISPLAY:=wayland-0}"
 
-# Let root reach the user's X/Xwayland too, in case Qt uses the xcb fallback
-# (also starts Xwayland-on-demand so DISPLAY is live). Harmless if xhost or
-# Xwayland is missing.
 xhost +SI:localuser:root >/dev/null 2>&1 || true
 
 run_installer() {
@@ -42,8 +45,8 @@ run_installer() {
         WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
         DISPLAY="${DISPLAY:-:0}" \
         XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
-        QT_QPA_PLATFORM="wayland;xcb" \
-        eggs sysinstall calamares
+        QT_QPA_PLATFORM="xcb;wayland" \
+        calamares
 }
 
 if [ "$ONCE" -eq 1 ]; then
