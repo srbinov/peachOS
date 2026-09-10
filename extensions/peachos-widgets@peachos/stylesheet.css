@@ -129,11 +129,15 @@
     font-weight: 700;
 }
 
-/* full-width action bar pinned to the bottom edge of the panel. The panel
-   bleeds ~44px past the screen, so the strip carries an extra 44px of bottom
-   padding to lift its content (hint + Done) back into the visible area. */
+/* the panel bleeds ~44px past the screen edge -- reserve that band so the
+   footer action bar lands flush with the visible bottom edge */
+.peachos-picker-wrap {
+    padding-bottom: 44px;
+}
+
+/* full-width action bar: drag hint on the left, accent Done pill on the right */
 .peachos-picker-footer {
-    padding: 13px 22px 57px 22px;
+    padding: 12px 22px;
     spacing: 12px;
     background-color: rgba(0, 0, 0, 0.32);
     border-top: 1px solid rgba(255, 255, 255, 0.10);
@@ -248,10 +252,7 @@
 .peachos-picker-grid {
     spacing: 0;
     padding-top: 4px;
-    /* the panel bleeds ~44px past the screen edge and the footer action bar
-       overlays the bottom ~62px -- keep the last row of previews scrollable
-       clear of both */
-    padding-bottom: 122px;
+    padding-bottom: 28px;
 }
 
 .peachos-picker-grid-row {

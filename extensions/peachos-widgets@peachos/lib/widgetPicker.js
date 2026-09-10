@@ -237,6 +237,7 @@ class WidgetPicker extends Clutter.Actor {
         const wrap = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
             x_expand: true, y_expand: true,
+            style_class: 'peachos-picker-wrap',
         });
         this._glass.content.add_child(wrap);
         wrap.add_child(this._buildHandle());
@@ -246,6 +247,7 @@ class WidgetPicker extends Clutter.Actor {
             style_class: 'peachos-picker-body',
         });
         wrap.add_child(row);
+        this._body = row;
 
         // ---- sidebar --------------------------------------------------
         const side = new St.BoxLayout({
@@ -315,11 +317,10 @@ class WidgetPicker extends Clutter.Actor {
         this._scroll.set_child(this._grid);
         main.add_child(this._scroll);
 
-        // ---- footer action bar (overlays the bottom edge) -----------
+        // ---- footer action bar (last row of the panel) -------------
         const footer = new St.BoxLayout({
             style_class: 'peachos-picker-footer',
-            x_expand: true, x_align: Clutter.ActorAlign.FILL,
-            y_align: Clutter.ActorAlign.END,
+            x_expand: true, y_expand: false,
         });
         footer.add_child(new St.Label({
             text: 'Drag a widget to place it on the desktop…',
@@ -332,7 +333,7 @@ class WidgetPicker extends Clutter.Actor {
         });
         done.connect('clicked', () => this._callbacks.onDone());
         footer.add_child(done);
-        this._glass.content.add_child(footer);
+        wrap.add_child(footer);
     }
 
     _sideItem(type, label, icon) {
