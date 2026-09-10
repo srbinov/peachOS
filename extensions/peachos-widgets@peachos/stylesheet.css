@@ -306,6 +306,17 @@
     background-color: rgba(255, 255, 255, 0.06);
 }
 
+/* ---- iCloud Photos connect state ------------------------------- */
+
+.peachos-photos-connect {
+    border-radius: 18px;
+    transition-duration: 120ms;
+}
+
+.peachos-photos-connect:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
 /* ---- calendar agenda scroll (no visible scrollbar) -------------- */
 
 .peachos-cal-scroll {

@@ -9,10 +9,27 @@
 //   'square' / 'grid' -- one photo at the footprint's size.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {FONT, fontStyle} from '../lib/fonts.js';
+
+// Open peachOS Settings on the Internet Accounts page (where the iCloud sign-in
+// lives). Same subprocess spawn edsCalendar.openAccountSettings uses.
+function openICloudSettings() {
+    for (const argv of [
+        ['peachos-settings', 'internetaccounts'],
+        ['gnome-control-center', 'online-accounts'],
+    ]) {
+        try {
+            Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+            return;
+        } catch (e) {
+            // try the next
+        }
+    }
+}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
     'August', 'September', 'October', 'November', 'December'];
@@ -79,38 +96,98 @@ export class PhotosWidget {
                 return;
             }
 
-            // nothing to show -- placeholder
+            // nothing to show -- the "set it up" placeholder
             this._setImage?.(null);
-            const msg = !st.connected
-                ? 'Connect iCloud Photos\nin Settings'
-                : st.reauthNeeded
-                    ? 'Sign in to iCloud\nagain in Settings'
-                    : 'Fetching your photos…';
-            const box = new St.BoxLayout({
-                orientation: Clutter.Orientation.VERTICAL,
-                width: this._w, height: this._h,
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
-                style: `spacing: ${Math.round(fs * 0.5)}px;`,
-            });
-            box.add_child(new St.Icon({
-                icon_name: 'image-x-generic-symbolic',
-                icon_size: Math.round(this._h * 0.22),
-                style: 'color: rgba(255,255,255,0.7);',
-                x_align: Clutter.ActorAlign.CENTER,
-            }));
-            const t = new St.Label({
-                text: msg,
-                style: fontStyle(FONT.display, fs, 0.8, '255,255,255'),
-                x_align: Clutter.ActorAlign.CENTER,
-            });
-            t.clutter_text.line_wrap = true;
-            t.clutter_text.justify = true;
-            box.add_child(t);
-            this._root.add_child(box);
+            this._renderPlaceholder(st);
         } finally {
             this._rendering = false;
         }
+    }
+
+    _renderPlaceholder(st) {
+        const w = this._w;
+        const h = this._h;
+        const compact = h < 210;
+        const pad = Math.round(Math.min(w, h) * 0.09);
+        const fg = '255,255,255'; // photos card is always a dark image card
+        const titlePx = Math.max(13, Math.round(h * (compact ? 0.11 : 0.085)));
+        const subPx = Math.round(titlePx * 0.72);
+
+        const icoPath = n =>
+            GLib.build_filenamev([this._ctx.path, 'icons', 'app', n]);
+
+        const col = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            width: w, height: h,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            style: `spacing: ${Math.round(titlePx * (compact ? 0.5 : 0.75))}px; `
+                + `padding: ${pad}px;`,
+        });
+
+        // Apple Photos icon
+        col.add_child(new St.Icon({
+            gicon: Gio.icon_new_for_string(icoPath('icloud-photos.svg')),
+            icon_size: Math.round(Math.min(w, h) * (compact ? 0.34 : 0.26)),
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
+
+        // Apple logo + "iCloud Photos" lockup
+        const titleRow = new St.BoxLayout({
+            x_align: Clutter.ActorAlign.CENTER,
+            style: `spacing: ${Math.round(titlePx * 0.32)}px;`,
+        });
+        titleRow.add_child(new St.Icon({
+            gicon: Gio.icon_new_for_string(icoPath('apple-logo-white.svg')),
+            icon_size: Math.round(titlePx * 1.15),
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        titleRow.add_child(new St.Label({
+            text: 'iCloud Photos',
+            style: fontStyle(FONT.rounded, titlePx, 1, fg) + ' font-weight: 600;',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        col.add_child(titleRow);
+
+        if (!compact) {
+            const sub = new St.Label({
+                text: !st.connected
+                    ? 'Connect your account to\nshow photos from your library'
+                    : st.reauthNeeded
+                        ? 'Your session expired —\nsign in again to keep syncing'
+                        : 'Fetching your photos…',
+                style: fontStyle(FONT.display, subPx, 0.6, fg),
+                x_align: Clutter.ActorAlign.CENTER,
+            });
+            sub.clutter_text.line_wrap = true;
+            sub.clutter_text.justify = true;
+            col.add_child(sub);
+        }
+
+        // "Open Settings" pill -- visual affordance; the whole card is the button
+        const fetching = st.connected && !st.reauthNeeded;
+        if (!fetching) {
+            const pill = new St.BoxLayout({
+                x_align: Clutter.ActorAlign.CENTER,
+                style: 'background-color: rgba(255,255,255,0.16); '
+                    + `border-radius: 999px; padding: ${Math.round(subPx * 0.55)}px `
+                    + `${Math.round(subPx * 1.1)}px;`,
+            });
+            pill.add_child(new St.Label({
+                text: st.reauthNeeded ? 'Sign In' : 'Open Settings',
+                style: fontStyle(FONT.rounded, subPx, 1, fg) + ' font-weight: 600;',
+            }));
+            col.add_child(pill);
+        }
+
+        const card = new St.Button({
+            width: w, height: h,
+            reactive: true, can_focus: true,
+            style_class: 'peachos-photos-connect',
+        });
+        card.set_child(col);
+        card.connect('clicked', () => openICloudSettings());
+        this._root.add_child(card);
     }
 
     destroy() {
