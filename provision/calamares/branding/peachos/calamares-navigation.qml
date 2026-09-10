@@ -21,7 +21,7 @@ import QtQuick.Layouts
 Rectangle {
     id: navBar
     color: Branding.styleString( Branding.SidebarBackground )
-    width: parent.width
+    width: parent ? parent.width : 0
     height: 86
 
     property color accent: Branding.styleString( Branding.SidebarBackgroundCurrent )
