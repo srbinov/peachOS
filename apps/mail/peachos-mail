@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""
+peachos-mail -- feeds the desktop Mail widgets (Gmail / iCloud Mail / Outlook)
+and raises a notification for each new inbox message.
+
+  sync     headless: refresh every connected provider's cache + notify  (the timer runs this)
+  status   JSON on stdout: per-provider connected? / message count / last sync
+
+Auth, per provider -- nothing is stored in the clear by this tool:
+  Gmail    GNOME Online Accounts `google` account -> OAuth2 token -> IMAP XOAUTH2
+  Outlook  GNOME Online Accounts `ms_graph` account -> OAuth2 token -> Microsoft Graph
+  iCloud   an app-specific password from the login keyring (org.peachos.Mail),
+           saved by peachOS Settings during the iCloud sign-in -> IMAP
+
+Only inbox headers + a ~400-char body slice are fetched; mail is never downloaded
+in full and never leaves the machine except to the provider it came from.
+"""
+import email
+import email.header
+import email.utils
+import imaplib
+import json
+import os
+import quopri
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+
+import gi
+gi.require_version('Secret', '1')
+from gi.repository import Gio, GLib, Secret  # noqa: E402
+
+CACHE_DIR = os.path.expanduser('~/.cache/peachos-widgets/mail')
+STATE_DIR = os.path.expanduser('~/.local/share/peachos/mail')
+SEEN_FILE = os.path.join(STATE_DIR, 'seen.json')
+ICLOUD_CONFIG = os.path.expanduser(
+    '~/.local/share/peachos/icloud-photos/config.json')
+
+APP_ID = 'org.peachos.Mail'
+ICON_DIR = '/usr/share/peachos/mail-icons'
+COUNT = 3                      # messages shown per widget
+SEEN_TTL = 7 * 24 * 3600       # forget notified ids after a week
+
+GOA_NAME = 'org.gnome.OnlineAccounts'
+GOA_PATH = '/org/gnome/OnlineAccounts'
+IFACE_ACCOUNT = 'org.gnome.OnlineAccounts.Account'
+IFACE_MAIL = 'org.gnome.OnlineAccounts.Mail'
+IFACE_OAUTH2 = 'org.gnome.OnlineAccounts.OAuth2Based'
+
+_MAIL_SCHEMA = Secret.Schema.new(
+    'org.peachos.Mail', Secret.SchemaFlags.NONE,
+    {'account': Secret.SchemaAttributeType.STRING})
+
+
+# ---- small helpers ----------------------------------------------------
+
+def _bus():
+    return Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+
+def _read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def _write_json(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
+
+
+def _clean(s):
+    return re.sub(r'\s+', ' ', (s or '')).strip()
+
+
+def _decode_header(raw):
+    if raw is None:
+        return ''
+    parts = email.header.decode_header(str(raw))
+    out = []
+    for text, enc in parts:
+        if isinstance(text, bytes):
+            try:
+                out.append(text.decode(enc or 'utf-8', 'replace'))
+            except LookupError:
+                out.append(text.decode('utf-8', 'replace'))
+        else:
+            out.append(text)
+    return _clean(''.join(out))
+
+
+def _snippet(raw):
+    """Best-effort readable preview from a raw MIME body slice."""
+    if not raw:
+        return ''
+    try:
+        raw = quopri.decodestring(raw)   # turns =C2=A0 etc. into real bytes
+    except Exception:
+        pass
+    txt = raw.decode('utf-8', 'replace')
+    txt = re.sub(r'<[^>]+>', ' ', txt)       # strip any HTML tags in the slice
+    txt = re.sub(r'&[a-z#0-9]+;', ' ', txt)  # and entities
+    txt = re.sub('[\u200b-\u200f\u034f\u2060\ufeff\u00ad\ufffd]', '', txt)  # zero-width / junk
+    txt = ''.join(c for c in txt if c.isprintable() or c == ' ')
+    return _clean(txt)[:160]
+
+
+def _sender(from_hdr):
+    name, addr = email.utils.parseaddr(from_hdr or '')
+    name = _decode_header(name)
+    if not name:
+        name = addr.split('@')[0] if addr else 'Unknown'
+    return name, addr
+
+
+# ---- GNOME Online Accounts -----------------------------------------------
+
+def _goa_accounts():
+    """[(object_path, {iface: {prop: value}})] for every GOA account."""
+    try:
+        bus = _bus()
+        res = bus.call_sync(
+            GOA_NAME, GOA_PATH, 'org.freedesktop.DBus.ObjectManager',
+            'GetManagedObjects', None, GLib.VariantType('(a{oa{sa{sv}}})'),
+            Gio.DBusCallFlags.NONE, 8000, None)
+        objects = res.unpack()[0]
+    except GLib.Error:
+        return []
+    out = []
+    for path, ifaces in objects.items():
+        if '/Accounts/' in path:
+            out.append((path, ifaces))
+    return out
+
+
+def _goa_token(path):
+    bus = _bus()
+    res = bus.call_sync(
+        GOA_NAME, path, IFACE_OAUTH2, 'GetAccessToken', None,
+        GLib.VariantType('(si)'), Gio.DBusCallFlags.NONE, 20000, None)
+    return res.unpack()[0]
+
+
+def _find_goa(provider_type):
+    """(object_path, ifaces) for the first account of a provider type, or None."""
+    for path, ifaces in _goa_accounts():
+        acct = ifaces.get(IFACE_ACCOUNT, {})
+        if acct.get('ProviderType') == provider_type:
+            return path, ifaces
+    return None
+
+
+# ---- IMAP fetch --------------------------------------------------------
+
+def _imap_recent(M):
+    """Newest COUNT inbox messages from a logged-in IMAP4 connection."""
+    M.select('INBOX', readonly=True)
+    typ, data = M.search(None, 'ALL')
+    if typ != 'OK' or not data or not data[0]:
+        return []
+    seqs = data[0].split()[-COUNT:]
+    msgs = []
+    for seq in reversed(seqs):  # newest first
+        typ, resp = M.fetch(
+            seq, '(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)]'
+                 ' BODY.PEEK[1]<0.400>)')
+        if typ != 'OK':
+            continue
+        flags, header_bytes, body_slice = b'', b'', b''
+        for part in resp:
+            if isinstance(part, tuple):
+                meta, chunk = part
+                if b'HEADER.FIELDS' in meta:
+                    header_bytes = chunk
+                elif b'BODY[1]' in meta or b'BODY.PEEK[1]' in meta:
+                    body_slice = chunk
+                m = re.search(rb'FLAGS \(([^)]*)\)', meta)
+                if m:
+                    flags = m.group(1)
+            elif isinstance(part, bytes):
+                m = re.search(rb'FLAGS \(([^)]*)\)', part)
+                if m:
+                    flags = m.group(1)
+        hdr = email.message_from_bytes(header_bytes)
+        name, addr = _sender(hdr.get('From'))
+        try:
+            dt = email.utils.parsedate_to_datetime(hdr.get('Date'))
+            ts = int(dt.timestamp())
+        except Exception:
+            ts = int(time.time())
+        mid = _clean(hdr.get('Message-ID')) or f'{addr}|{hdr.get("Subject")}|{ts}'
+        preview = _snippet(body_slice)
+        msgs.append({
+            'id': mid,
+            'from': name,
+            'addr': addr,
+            'subject': _decode_header(hdr.get('Subject')) or '(no subject)',
+            'preview': preview,
+            'date': ts,
+            'unread': b'\\Seen' not in flags,
+        })
+    return msgs
+
+
+# ---- per-provider fetchers ---------------------------------------------
+
+def fetch_gmail():
+    found = _find_goa('google')
+    if not found:
+        return {'connected': False}
+    path, ifaces = found
+    if IFACE_MAIL not in ifaces:
+        return {'connected': False}
+    mail = ifaces[IFACE_MAIL]
+    host = mail.get('ImapHost') or 'imap.gmail.com'
+    user = mail.get('ImapUserName') or mail.get('EmailAddress')
+    acct = ifaces[IFACE_ACCOUNT].get('PresentationIdentity') or user
+    try:
+        token = _goa_token(path)
+        M = imaplib.IMAP4_SSL(host, 993)
+        M.authenticate(
+            'XOAUTH2',
+            lambda _c: f'user={user}\x01auth=Bearer {token}\x01\x01'.encode())
+        msgs = _imap_recent(M)
+        try:
+            M.logout()
+        except Exception:
+            pass
+        return {'connected': True, 'account': acct, 'messages': msgs}
+    except (imaplib.IMAP4.error, OSError, GLib.Error) as e:
+        return {'connected': True, 'account': acct, 'reauth': True,
+                'error': str(e)}
+
+
+def fetch_icloud():
+    cfg = _read_json(ICLOUD_CONFIG, {})
+    apple_id = cfg.get('apple_id')
+    if not apple_id:
+        return {'connected': False}
+    app_pw = Secret.password_lookup_sync(
+        _MAIL_SCHEMA, {'account': apple_id}, None)
+    if not app_pw:
+        return {'connected': True, 'account': apple_id, 'reauth': True}
+    try:
+        M = imaplib.IMAP4_SSL('imap.mail.me.com', 993)
+        M.login(apple_id, app_pw)
+        msgs = _imap_recent(M)
+        try:
+            M.logout()
+        except Exception:
+            pass
+        return {'connected': True, 'account': apple_id, 'messages': msgs}
+    except (imaplib.IMAP4.error, OSError) as e:
+        return {'connected': True, 'account': apple_id, 'reauth': True,
+                'error': str(e)}
+
+
+def fetch_outlook():
+    found = _find_goa('ms_graph')
+    if not found:
+        return {'connected': False}
+    path, ifaces = found
+    acct = ifaces[IFACE_ACCOUNT].get('PresentationIdentity') or 'Outlook'
+    url = ('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages'
+           '?$top=%d&$select=id,from,subject,receivedDateTime,isRead,bodyPreview'
+           '&$orderby=receivedDateTime desc' % COUNT)
+    try:
+        token = _goa_token(path)
+        req = urllib.request.Request(
+            url, headers={'Authorization': f'Bearer {token}',
+                          'Accept': 'application/json'})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.load(r)
+        msgs = []
+        for m in data.get('value', []):
+            ea = (m.get('from') or {}).get('emailAddress') or {}
+            try:
+                dt = email.utils.parsedate_to_datetime(
+                    m['receivedDateTime'].replace('Z', '+00:00'))
+                ts = int(dt.timestamp())
+            except Exception:
+                ts = int(time.time())
+            msgs.append({
+                'id': m.get('id') or f'{ea.get("address")}|{ts}',
+                'from': _clean(ea.get('name')) or (ea.get('address') or '').split('@')[0],
+                'addr': ea.get('address') or '',
+                'subject': _clean(m.get('subject')) or '(no subject)',
+                'preview': _clean(m.get('bodyPreview'))[:160],
+                'date': ts,
+                'unread': not m.get('isRead', True),
+            })
+        return {'connected': True, 'account': acct, 'messages': msgs}
+    except (urllib.error.URLError, OSError, GLib.Error, KeyError, ValueError) as e:
+        return {'connected': True, 'account': acct, 'reauth': True,
+                'error': str(e)}
+
+
+PROVIDERS = {
+    'gmail': fetch_gmail,
+    'icloud': fetch_icloud,
+    'outlook': fetch_outlook,
+}
+
+
+# ---- notifications ----------------------------------------------------
+
+def _notify(provider, msg):
+    icon_path = os.path.join(ICON_DIR, f'{provider}.png')
+    body = {
+        'title': GLib.Variant('s', msg['from']),
+        'body': GLib.Variant('s', msg['subject']),
+        'priority': GLib.Variant('s', 'normal'),
+    }
+    if os.path.exists(icon_path):
+        body['icon'] = Gio.FileIcon.new(
+            Gio.File.new_for_path(icon_path)).serialize()
+    try:
+        _bus().call_sync(
+            'org.gtk.Notifications', '/org/gtk/Notifications',
+            'org.gtk.Notifications', 'AddNotification',
+            GLib.Variant('(ssa{sv})', (APP_ID, f'{provider}:{msg["id"]}', body)),
+            None, Gio.DBusCallFlags.NONE, 5000, None)
+        return True
+    except GLib.Error:
+        return False
+
+
+def _withdraw(provider, msg_id):
+    try:
+        _bus().call_sync(
+            'org.gtk.Notifications', '/org/gtk/Notifications',
+            'org.gtk.Notifications', 'RemoveNotification',
+            GLib.Variant('(ss)', (APP_ID, f'{provider}:{msg_id}')),
+            None, Gio.DBusCallFlags.NONE, 5000, None)
+    except GLib.Error:
+        pass
+
+
+# ---- commands --------------------------------------------------------
+
+def cmd_sync():
+    seen = _read_json(SEEN_FILE, {})
+    now = int(time.time())
+    first_run = not os.path.exists(SEEN_FILE)
+
+    for provider, fetch in PROVIDERS.items():
+        try:
+            res = fetch()
+        except Exception as e:  # never let one provider kill the run
+            res = {'connected': True, 'reauth': True, 'error': repr(e)}
+
+        manifest = {
+            'account': res.get('account'),
+            'connected': bool(res.get('connected')),
+            'reauth': bool(res.get('reauth')),
+            'updated': now,
+            'messages': res.get('messages', []),
+        }
+        _write_json(os.path.join(CACHE_DIR, f'{provider}.json'), manifest)
+
+        pseen = seen.setdefault(provider, {})
+        cur_ids = {m['id'] for m in manifest['messages']}
+
+        # notify genuinely-new unread messages (skip the very first run so we
+        # don't dump a stack of banners the moment the timer first fires)
+        for m in manifest['messages']:
+            if m['id'] in pseen or not m['unread']:
+                continue
+            if not first_run and _notify(provider, m):
+                pseen[m['id']] = {'at': now, 'read': False}
+            elif first_run:
+                pseen[m['id']] = {'at': now, 'read': True}
+
+        # withdraw notifications for messages now read or no longer in the top-N
+        for mid, info in list(pseen.items()):
+            still_unread = any(x['id'] == mid and x['unread']
+                               for x in manifest['messages'])
+            if info.get('read'):
+                continue
+            if not still_unread or mid not in cur_ids:
+                _withdraw(provider, mid)
+                info['read'] = True
+
+        # prune old entries
+        for mid, info in list(pseen.items()):
+            if now - info.get('at', now) > SEEN_TTL:
+                del pseen[mid]
+
+    _write_json(SEEN_FILE, seen)
+    return 0
+
+
+def cmd_status():
+    out = {}
+    for provider in PROVIDERS:
+        m = _read_json(os.path.join(CACHE_DIR, f'{provider}.json'), {})
+        out[provider] = {
+            'connected': m.get('connected', False),
+            'reauth': m.get('reauth', False),
+            'count': len(m.get('messages', [])),
+            'updated': m.get('updated'),
+        }
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def main(argv):
+    cmds = {'sync': cmd_sync, 'status': cmd_status}
+    if len(argv) != 2 or argv[1] not in cmds:
+        print(__doc__)
+        return 64
+    return cmds[argv[1]]()
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

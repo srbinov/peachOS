@@ -122,6 +122,7 @@ export class WidgetFrame {
         this._editing = editing;
         this._glass.widget.reactive = editing;
         this._chrome.visible = editing;
+        this._content?.setEditing?.(editing);
         if (!editing && this._config) {
             this._config.destroy();
             this._config = null;

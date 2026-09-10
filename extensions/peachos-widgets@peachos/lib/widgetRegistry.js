@@ -17,6 +17,7 @@ import {RemindersWidget} from '../widgets/reminders.js';
 import {StocksWidget} from '../widgets/stocks.js';
 import {NewsWidget} from '../widgets/news.js';
 import {PhotosWidget} from '../widgets/photos.js';
+import {MailWidget} from '../widgets/mail.js';
 
 export const UNIT = 170;          // square widget side, px
 export const ROW_GAP = 8;         // gap a row spans (matches widgetLayer GAP)
@@ -152,6 +153,54 @@ export const REGISTRY = {
             grid: {
                 name: 'Featured', shape: 'grid',
                 make: (parent, ctx, size) => new PhotosWidget(parent, ctx, size, 'grid'),
+            },
+        },
+    },
+    gmail: {
+        name: 'Gmail',
+        appIcon: 'icons/app/mail-gmail.svg',
+        variants: {
+            row: {
+                name: 'Inbox', shape: 'row',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'row', {brand: 'google'}),
+            },
+            big: {
+                name: 'Large', shape: 'grid',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'grid', {brand: 'google'}),
+            },
+        },
+    },
+    icloudmail: {
+        name: 'iCloud Mail',
+        appIcon: 'icons/app/mail-icloud.svg',
+        variants: {
+            row: {
+                name: 'Inbox', shape: 'row',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'row', {brand: 'apple'}),
+            },
+            big: {
+                name: 'Large', shape: 'grid',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'grid', {brand: 'apple'}),
+            },
+        },
+    },
+    outlook: {
+        name: 'Outlook',
+        appIcon: 'icons/app/mail-outlook.svg',
+        variants: {
+            row: {
+                name: 'Inbox', shape: 'row',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'row', {brand: 'microsoft'}),
+            },
+            big: {
+                name: 'Large', shape: 'grid',
+                make: (parent, ctx, size) =>
+                    new MailWidget(parent, ctx, size, 'grid', {brand: 'microsoft'}),
             },
         },
     },

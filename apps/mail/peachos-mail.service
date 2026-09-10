@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh the peachOS Mail widgets + notify on new email
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/peachos-mail sync
+SuccessExitStatus=0
+Nice=10

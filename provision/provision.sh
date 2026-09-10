@@ -1201,6 +1201,23 @@ install -Dm644 "$REPO_DIR/apps/icloud-photos/peachos-icloud-photos.service" /usr
 install -Dm644 "$REPO_DIR/apps/icloud-photos/peachos-icloud-photos.timer" /usr/lib/systemd/user/peachos-icloud-photos.timer
 systemctl --global enable peachos-icloud-photos.timer
 
+# Mail widget helper (apps/mail): polls Gmail (GOA OAuth -> IMAP XOAUTH2),
+# iCloud Mail (app-specific password from libsecret -> IMAP) and Outlook (GOA
+# OAuth -> Microsoft Graph), writes the 3 newest inbox messages per provider to
+# ~/.cache/peachos-widgets/mail for the desktop Mail widgets, and raises a
+# grouped "Mail" notification for each new message (org.gtk.Notifications, needs
+# the .desktop below so the shell resolves the app id). The timer runs `sync`
+# every 2 min. No new apt deps -- stdlib imaplib/urllib + gir1.2-secret-1.
+echo "==> Installing Mail widget helper"
+install -Dm755 "$REPO_DIR/apps/mail/peachos-mail"                 /usr/bin/peachos-mail
+install -Dm644 "$REPO_DIR/apps/mail/peachos-mail.service"         /usr/lib/systemd/user/peachos-mail.service
+install -Dm644 "$REPO_DIR/apps/mail/peachos-mail.timer"           /usr/lib/systemd/user/peachos-mail.timer
+install -Dm644 "$REPO_DIR/apps/mail/org.peachos.Mail.desktop"     /usr/share/applications/org.peachos.Mail.desktop
+for _mi in "$REPO_DIR"/apps/mail/icons/*.png; do
+    install -Dm644 "$_mi" "/usr/share/peachos/mail-icons/$(basename "$_mi")"
+done
+systemctl --global enable peachos-mail.timer
+
 echo "==> Installing wallpapers -> /usr/share/backgrounds/peachos"
 mkdir -p /usr/share/backgrounds/peachos
 cp "$REPO_DIR"/assets/wallpapers/*.jpg "$REPO_DIR"/assets/wallpapers/*.png /usr/share/backgrounds/peachos/

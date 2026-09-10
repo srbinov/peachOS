@@ -22,6 +22,7 @@ import {RemindersSource} from './lib/providers/reminders.js';
 import {StocksProvider} from './lib/providers/stocks.js';
 import {NewsProvider} from './lib/providers/news.js';
 import {IcloudPhotosProvider} from './lib/providers/icloudPhotos.js';
+import {MailProvider} from './lib/providers/mail.js';
 
 export default class PeachosWidgetsExtension extends Extension {
     enable() {
@@ -49,6 +50,7 @@ export default class PeachosWidgetsExtension extends Extension {
             this._stocks = new StocksProvider();
             this._news = new NewsProvider();
             this._icloudPhotos = new IcloudPhotosProvider();
+            this._mail = new MailProvider();
 
             const ctx = {
                 settings: this._settings,
@@ -59,6 +61,7 @@ export default class PeachosWidgetsExtension extends Extension {
                 stocks: this._stocks,
                 news: this._news,
                 icloudPhotos: this._icloudPhotos,
+                mail: this._mail,
                 path: this.path,
             };
 
@@ -112,6 +115,7 @@ export default class PeachosWidgetsExtension extends Extension {
         this._stocks?.destroy();
         this._news?.destroy();
         this._icloudPhotos?.destroy();
+        this._mail?.destroy();
         clearCropCache();
 
         this._editMode = null;
@@ -123,6 +127,7 @@ export default class PeachosWidgetsExtension extends Extension {
         this._stocks = null;
         this._news = null;
         this._icloudPhotos = null;
+        this._mail = null;
         this._settings = null;
         this._bgSettings = null;
         this._ifaceSettings = null;

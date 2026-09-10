@@ -29,6 +29,10 @@ _ICLOUD_CONFIG = os.path.join(_ICLOUD_DATA, 'config.json')
 _ICLOUD_SCHEMA = Secret.Schema.new(
     'org.peachos.iCloudPhotos', Secret.SchemaFlags.NONE,
     {'account': Secret.SchemaAttributeType.STRING})
+# The app-specific password, reused by the peachos-mail helper for IMAP.
+_MAIL_SCHEMA = Secret.Schema.new(
+    'org.peachos.Mail', Secret.SchemaFlags.NONE,
+    {'account': Secret.SchemaAttributeType.STRING})
 # Apple's app-specific-passwords page
 _APP_PW_URL = 'https://account.apple.com/account/manage'
 
@@ -54,6 +58,13 @@ def _icloud_store_session(apple_id, password, name):
 def _icloud_kick_sync():
     try:
         Gio.Subprocess.new(['peachos-icloud-photos', 'sync'], Gio.SubprocessFlags.NONE)
+    except GLib.Error:
+        pass
+
+
+def _mail_kick_sync():
+    try:
+        Gio.Subprocess.new(['peachos-mail', 'sync'], Gio.SubprocessFlags.NONE)
     except GLib.Error:
         pass
 
@@ -485,6 +496,7 @@ class _AddICloudDialog(Gtk.Window):
         self._caldav_err.set_visible(False)
         self._caldav_btn.set_sensitive(False)
         self._caldav_spin.start()
+        self._mail_id, self._mail_pw = apple_id, password
         threading.Thread(target=self._do_caldav, args=(apple_id, password),
                          daemon=True).start()
 
@@ -526,6 +538,16 @@ class _AddICloudDialog(Gtk.Window):
             self._caldav_err.set_visible(True)
             return
         self._caldav_ok = True
+        # Stash the app-specific password so the Mail widget helper can log in
+        # to iCloud IMAP without asking again.
+        try:
+            Secret.password_store_sync(
+                _MAIL_SCHEMA, {'account': self._mail_id},
+                Secret.COLLECTION_DEFAULT, 'peachOS — iCloud Mail',
+                self._mail_pw, None)
+            _mail_kick_sync()
+        except Exception:
+            pass
         self._finish()
 
     # ---- step 4: done ---------------------------------------------

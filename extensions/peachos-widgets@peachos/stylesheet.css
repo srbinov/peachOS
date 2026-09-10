@@ -317,6 +317,26 @@
     background-color: rgba(255, 255, 255, 0.06);
 }
 
+/* ---- mail widgets (connect state + tap-to-open) ---------------- */
+
+.peachos-mail-connect {
+    border-radius: 18px;
+    transition-duration: 120ms;
+}
+
+.peachos-mail-connect:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.peachos-mail-open {
+    border-radius: 18px;
+    transition-duration: 120ms;
+}
+
+.peachos-mail-open:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 /* ---- calendar agenda scroll (no visible scrollbar) -------------- */
 
 .peachos-cal-scroll {

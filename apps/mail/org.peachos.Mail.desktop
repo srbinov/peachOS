@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Mail
+Comment=peachOS mail widget notifications
+Icon=mail-unread
+Exec=xdg-open https://mail.google.com/
+Terminal=false
+NoDisplay=true
+Categories=Network;Email;
+X-GNOME-UsesNotifications=true
