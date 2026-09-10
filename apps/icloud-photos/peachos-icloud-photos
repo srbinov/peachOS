@@ -46,8 +46,10 @@ CACHE_DIR = os.path.expanduser('~/.cache/peachos-widgets/icloud-photos')
 MANIFEST = os.path.join(CACHE_DIR, 'manifest.json')
 
 POOL_SIZE = 30       # photos kept cached at once
-MAX_EDGE = 1800      # downscale the longest side to this
-JPEG_Q = 85
+# The widget squircle is at most ~350px logical (≈700px @2x); 1400 leaves crop
+# headroom. Saved as PNG, not JPEG: the widget paints it through a Cairo squircle
+# clip with ImageSurface.createFromPNG (PNG only) -- same as the News widget.
+MAX_EDGE = 1400
 
 _SCHEMA = Secret.Schema.new(
     'org.peachos.iCloudPhotos', Secret.SchemaFlags.NONE,
@@ -185,7 +187,7 @@ def _save_scaled(data, path):
     if max(im.size) > MAX_EDGE:
         im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
     tmp = path + '.tmp'
-    im.save(tmp, 'JPEG', quality=JPEG_Q)
+    im.save(tmp, 'PNG', optimize=True)
     os.replace(tmp, path)
     return im.size
 
@@ -287,7 +289,7 @@ def cmd_sync():
     photos, downloaded = [], 0
     for asset in picks:
         pid = asset.id
-        name = hashlib.sha1(pid.encode()).hexdigest()[:16] + '.jpg'
+        name = hashlib.sha1(pid.encode()).hexdigest()[:16] + '.png'
         fpath = os.path.join(CACHE_DIR, name)
         if pid in have and os.path.exists(fpath):
             photos.append(have[pid])
@@ -311,7 +313,7 @@ def cmd_sync():
 
     keep = {p['file'] for p in photos}
     for f in os.listdir(CACHE_DIR):
-        if f.endswith('.jpg') and f not in keep:
+        if f.endswith(('.jpg', '.png')) and f not in keep:
             try:
                 os.remove(os.path.join(CACHE_DIR, f))
             except OSError:
