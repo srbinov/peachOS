@@ -1,15 +1,18 @@
 ---
 componentName: peachos
 
+# Fullscreen so the installer is the only thing on screen -- the live session
+# also blanks the desktop and disables every shell extension before this opens
+# (see provision/live-session/start-installer.sh).
 windowExpanding:    fullscreen
 
 strings:
     productName:         peachOS
     shortProductName:    peachOS
-    version:             26.04
-    shortVersion:        26.04
-    versionedName:       peachOS 26.04
-    shortVersionedName:  peachOS 26.04
+    version:             10.0
+    shortVersion:        10.0
+    versionedName:       peachOS 10.0
+    shortVersionedName:  peachOS 10.0
     bootloaderEntryName: peachOS
     productUrl:          https://github.com/srbinov/peachOS
     supportUrl:          https://github.com/srbinov/peachOS/issues
@@ -17,28 +20,19 @@ strings:
 images:
     productLogo:         "logo.png"
     productIcon:         "icon.png"
-    productWelcome:      "welcome.png"
 
 slideshow:               "show.qml"
-
 slideshowAPI:            1
 
-# Replaces Calamares' classic left-hand step list (the stock Ubuntu-installer look) with a
-# slim animated top progress bar and a bottom Back/Continue nav bar -- both custom QML, see
-# calamares-sidebar.qml/calamares-navigation.qml in this same directory for the reasoning and
-# the verified Calamares QML API they're built against. "qml,top" / plain "qml" (defaults to
-# bottom) are documented sidebar/navigation kinds, not custom flags.
-sidebar: qml,top
-navigation: qml
+# Stock Calamares chrome: the plain widget step-list on the left and a plain
+# Back/Next button bar. No custom QML panels -- keep it simple.
+sidebar: widget
+navigation: widget
 
-# Same tone as the rest of peachOS's own dark surfaces (Control Center/notification glass
-# solid-dark target, #1c1c1e -- see macOS-TopBar-Gnome/lib/liquidGlassIntensity.js). Accent
-# switched from the earlier orange (#FF8A3D) to peachOS's blue (#0A84FF, macOS system blue)
-# per explicit direction -- these two keys double as the QML panels' accent color (read via
-# Branding.styleString(Branding.SidebarBackgroundCurrent) in both), not just the legacy
-# widget sidebar's own current-step highlight.
+# Pure black surfaces, no accent bar on the sidebar -- the current step is just
+# white text, the rest dim grey.
 style:
-   SidebarBackground:    "#1c1c1e"
-   SidebarText:          "#FFFFFF"
-   SidebarBackgroundCurrent: "#0A84FF"
-   SidebarTextCurrent:   "#0A84FF"
+   sidebarBackground:         "#000000"
+   sidebarText:               "#86868b"
+   sidebarTextSelect:         "#ffffff"
+   sidebarBackgroundSelected: "#000000"

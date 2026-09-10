@@ -1,59 +1,61 @@
 /*
- * peachOS installer styling -- applies to the actual step content (welcome/locale/keyboard/
- * partition/users/summary), which stays native Qt Widgets even with the QML sidebar/
- * navigation panels swapped in above. Built from Calamares' own documented QSS surface
- * (generic widget-class selectors, plus the handful of objectNames Calamares itself
- * documents: #mainApp/#sidebarApp/#logoApp) -- see the stock branding/default/stylesheet.qss
- * shipped with this Calamares install for that reference; every selector below is either a
- * plain Qt widget class or one of those documented IDs, nothing invented.
+ * peachOS installer -- black, SF Pro Display, nothing else. Applies to the
+ * native Qt-widget step pages (welcome/locale/keyboard/partition/users/summary)
+ * and the stock widget sidebar + navigation bar.
  *
- * Same dark surface + blue accent language as the rest of peachOS (Control Center/
- * notification glass target #1c1c1e, accent #0A84FF -- macOS system blue).
+ * Only plain Qt widget-class selectors and the three objectNames Calamares
+ * documents (#mainApp/#sidebarApp/#logoApp).
  */
 
-#mainApp {
-    background-color: #1c1c1e;
+#mainApp,
+#sidebarApp,
+QWidget {
+    background-color: #000000;
 }
 
 QWidget {
-    color: #FFFFFF;
-    font-family: "Inter", "Helvetica Neue", "Segoe UI", sans-serif;
+    color: #f5f5f7;
+    font-family: "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
     font-size: 11pt;
-    selection-background-color: #0A84FF;
+    selection-background-color: #0a84ff;
+    selection-color: #ffffff;
 }
 
 QLabel {
     background-color: transparent;
 }
 
-/* Generic buttons: quiet, rounded, subtle fill -- the QML nav bar carries the primary
-   Back/Continue actions, so widget-rendered buttons here (e.g. per-page helper buttons,
-   partition dialog actions) stay understated rather than competing with it. */
+/* Sidebar step list: current step white, the rest dim -- no highlight block. */
+#sidebarApp QLabel {
+    color: #86868b;
+    padding: 3px 0;
+}
+
+/* Buttons: flat, quiet, just a thin outline. */
 QPushButton {
-    background-color: #2c2c2e;
-    color: #FFFFFF;
-    border: 1px solid #3a3a3c;
+    background-color: transparent;
+    color: #f5f5f7;
+    border: 1px solid #48484a;
     border-radius: 8px;
-    padding: 6px 16px;
+    padding: 6px 18px;
 }
 QPushButton:hover {
-    background-color: #3a3a3c;
+    border-color: #86868b;
 }
 QPushButton:pressed {
-    background-color: #48484a;
+    background-color: #1c1c1e;
 }
 QPushButton:disabled {
-    color: #6e6e73;
+    color: #48484a;
     border-color: #2c2c2e;
 }
 
-/* The one primary action Calamares' own widget pages render directly (not through the QML
-   nav bar) is the final "Install Now" button on the summary page. */
+/* The one filled action: "Install" on the summary page / the default button. */
 QPushButton#mainButton,
 QPushButton[default="true"] {
-    background-color: #0A84FF;
+    background-color: #0a84ff;
     border: none;
-    color: #FFFFFF;
+    color: #ffffff;
     font-weight: 600;
 }
 QPushButton#mainButton:hover,
@@ -62,23 +64,23 @@ QPushButton[default="true"]:hover {
 }
 
 QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTextEdit {
-    background-color: #2c2c2e;
-    color: #FFFFFF;
+    background-color: #1c1c1e;
+    color: #f5f5f7;
     border: 1px solid #3a3a3c;
     border-radius: 8px;
     padding: 5px 10px;
 }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-    border: 1px solid #0A84FF;
+    border-color: #0a84ff;
 }
 QComboBox::drop-down {
     border: none;
     width: 22px;
 }
 QComboBox QAbstractItemView {
-    background-color: #2c2c2e;
-    color: #FFFFFF;
-    selection-background-color: #0A84FF;
+    background-color: #1c1c1e;
+    color: #f5f5f7;
+    selection-background-color: #0a84ff;
     border: 1px solid #3a3a3c;
 }
 
@@ -91,8 +93,8 @@ QRadioButton::indicator, QCheckBox::indicator {
     height: 16px;
 }
 QRadioButton::indicator:checked {
-    background-color: #0A84FF;
-    border: 1px solid #0A84FF;
+    background-color: #0a84ff;
+    border: 1px solid #0a84ff;
     border-radius: 8px;
 }
 QRadioButton::indicator:unchecked {
@@ -101,8 +103,8 @@ QRadioButton::indicator:unchecked {
     border-radius: 8px;
 }
 QCheckBox::indicator:checked {
-    background-color: #0A84FF;
-    border: 1px solid #0A84FF;
+    background-color: #0a84ff;
+    border: 1px solid #0a84ff;
     border-radius: 4px;
 }
 QCheckBox::indicator:unchecked {
@@ -112,16 +114,16 @@ QCheckBox::indicator:unchecked {
 }
 
 QProgressBar {
-    background-color: #2c2c2e;
+    background-color: #1c1c1e;
     border: none;
-    border-radius: 6px;
-    height: 10px;
+    border-radius: 4px;
+    height: 8px;
     text-align: center;
     color: transparent;
 }
 QProgressBar::chunk {
-    background-color: #0A84FF;
-    border-radius: 6px;
+    background-color: #0a84ff;
+    border-radius: 4px;
 }
 
 QScrollBar:vertical {
@@ -130,7 +132,7 @@ QScrollBar:vertical {
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: #48484a;
+    background: #3a3a3c;
     border-radius: 5px;
     min-height: 24px;
 }
@@ -143,7 +145,7 @@ QScrollBar:horizontal {
     margin: 0;
 }
 QScrollBar::handle:horizontal {
-    background: #48484a;
+    background: #3a3a3c;
     border-radius: 5px;
     min-width: 24px;
 }
@@ -152,11 +154,11 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 }
 
 QListWidget, QTreeView, QTableView {
-    background-color: #232325;
-    border: 1px solid #3a3a3c;
+    background-color: #0d0d0d;
+    border: 1px solid #2c2c2e;
     border-radius: 8px;
-    alternate-background-color: #2c2c2e;
+    alternate-background-color: #141414;
 }
 QListWidget::item:selected, QTreeView::item:selected, QTableView::item:selected {
-    background-color: #0A84FF;
+    background-color: #0a84ff;
 }

@@ -348,13 +348,10 @@ done
 # "loading complete" with zero errors, only benign warnings matching the real Kubuntu
 # reference's own (e.g. partition's "unknown" filesystem meaning "let the user pick").
 echo "==> Installing Calamares installer -> peachOS branding"
-# qml6-module-qtquick-{controls,layouts}: NOT pulled in by the calamares package itself (it
-# runs fine without them, in its default all-widget mode) but required by peachOS's own
-# calamares-sidebar.qml/calamares-navigation.qml, which replace the stock left-hand widget
-# sidebar with custom QML panels -- confirmed missing live (`calamares --debug` logged
-# `module "QtQuick.Layouts" is not installed` until these were installed) rather than assumed.
-apt-get install -y --no-install-recommends calamares calamares-settings-ubuntu-common \
-    qml6-module-qtquick-controls qml6-module-qtquick-layouts
+# Stock widget sidebar + navigation now (branding.desc: sidebar/navigation = widget), so no
+# QtQuick.Controls/Layouts needed -- the only QML left is show.qml, which uses base QtQuick
+# (Rectangle/Column/Image/Text), pulled in by calamares itself.
+apt-get install -y --no-install-recommends calamares calamares-settings-ubuntu-common
 install -d /etc/calamares/branding/peachos
 install -Dm644 "$REPO_DIR/provision/calamares/settings.conf" /etc/calamares/settings.conf
 for f in "$REPO_DIR"/provision/calamares/modules/*.conf; do
