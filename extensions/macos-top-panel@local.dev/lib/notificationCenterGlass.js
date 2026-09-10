@@ -22,6 +22,9 @@ import St from 'gi://St';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
 
 // [top card, 2nd in stack, 3rd+] fills, plus the hairline border, per mode.
+// `fg`/`fgDim` are the card's text colours -- the shell theme's own .message-title /
+// .message-body rules follow the *installed theme name*, which lags the color-scheme
+// toggle, so a dark card kept getting dark text (dark-on-dark). Own them here too.
 const PALETTE = {
     light: {
         card: 'rgba(255, 255, 255, 0.72)',
@@ -29,6 +32,9 @@ const PALETTE = {
         card3: 'rgba(255, 255, 255, 0.40)',
         hairline: 'rgba(255, 255, 255, 0.55)',
         shadow: 'rgba(0, 0, 0, 0.12)',
+        fg: 'rgba(0, 0, 0, 0.9)',
+        fgDim: 'rgba(0, 0, 0, 0.6)',
+        chip: 'rgba(60, 60, 67, 0.25)',
     },
     dark: {
         card: 'rgba(44, 44, 48, 0.72)',
@@ -36,6 +42,9 @@ const PALETTE = {
         card3: 'rgba(44, 44, 48, 0.40)',
         hairline: 'rgba(255, 255, 255, 0.12)',
         shadow: 'rgba(0, 0, 0, 0.28)',
+        fg: 'rgba(255, 255, 255, 0.95)',
+        fgDim: 'rgba(255, 255, 255, 0.68)',
+        chip: 'rgba(235, 235, 245, 0.20)',
     },
 };
 
@@ -77,12 +86,30 @@ export class NotificationCenterGlass {
             '.macos-notification-center .message {',
             `    background-color: ${p.card} !important;`,
             '    border-radius: 14px !important;',
+            `    color: ${p.fg} !important;`,
             '}',
             '.macos-notification-center .message:second-in-stack {',
             `    background-color: ${p.card2} !important;`,
             '}',
             '.macos-notification-center .message:lower-in-stack {',
             `    background-color: ${p.card3} !important;`,
+            '}',
+            // Text: title solid, body/time dimmed -- so a dark card never keeps
+            // dark theme text.
+            '.macos-notification-center .message .message-title,',
+            '.macos-notification-center .message .message-content .message-title {',
+            `    color: ${p.fg} !important;`,
+            '}',
+            '.macos-notification-center .message .message-body,',
+            '.macos-notification-center .message .message-content .message-body,',
+            '.macos-notification-center .message .event-time,',
+            '.macos-notification-center .message .message-source-title {',
+            `    color: ${p.fgDim} !important;`,
+            '}',
+            // The per-card ✕ overlay (lib/notificationCenter.js _decorateMessage).
+            '.macos-notification-center .macos-nc-close {',
+            `    color: ${p.fg} !important;`,
+            `    background-color: ${p.chip} !important;`,
             '}',
             '',
         ].join('\n');

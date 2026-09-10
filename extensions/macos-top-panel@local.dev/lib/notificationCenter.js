@@ -621,10 +621,9 @@ export class NotificationCenterPanel {
             return;
         message._peachDecorated = true;
         message.add_style_class_name('macos-nc-message');
-        message.track_hover = true; // Message (St.Button) doesn't set this itself
         log('[macos-top-panel] decorating notification message');
 
-        const item = message.get_parent(); // the St.Bin wrapper (ScaleLayout + pivot)
+        const item = message.get_parent(); // the St.Bin wrapper (ScaleLayout = a BinLayout)
 
         const dismiss = () => {
             // _closed short-circuits NotificationMessage's own 'destroy' handler so it
@@ -640,32 +639,30 @@ export class NotificationCenterPanel {
             }
         };
 
-        // ---- close button: a fresh ✕ chip pinned to the card's top-left corner --------
-        // Replaces the native close button (whose baked-in 'clicked' handler closes the
-        // whole collapsed group) with one that dismisses just this card. Visibility is
-        // pure CSS -- `.macos-nc-message:hover .message-close-button` -- because the
-        // St.Button `:hover` pseudo-class is far more dependable than chasing
-        // notify::hover / enter-event through a scaled, stacked St.Bin (which is why the
-        // old JS-opacity version never appeared).
-        const header = message._header;
-        const oldClose = header.closeButton;
-        const closeBtn = new St.Button({
-            style_class: 'message-close-button',
-            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 14}),
-            y_align: Clutter.ActorAlign.START,
-        });
-        closeBtn.connect('clicked', () => dismiss());
-        if (oldClose) {
-            oldClose.hide();
-            header.remove_child(oldClose);
-        }
-        header.insert_child_at_index(closeBtn, 0);
-        header.closeButton = closeBtn;
-        message.track_hover = true;
+        // ---- close button: an overlay ✕ in the card's top-right corner ---------------
+        // Every earlier attempt put this INSIDE the header row -- which peachOS collapses
+        // to ~0 height -- so it was there but invisible. ScaleLayout is a Clutter.BinLayout,
+        // so a second child of `item` is simply stacked on top of the card and honours its
+        // align: END/START drops it in the top-right corner, clear of the header entirely.
+        // The native header close button stays hidden -- its baked-in handler closes the
+        // whole collapsed group, not one card. (The expand button is left alone.)
+        message._header?.closeButton?.hide();
 
-        // ---- swipe right to dismiss --------------------------------------------------
-        if (item)
+        if (item) {
+            const closeBtn = new St.Button({
+                style_class: 'macos-nc-close',
+                child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 13}),
+                x_align: Clutter.ActorAlign.END,
+                y_align: Clutter.ActorAlign.START,
+                can_focus: true,
+            });
+            closeBtn.connect('clicked', () => dismiss());
+            item.add_child(closeBtn);          // last child -> painted on top
+            message._peachCloseBtn = closeBtn;
+
+            // ---- swipe right to dismiss --------------------------------------------
             this._addSwipeDismiss(message, item, dismiss);
+        }
     }
 
     _addSwipeDismiss(message, item, dismiss) {
