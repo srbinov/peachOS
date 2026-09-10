@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import threading
 import time
 
@@ -343,6 +344,13 @@ class _AddICloudDialog(Gtk.Window):
 
     def _do_signin(self, apple_id, password):
         try:
+            # Start from a clean session every time the dialog is used. A leftover
+            # half-finished session (scnt / session_id / auth_attributes from an
+            # earlier attempt where the 2FA code was never entered) makes Apple
+            # treat the next signin/complete as a *resumed* challenge and NOT push
+            # a fresh code -- the "I never got a code" case. A successful sign-in
+            # rewrites the trusted session here for the photos helper to reuse.
+            shutil.rmtree(_ICLOUD_SESSION, ignore_errors=True)
             os.makedirs(_ICLOUD_SESSION, exist_ok=True)
             api = PyiCloudService(apple_id, password,
                                   cookie_directory=_ICLOUD_SESSION)
@@ -359,11 +367,31 @@ class _AddICloudDialog(Gtk.Window):
         self._signin_spin.stop()
         self._signin_btn.set_sensitive(True)
         if error:
-            self._signin_err.set_label(error)
-            self._signin_err.set_visible(True)
+            on_2fa = self._stack.get_visible_child_name() == '2fa'
+            target = self._twofa_err if on_2fa else self._signin_err
+            target.set_label(error)
+            target.set_visible(True)
+            if on_2fa:
+                self._twofa_hint.set_label(
+                    'Enter the six-digit code from your other Apple devices.')
             return
         self._api = api
         if api.requires_2fa or api.requires_2sa:
+            try:
+                mode = (getattr(api, '_auth_data', {}) or {}).get('mode', '')
+            except Exception:
+                mode = ''
+            if mode == 'sms':
+                self._twofa_hint.set_label(
+                    'Apple just sent a six-digit code to your trusted phone '
+                    'number by text message.')
+            else:
+                self._twofa_hint.set_label(
+                    'A "Sign-In Requested" notification with a six-digit code '
+                    'should now be on your other Apple devices. If nothing came '
+                    'through, use "Resend code" below.')
+            self._twofa_err.set_visible(False)
+            self._code_entry.set_text('')
             self._stack.set_visible_child_name('2fa')
         else:
             self._photos_connected()
@@ -371,9 +399,12 @@ class _AddICloudDialog(Gtk.Window):
     # ---- step 2: two-factor ----------------------------------------
 
     def _page_2fa(self):
-        box = self._shell(
-            'Two-Factor Authentication',
-            'Enter the six-digit code shown on your other Apple devices.')
+        box = self._shell('Two-Factor Authentication')
+        self._twofa_hint = Gtk.Label(
+            xalign=0, wrap=True, css_classes=['dim-label'],
+            label='Enter the six-digit code from your other Apple devices.')
+        box.append(self._twofa_hint)
+
         self._code_entry = Gtk.Entry(placeholder_text='000000', max_length=8,
                                      input_purpose=Gtk.InputPurpose.DIGITS,
                                      xalign=0.5)
@@ -385,6 +416,11 @@ class _AddICloudDialog(Gtk.Window):
         self._twofa_spin = Gtk.Spinner()
         box.append(self._twofa_spin)
 
+        self._resend_btn = Gtk.Button(label='Resend code', css_classes=['flat'],
+                                      halign=Gtk.Align.START)
+        self._resend_btn.connect('clicked', lambda *_a: self._on_resend())
+        box.append(self._resend_btn)
+
         back = Gtk.Button(label='Back')
         back.connect('clicked',
                      lambda *_a: self._stack.set_visible_child_name('signin'))
@@ -393,6 +429,25 @@ class _AddICloudDialog(Gtk.Window):
         self._verify_btn.connect('clicked', lambda *_a: self._on_verify())
         box.append(self._footer(back, self._verify_btn))
         return box
+
+    def _on_resend(self):
+        # A fresh sign-in wipes the half-finished session (see _do_signin), so
+        # Apple pushes a new code instead of treating it as a resumed challenge.
+        self._resend_btn.set_sensitive(False)
+        self._twofa_err.set_visible(False)
+        self._twofa_hint.set_label('Requesting a new code…')
+        self._twofa_spin.start()
+
+        def done():
+            self._twofa_spin.stop()
+            self._resend_btn.set_sensitive(True)
+            return GLib.SOURCE_REMOVE
+
+        def work():
+            self._do_signin(self._apple_id, self._password)
+            GLib.idle_add(done)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _on_verify(self):
         code = self._code_entry.get_text().strip().replace(' ', '')
