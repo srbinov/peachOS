@@ -31,8 +31,13 @@ while true; do
     [ "$(systemctl is-system-running 2>/dev/null)" = stopping ] && exit 0
 
     start=$(date +%s)
-    pkexec eggs sysinstall || true
-    # `eggs sysinstall` should block until Calamares quits; wait it out if not.
+    # Force the Calamares GUI -- a bare `eggs sysinstall` falls back to the
+    # Krill TUI when it can't see an active display server (which it can't,
+    # from an autostart under pkexec), and Krill then dies with no controlling
+    # TTY. pkexec keeps DISPLAY + XAUTHORITY (allow_gui in eggs' policy), which
+    # is what Calamares needs.
+    pkexec eggs sysinstall calamares || true
+    # eggs blocks until Calamares quits; wait it out if that ever changes.
     while pgrep -x calamares >/dev/null 2>&1; do sleep 2; done
 
     # A run under ~10s means it never actually opened (denied / crashed).
@@ -42,7 +47,7 @@ while true; do
     else
         fails=0
     fi
-    sleep 2
+    sleep 3
 done
 
 # Installer wouldn't start -- hand back a usable desktop.

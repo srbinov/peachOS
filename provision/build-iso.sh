@@ -159,6 +159,14 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
         install -Dm644 "$f" "/etc/calamares/branding/peachos/$(basename "$f")"
     done
 
+    # eggs' live-desktop "Install peachOS" launcher script (build-host asset,
+    # read at remaster time, not squashed) -- keep it current so the icon and
+    # the autostart launch the installer the same way.
+    if [[ -d /etc/penguins-eggs.d/scripts ]]; then
+        install -Dm755 "$REPO_DIR/provision/penguins-eggs/trust-desktop.sh" \
+            /etc/penguins-eggs.d/scripts/trust-desktop.sh
+    fi
+
     # Live-session autostarts (boot=live guarded, shipped via /etc/skel).
     install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
     install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
