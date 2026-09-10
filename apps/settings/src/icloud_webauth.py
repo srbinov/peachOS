@@ -21,6 +21,8 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -36,8 +38,9 @@ from gi.repository import Gtk, WebKit, GLib  # noqa: E402
 
 ICLOUD_URL = 'https://www.icloud.com/'
 VALIDATE_URL = 'https://setup.icloud.com/setup/ws/1/validate'
-# Any of these present (with a value) => the web session is probably ready.
-AUTH_COOKIES = ('X-APPLE-WEBAUTH-TOKEN', 'X-APPLE-WEBAUTH-USER')
+# THE post-2FA session cookie. X-APPLE-WEBAUTH-USER / -LOGIN / -VALIDATE are all
+# set mid-auth (before the code), so keying off those harvests too early.
+AUTH_COOKIE = 'X-APPLE-WEBAUTH-TOKEN'
 # Only cookies from these domains are worth keeping.
 KEEP_DOMAIN_RE = re.compile(r'(^|\.)(icloud\.com|apple\.com)$')
 
@@ -92,9 +95,18 @@ def _validate(jar):
                  'Origin': 'https://www.icloud.com',
                  'Referer': 'https://www.icloud.com/',
                  'User-Agent': 'Mozilla/5.0'})
-    with opener.open(req, timeout=25) as resp:
-        data = json.load(resp)
-    apple_id = (data.get('dsInfo') or {}).get('appleId')
+    data = None
+    for attempt in range(3):
+        try:
+            with opener.open(req, timeout=25) as resp:
+                data = json.load(resp)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 421 and attempt < 2:   # transient; session still settling
+                time.sleep(2)
+                continue
+            raise
+    apple_id = ((data or {}).get('dsInfo') or {}).get('appleId')
     if not apple_id:
         raise RuntimeError('session did not validate (no dsInfo.appleId)')
     return apple_id
@@ -127,6 +139,7 @@ class ICloudWebAuth(Gtk.Window):
         self._session_dir = session_dir
         self._on_done = on_done
         self._finished = False
+        self._busy_flag = False
         self._poll_id = 0
         self._tmp = tempfile.mkdtemp(prefix='peachos-icloud-web-')
 
@@ -179,40 +192,46 @@ class ICloudWebAuth(Gtk.Window):
             cookies = mgr.get_all_cookies_finish(res)
         except GLib.Error:
             return
-        names = {c.get_name() for c in cookies if c.get_value()}
-        if names & set(AUTH_COOKIES):
-            _log('auto: saw', sorted(names & set(AUTH_COOKIES)))
+        if any(c.get_name() == AUTH_COOKIE and c.get_value() for c in cookies):
+            _log('auto: X-APPLE-WEBAUTH-TOKEN present')
             self._harvest('auto')
 
     # ---- harvest + validate (off the UI thread) -----------------------
 
+    def _busy(self, busy, label=None):
+        self._busy_flag = busy
+        self._continue_btn.set_sensitive(not busy)
+        if label:
+            self._status.set_label(label)
+
     def _harvest(self, how):
-        if self._finished:
+        if self._finished or getattr(self, '_busy_flag', False):
             return
-        self._finished = True
-        if self._poll_id:
-            GLib.source_remove(self._poll_id)
-            self._poll_id = 0
-        self._status.set_label('Checking the session…')
-        self._continue_btn.set_sensitive(False)
+        self._busy(True, 'Checking the session…')
         _log('harvest (%s)' % how)
+        self._how = how
         self._cookies.get_all_cookies(None, self._got_all)
+
+    def _recover(self, msg):
+        """A harvest attempt failed but the user may still be finishing 2FA --
+        never tear the window down, just resume."""
+        _log('recover:', msg)
+        self._busy(False, msg)
+        if not self._poll_id and not self._finished:
+            self._poll_id = GLib.timeout_add_seconds(2, self._poll)
 
     def _got_all(self, mgr, res):
         try:
             cookies = list(mgr.get_all_cookies_finish(res))
         except GLib.Error as e:
-            self._deliver(False, str(e))
+            self._recover(f'Could not read cookies: {e}')
             return
         jar = _jar_from_soup(cookies)
         names = sorted({c.name for c in jar})
         _log('kept %d apple cookies:' % len(names), names)
-        if not set(names) & set(AUTH_COOKIES):
-            self._deliver(
-                False,
-                'The sign-in didn’t finish — no iCloud session cookie was set. '
-                'Complete two-factor and "Trust this browser", then press '
-                '"I’ve signed in".')
+        if AUTH_COOKIE not in names:
+            self._recover('Not signed in yet — finish two-factor and '
+                          '"Trust this browser", then press "I’ve signed in".')
             return
 
         def work():
@@ -220,12 +239,14 @@ class ICloudWebAuth(Gtk.Window):
                 apple_id = _validate(jar)
                 _write_session(self._session_dir, apple_id, jar)
                 _log('validated as', apple_id)
+                self._finished = True
                 GLib.idle_add(self._deliver, True, apple_id)
             except Exception as e:  # noqa: BLE001
                 _log('validate failed:', repr(e))
                 GLib.idle_add(
-                    self._deliver, False,
-                    'Could not confirm the iCloud session. Try signing in again.')
+                    self._recover,
+                    'The iCloud session isn’t ready yet. Wait for the iCloud '
+                    'page to finish loading, then press "I’ve signed in".')
         threading.Thread(target=work, daemon=True).start()
 
     # ---- teardown ----------------------------------------------------
