@@ -16,6 +16,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import {openAccountSettings} from '../lib/providers/edsCalendar.js';
+import {buildConnectCard} from '../lib/connectCard.js';
 import {FONT, fontStyle, Pango} from '../lib/fonts.js';
 
 // accent per brand: [glass, dark, light] rgb triplets (0-1). glass is always
@@ -27,6 +28,7 @@ const ACCENTS = {
 };
 
 const NAMES = {google: 'Gmail', apple: 'iCloud Mail', microsoft: 'Outlook'};
+const ACCOUNT = {google: 'Google', apple: 'iCloud', microsoft: 'Microsoft'};
 const ICON = {google: 'mail-gmail.svg', apple: 'mail-icloud.svg', microsoft: 'mail-outlook.svg'};
 const WEBMAIL = {
     google: 'https://mail.google.com/',
@@ -244,76 +246,20 @@ export class MailWidget {
     // ---- not set up: the branded placeholder ------------------------
 
     _renderConnect(st) {
-        const w = this._w;
-        const h = this._h;
-        const compact = h < 210;
-        const pad = Math.round(Math.min(w, h) * 0.09);
-        const fg = this._fg;
-        const titlePx = Math.max(13, Math.round(h * (compact ? 0.11 : 0.085)));
-        const subPx = Math.round(titlePx * 0.72);
+        const status = st.reauthNeeded
+            ? 'Your session expired — reconnect in Settings'
+            : `Add your ${ACCOUNT[this._brand]} account in Settings to see your inbox`;
 
-        const col = new St.BoxLayout({
-            orientation: Clutter.Orientation.VERTICAL,
-            width: w, height: h,
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${Math.round(titlePx * (compact ? 0.5 : 0.72))}px; `
-                + `padding: ${pad}px;`,
+        const card = buildConnectCard({
+            w: this._w, h: this._h, fg: this._fg,
+            iconPath: this._icoPath(ICON[this._brand]),
+            name: NAMES[this._brand],
+            status,
+            pill: st.reauthNeeded ? 'Reconnect' : 'Open Settings',
+            styleClass: 'peachos-mail-connect',
+            onClick: () => openAccountSettings(),
         });
-
-        col.add_child(new St.Icon({
-            gicon: Gio.icon_new_for_string(this._icoPath(ICON[this._brand])),
-            icon_size: Math.round(Math.min(w, h) * (compact ? 0.32 : 0.24)),
-            x_align: Clutter.ActorAlign.CENTER,
-        }));
-
-        const titleRow = new St.BoxLayout({
-            x_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${Math.round(titlePx * 0.34)}px;`,
-        });
-        titleRow.add_child(new St.Icon({
-            gicon: Gio.icon_new_for_string(this._icoPath(ICON[this._brand])),
-            icon_size: Math.round(titlePx * 1.1),
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
-        titleRow.add_child(new St.Label({
-            text: NAMES[this._brand],
-            style: fontStyle(FONT.rounded, titlePx, 1, fg) + ' font-weight: 600;',
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
-        col.add_child(titleRow);
-
-        if (!compact) {
-            const sub = new St.Label({
-                text: st.reauthNeeded
-                    ? 'Your session expired —\nreconnect in Settings'
-                    : 'Connect your account in\nSettings to see your inbox',
-                style: fontStyle(FONT.display, subPx, 0.6, fg),
-                x_align: Clutter.ActorAlign.CENTER,
-            });
-            sub.clutter_text.line_wrap = true;
-            sub.clutter_text.justify = true;
-            col.add_child(sub);
-        }
-
-        const pill = new St.BoxLayout({
-            x_align: Clutter.ActorAlign.CENTER,
-            style: `background-color: rgba(${fg},0.16); border-radius: 999px; `
-                + `padding: ${Math.round(subPx * 0.55)}px ${Math.round(subPx * 1.1)}px;`,
-        });
-        pill.add_child(new St.Label({
-            text: st.reauthNeeded ? 'Reconnect' : 'Open Settings',
-            style: fontStyle(FONT.rounded, subPx, 1, fg) + ' font-weight: 600;',
-        }));
-        col.add_child(pill);
-
-        const card = new St.Button({
-            width: w, height: h,
-            reactive: !this._editing, can_focus: true,
-            style_class: 'peachos-mail-connect',
-        });
-        card.set_child(col);
-        card.connect('clicked', () => openAccountSettings());
+        card.reactive = !this._editing;
         this._root.add_child(card);
         this._clickTarget = card;
     }
