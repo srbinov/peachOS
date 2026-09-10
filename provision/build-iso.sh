@@ -154,10 +154,11 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
     for f in "$REPO_DIR"/provision/calamares/modules/*.conf; do
         install -Dm644 "$f" "/etc/calamares/modules/$(basename "$f")"
     done
+    # rsync --delete: branding files get removed too (dropped the QML panels,
+    # welcome.png, slide-bg.png) -- a plain `install` loop would leave the stale
+    # ones to be squashed into the ISO.
     install -d /etc/calamares/branding/peachos
-    for f in "$REPO_DIR"/provision/calamares/branding/peachos/*; do
-        install -Dm644 "$f" "/etc/calamares/branding/peachos/$(basename "$f")"
-    done
+    rsync -a --delete "$REPO_DIR/provision/calamares/branding/peachos/" /etc/calamares/branding/peachos/
 
     # eggs' live-desktop "Install peachOS" launcher script (build-host asset,
     # read at remaster time, not squashed) -- keep it current so the icon and
