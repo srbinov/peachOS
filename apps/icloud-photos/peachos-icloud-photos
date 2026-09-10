@@ -134,6 +134,23 @@ def _is_video(asset):
         return False
 
 
+def _is_screenshot(asset):
+    """Screenshots (and saved graphics/memes) are PNGs -- camera photos are
+    HEIC or JPEG. Skip them: they're not "a photo from your library" in the
+    wallpaper-widget sense, and iCloud's JPEG derivative of a PNG often comes
+    back solid black anyway."""
+    try:
+        raw = asset._master_record['fields']['itemType']['value']
+        if raw == 'public.png':
+            return True
+    except Exception:
+        pass
+    try:
+        return asset.filename.lower().endswith('.png')
+    except Exception:
+        return False
+
+
 def _download_jpeg(asset):
     """iCloud stores a JPEG derivative of every photo -- prefer that, so we
     never have to decode HEIC. `medium` is ~1600-2048px."""
@@ -158,6 +175,13 @@ def _download_jpeg(asset):
 def _save_scaled(data, path):
     im = Image.open(io.BytesIO(data))
     im = im.convert('RGB')
+    # Guard against broken derivatives (iCloud sometimes hands back a solid
+    # black JPEG for a PNG source) -- a near-zero-luminance frame is never a
+    # real photo worth showing.
+    small = im.resize((32, 32))
+    mean = sum(sum(px) for px in small.getdata()) / (32 * 32 * 3)
+    if mean < 7:
+        raise ValueError('image is essentially black (broken derivative)')
     if max(im.size) > MAX_EDGE:
         im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
     tmp = path + '.tmp'
@@ -256,7 +280,7 @@ def cmd_sync():
             asset = next(lib._get_photos_at(idx, DirectionEnum.ASCENDING, 1), None)
         except Exception:
             asset = None
-        if asset is None or _is_video(asset):
+        if asset is None or _is_video(asset) or _is_screenshot(asset):
             continue
         picks.append(asset)
 

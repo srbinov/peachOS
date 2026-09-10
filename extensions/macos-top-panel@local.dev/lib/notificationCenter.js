@@ -639,30 +639,23 @@ export class NotificationCenterPanel {
             }
         };
 
-        // ---- close button: an overlay ✕ in the card's top-right corner ---------------
-        // Every earlier attempt put this INSIDE the header row -- which peachOS collapses
-        // to ~0 height -- so it was there but invisible. ScaleLayout is a Clutter.BinLayout,
-        // so a second child of `item` is simply stacked on top of the card and honours its
-        // align: END/START drops it in the top-right corner, clear of the header entirely.
-        // The native header close button stays hidden -- its baked-in handler closes the
-        // whole collapsed group, not one card. (The expand button is left alone.)
-        message._header?.closeButton?.hide();
-
-        if (item) {
-            const closeBtn = new St.Button({
-                style_class: 'macos-nc-close',
-                child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 13}),
-                x_align: Clutter.ActorAlign.END,
-                y_align: Clutter.ActorAlign.START,
-                can_focus: true,
-            });
-            closeBtn.connect('clicked', () => dismiss());
-            item.add_child(closeBtn);          // last child -> painted on top
-            message._peachCloseBtn = closeBtn;
-
-            // ---- swipe right to dismiss --------------------------------------------
-            this._addSwipeDismiss(message, item, dismiss);
+        // ---- close button --------------------------------------------------------
+        // Use the NATIVE header close button, not a custom overlay. In GNOME 50 an
+        // expanded NotificationMessage's close button already dismisses just that
+        // card (Message.on_close -> notification.destroy(DISMISSED)); the group only
+        // hijacks it to "clear the stack" while collapsed. It's also already pinned
+        // top-right by the header BoxLayout -- a custom child of the ScaleLayout
+        // (a Clutter.BinLayout) only ever lands dead centre. Earlier versions
+        // *replaced* it with a button that never rendered; just make sure it shows.
+        const closeBtn = message._header?.closeButton;
+        if (closeBtn) {
+            closeBtn.visible = message.canClose?.() ?? true;
+            closeBtn.add_style_class_name('macos-nc-close');
         }
+
+        // ---- swipe right to dismiss -------------------------------------------
+        if (item)
+            this._addSwipeDismiss(message, item, dismiss);
     }
 
     _addSwipeDismiss(message, item, dismiss) {

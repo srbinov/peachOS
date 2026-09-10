@@ -231,19 +231,19 @@
     margin-right: 0;
 }
 
-/* Per-card dismiss (lib/notificationCenter.js _decorateMessage): a ✕ overlaid on the
-   card's top-right corner via ScaleLayout (a Clutter.BinLayout). Always visible but
-   subtle; full strength on its own hover. Colour comes from nc-messages.css
-   (lib/notificationCenterGlass.js) so it follows the dark/light card. */
-.macos-notification-center .macos-nc-close {
-    margin: 5px 6px 0 0;
-    padding: 3px;
-    border-radius: 999px;
-    opacity: 0.55;
-    transition-duration: 120ms;
+/* Per-card dismiss (lib/notificationCenter.js _decorateMessage): the NATIVE header
+   close button, restyled as a macOS ✕ chip. The header BoxLayout already pins it
+   top-right; give the row a little height so it isn't cramped. Colour follows the
+   card via nc-messages.css (lib/notificationCenterGlass.js). */
+.macos-notification-center .macos-nc-message .message-header {
+    min-height: 1.35em;
+    padding-top: 3px;
 }
-.macos-notification-center .macos-nc-close:hover {
-    opacity: 1;
+.macos-notification-center .macos-nc-message .message-close-button {
+    border-radius: 999px;
+    padding: 4px;
+    border: none;
+    transition-duration: 120ms;
 }
 
 /* Battery icon: an St.DrawingArea now (lib/batteryCanvas.js draws a real macOS-style
