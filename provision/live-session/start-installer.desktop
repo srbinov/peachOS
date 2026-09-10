@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=peachOS installer autostart
+Comment=Boots the peachOS ISO straight into the installer (live/demo boot only, no-op once installed)
+Exec=/usr/local/bin/peachos-start-installer
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

@@ -390,6 +390,14 @@ echo "==> Installing live-session lock guard (boot=live only, see disable-lock.s
 install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
 install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
 
+# Boot the ISO straight into the installer -- no "try peachOS" desktop step.
+# Autostart relaunches Calamares fullscreen for as long as the live session is
+# up; boot=live guard (in the script) makes it inert once installed. See
+# start-installer.sh's header.
+echo "==> Installing live-session installer autostart (boot=live only)"
+install -Dm755 "$REPO_DIR/provision/live-session/start-installer.sh" /usr/local/bin/peachos-start-installer
+install -Dm644 "$REPO_DIR/provision/live-session/start-installer.desktop" /etc/skel/.config/autostart/peachos-start-installer.desktop
+
 # Live-session installer polkit rule: "Install peachOS" runs `pkexec eggs
 # sysinstall`, and eggs' own passwordless action doesn't match here because
 # /usr/bin/eggs is a symlink to coa -- so without this the launcher prompts

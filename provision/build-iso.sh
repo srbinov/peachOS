@@ -146,7 +146,38 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
             /etc/fonts/conf.d/49-peachos-widgets.conf 2>/dev/null || true
         fc-cache -f >/dev/null 2>&1 || true
     fi
-    echo "    extensions + Settings app now match the repo"
+
+    # Calamares installer config + branding (see provision.sh "Installing
+    # Calamares installer"). Changes every time the installer flow or branding
+    # is touched -- cheap to re-sync here so a plain build ships it.
+    install -Dm644 "$REPO_DIR/provision/calamares/settings.conf" /etc/calamares/settings.conf
+    for f in "$REPO_DIR"/provision/calamares/modules/*.conf; do
+        install -Dm644 "$f" "/etc/calamares/modules/$(basename "$f")"
+    done
+    install -d /etc/calamares/branding/peachos
+    for f in "$REPO_DIR"/provision/calamares/branding/peachos/*; do
+        install -Dm644 "$f" "/etc/calamares/branding/peachos/$(basename "$f")"
+    done
+
+    # Live-session autostarts (boot=live guarded, shipped via /etc/skel).
+    install -Dm755 "$REPO_DIR/provision/live-session/disable-lock.sh" /usr/local/bin/peachos-disable-live-lock
+    install -Dm644 "$REPO_DIR/provision/live-session/disable-lock.desktop" /etc/skel/.config/autostart/peachos-disable-live-lock.desktop
+    install -Dm755 "$REPO_DIR/provision/live-session/start-installer.sh" /usr/local/bin/peachos-start-installer
+    install -Dm644 "$REPO_DIR/provision/live-session/start-installer.desktop" /etc/skel/.config/autostart/peachos-start-installer.desktop
+
+    # Mail widget helper (see provision.sh "Installing Mail widget helper").
+    if [[ -f "$REPO_DIR/apps/mail/peachos-mail" ]]; then
+        install -Dm755 "$REPO_DIR/apps/mail/peachos-mail"             /usr/bin/peachos-mail
+        install -Dm644 "$REPO_DIR/apps/mail/peachos-mail.service"     /usr/lib/systemd/user/peachos-mail.service
+        install -Dm644 "$REPO_DIR/apps/mail/peachos-mail.timer"       /usr/lib/systemd/user/peachos-mail.timer
+        install -Dm644 "$REPO_DIR/apps/mail/org.peachos.Mail.desktop" /usr/share/applications/org.peachos.Mail.desktop
+        for _mi in "$REPO_DIR"/apps/mail/icons/*.png; do
+            install -Dm644 "$_mi" "/usr/share/peachos/mail-icons/$(basename "$_mi")"
+        done
+        systemctl --global enable peachos-mail.timer >/dev/null 2>&1 || true
+    fi
+
+    echo "    extensions + Settings app + installer config now match the repo"
 fi
 
 # --- 5. blank machine-id --------------------------------------------------
