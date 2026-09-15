@@ -108,18 +108,9 @@ class ControlCenterIndicator extends PanelMenu.Button {
                 this._tileBlur.enable();
                 this._backgroundAdaptive.sample().catch(e =>
                     logError(e, '[macos-top-panel] control center: background sample failed'));
-                // TEMP DIAGNOSTIC -- remove once the overflow is actually root-caused.
-                try {
-                    const [bx, by] = this.get_transformed_position();
-                    const [bw, bh] = this.get_transformed_size();
-                    log(`[macos-top-panel] CC open: button pos=${bx},${by} size=${bw}x${bh} `
-                        + `containerWidth(req)=${this._container.width} containerWidth(live)=${this._container.get_width()} `
-                        + `menuActorWidth(live)=${this.menu.actor ? this.menu.actor.get_width() : 'n/a'}`);
-                } catch (e) {
-                    log(`[macos-top-panel] CC open diagnostic failed: ${e}`);
-                }
-                this._keepMenuOnScreen();
+                this._startKeepMenuOnScreen();
             } else {
+                this._stopKeepMenuOnScreen();
                 this._tileBlur.disable();
                 this._backgroundAdaptive.reset();
                 const bp = this.menu.actor;
@@ -144,6 +135,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
                 this.menu.disconnect(this._openStateId);
                 this._openStateId = 0;
             }
+            this._stopKeepMenuOnScreen();
             this._tileBlur.destroy();
             this._backgroundAdaptive.destroy();
             this._controlCenterGlass.destroy();
@@ -189,64 +181,54 @@ class ControlCenterIndicator extends PanelMenu.Button {
     // in peachos-widgets' lib/widgetLayer.js: clamp the placement so width/height never
     // push the widget's far edge past the monitor bounds). Same idea here, both edges.
     //
-    // A single GLib.idle_add correction wasn't reliable (confirmed live, repeatedly): the
-    // popup's open animation/reflow can still move or resize it after that first idle
-    // callback fires, and get_width()/get_transformed_position() read whatever the
-    // in-progress layout happened to be at that exact moment, not its final settled state.
-    // Re-running the same clamp a few times over the open animation's window (~300ms,
-    // see FADE_DURATION elsewhere in this project) is self-correcting regardless of
-    // exactly when in that window it happens to run: each pass recomputes translation_x
-    // from the CURRENT actual on-screen position (which already includes any translation
-    // a previous pass applied), so it converges instead of compounding.
-    _keepMenuOnScreen() {
+    // A handful of one-shot corrections over the first ~300ms after opening (idle_add, then
+    // a few GLib.timeout_add passes) was NOT enough -- confirmed live, repeatedly, including
+    // with instrumented logging showing this class's own math computing the right numbers
+    // (translation_x that would land the popup exactly EDGE_MARGIN off both edges) while the
+    // actual on-screen popup still sat flush against the right edge. That means something
+    // keeps re-asserting BoxPointer's own (edge-flush) position for as long as the popup
+    // stays open, not just during the initial open animation -- so a handful of early passes
+    // can never be enough regardless of timing. Instead of guessing when that stops, just
+    // keep re-imposing the correction for the ENTIRE time the menu is open, re-fetching
+    // this.menu.actor fresh on every tick (rather than a single reference captured once) in
+    // case that's ever swapped out too.
+    _startKeepMenuOnScreen() {
+        this._stopKeepMenuOnScreen(); // idempotent -- never run two of these at once
         const EDGE_MARGIN = 12; // 14px in the original 61px-unit grid, scaled to 90%
-        const bp = this.menu.actor;
-        if (!bp)
-            return;
 
-        const clampOnce = (tag) => {
-            if (!bp.mapped) {
-                log(`[macos-top-panel] CC clamp[${tag}]: not mapped yet`);
-                return;
-            }
+        const clampOnce = () => {
+            const bp = this.menu.actor;
+            if (!bp || !bp.mapped)
+                return GLib.SOURCE_CONTINUE;
             const monitor = Main.layoutManager.primaryMonitor;
-            if (!monitor) {
-                log(`[macos-top-panel] CC clamp[${tag}]: no primary monitor`);
-                return;
-            }
-            // The popup's own current on-screen X (already includes any translation_x a
-            // previous pass applied) minus that same translation -- i.e. where it would
-            // sit with translation_x reset to 0 -- is what BoxPointer itself wants this
-            // frame. Width is the known, hard-capped CSS width (CONTROL_CENTER_MENU_WIDTH),
-            // not a live get_width() query, since that can read 0 or a mid-layout value
-            // before the popup has fully allocated.
+            if (!monitor)
+                return GLib.SOURCE_CONTINUE;
             const [screenX] = bp.get_transformed_position();
-            const liveWidth = bp.get_width();
             const translationBefore = bp.translation_x;
             const naturalX = screenX - translationBefore;
             const width = CONTROL_CENTER_MENU_WIDTH;
             const minX = monitor.x + EDGE_MARGIN;
             const maxX = monitor.x + monitor.width - EDGE_MARGIN - width;
             const clampedX = Math.max(minX, Math.min(naturalX, maxX));
-            bp.translation_x = clampedX - naturalX;
-            // TEMP DIAGNOSTIC -- remove once the overflow is actually root-caused.
-            log(`[macos-top-panel] CC clamp[${tag}]: monitor=${monitor.x},${monitor.y} ${monitor.width}x${monitor.height} `
-                + `screenX=${screenX} translation_x(before)=${translationBefore} naturalX=${naturalX} `
-                + `liveWidth=${liveWidth} assumedWidth=${width} minX=${minX} maxX=${maxX} clampedX=${clampedX} `
-                + `newTranslation=${bp.translation_x}`);
+            const newTranslation = clampedX - naturalX;
+            // TEMP DIAGNOSTIC -- remove once the overflow is actually root-caused. Only
+            // logs when the correction is non-trivial, so a settled popup doesn't spam.
+            if (Math.abs(newTranslation - translationBefore) > 0.5) {
+                log(`[macos-top-panel] CC clamp: screenX=${screenX} translation ${translationBefore} -> `
+                    + `${newTranslation} (monitor ${monitor.width}px, naturalX=${naturalX})`);
+            }
+            bp.translation_x = newTranslation;
+            return GLib.SOURCE_CONTINUE;
         };
 
-        // 5 passes spread across ~300ms: first as soon as idle, then a few more while the
-        // open animation/reflow is still potentially settling.
-        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            clampOnce('idle');
-            return GLib.SOURCE_REMOVE;
-        });
-        for (const delay of [40, 90, 150, 250]) {
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
-                clampOnce(`+${delay}ms`);
-                return GLib.SOURCE_REMOVE;
-            });
+        clampOnce();
+        this._keepOnScreenTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, clampOnce);
+    }
+
+    _stopKeepMenuOnScreen() {
+        if (this._keepOnScreenTimerId) {
+            GLib.source_remove(this._keepOnScreenTimerId);
+            this._keepOnScreenTimerId = 0;
         }
     }
 
