@@ -22,6 +22,17 @@
 # "none" and effectively never gets picked).
 set -u
 
+# pactl ships in pulseaudio-utils, a separate package from pipewire-pulse (the server this
+# talks to) -- confirmed missing on a real install (systemd showed this unit "succeeding" in
+# under 30ms instead of staying up as a watcher: the `pactl subscribe | while read` pipeline
+# below just failed immediately and fell through with pipefail off, i.e. a silent no-op, not
+# a loud failure). Fail loudly instead so `systemctl --user status peachos-tv-audio` actually
+# says why, rather than looking like a clean, do-nothing exit.
+if ! command -v pactl >/dev/null 2>&1; then
+    echo "[peachos-tv-audio] pactl not found -- install pulseaudio-utils" >&2
+    exit 1
+fi
+
 SINK_NAME_RE='gnome_network_displays'
 PREV_SINK_FILE="${XDG_RUNTIME_DIR:-/tmp}/peachos-tv-audio-prev-sink"
 

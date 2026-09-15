@@ -1003,9 +1003,14 @@ update-desktop-database /usr/share/applications
 # so a cast without this package gets picture with NO sound. x264enc needs plugins-ugly
 # (patent-encumbered, split out of -good/-bad); openh264enc (plugins-bad, already installed
 # above for AirMirror) is a fallback peachos-connect-tv.desktop doesn't force either way.
+# pulseaudio-utils is peachos-tv-audio's own dependency: pipewire-pulse (already pulled in by
+# pipewire-audio elsewhere in this script) is the PulseAudio-compatible SERVER, but the pactl
+# CLIENT TOOL the script actually runs ships in this separate package -- confirmed missing
+# live (peachos-tv-audio.service "succeeded" in under 30ms, `pactl: command not found` inside
+# the loop making it exit 0 immediately instead of staying up as a watcher).
 echo "==> Installing Connect to TV (Wi-Fi Display / Miracast casting)"
 apt-get install -y --no-install-recommends gnome-network-displays gstreamer1.0-fdkaac \
-    gstreamer1.0-plugins-ugly
+    gstreamer1.0-plugins-ugly pulseaudio-utils
 install -Dm755 "$REPO_DIR/apps/tv-audio/peachos-tv-audio" /usr/bin/peachos-tv-audio
 install -Dm644 "$REPO_DIR/apps/tv-audio/peachos-tv-audio.service" \
     /usr/lib/systemd/user/peachos-tv-audio.service
