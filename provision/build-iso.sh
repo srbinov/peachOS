@@ -186,6 +186,24 @@ if [[ $SKIP_CHECKS -eq 0 && $DO_PROVISION -eq 0 ]]; then
         systemctl --global enable peachos-mail.timer >/dev/null 2>&1 || true
     fi
 
+    # "Apps" launcher (see provision.sh "Installing peachOS App Launcher").
+    if [[ -f "$REPO_DIR/apps/applauncher/peachos-applauncher" ]]; then
+        install -Dm755 "$REPO_DIR/apps/applauncher/peachos-applauncher" /usr/bin/peachos-applauncher
+        cp "$REPO_DIR/apps/applauncher/peachos-applauncher.desktop" /usr/share/applications/
+        update-desktop-database /usr/share/applications 2>/dev/null || true
+    fi
+
+    # Connect to TV (see provision.sh "Installing Connect to TV").
+    if [[ -f "$REPO_DIR/apps/tv-audio/peachos-tv-audio" ]]; then
+        install -Dm755 "$REPO_DIR/apps/tv-audio/peachos-tv-audio" /usr/bin/peachos-tv-audio
+        install -Dm644 "$REPO_DIR/apps/tv-audio/peachos-tv-audio.service" \
+            /usr/lib/systemd/user/peachos-tv-audio.service
+        install -Dm644 "$REPO_DIR/apps/tv-audio/peachos-connect-tv.desktop" \
+            /usr/share/applications/peachos-connect-tv.desktop
+        update-desktop-database /usr/share/applications 2>/dev/null || true
+        systemctl --global enable peachos-tv-audio.service >/dev/null 2>&1 || true
+    fi
+
     echo "    extensions + Settings app + installer config now match the repo"
 fi
 

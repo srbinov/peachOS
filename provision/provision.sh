@@ -738,10 +738,12 @@ Keywords=Ubuntu;Applications;Apps;Store;Software;Snaps;
 MimeType=x-scheme-handler/snap;application/vnd.debian.binary-package;
 EOF
 
-# peachos-applauncher.desktop's Exec= just pokes macOS-TopBar-Gnome's own AppLauncherOverlay
-# (lib/appLauncher.js) over D-Bus to toggle the Launchpad-style grid -- no separate binary,
-# this is purely a Dock entry point for something the top-bar extension already implements.
-echo "==> Installing peachOS App Launcher (Launchpad) desktop entry"
+# peachos-applauncher.desktop's Exec= pokes macOS-TopBar-Gnome's own AppLauncherOverlay
+# (lib/appLauncher.js) over D-Bus to toggle the "Apps" overlay, falling back to GNOME's own
+# stock app grid if that D-Bus name isn't there -- this is purely a Dock entry point for
+# something the top-bar extension already implements, not a separate app.
+echo "==> Installing peachOS App Launcher (Apps overlay) desktop entry"
+install -Dm755 "$REPO_DIR/apps/applauncher/peachos-applauncher" /usr/bin/peachos-applauncher
 cp "$REPO_DIR/apps/applauncher/peachos-applauncher.desktop" /usr/share/applications/
 update-desktop-database /usr/share/applications
 
@@ -980,6 +982,26 @@ StartupNotify=true
 StartupWMClass=app.mirror.Mirror
 EOF
 update-desktop-database /usr/share/applications
+
+# "Connect to TV" -- Miracast/Wi-Fi Display casting (gnome-network-displays), the opposite
+# direction from AirMirror above (this laptop -> a TV, not a phone -> this laptop). Linux
+# has no AirPlay-to-Roku path at all (Roku's AirPlay support is Apple-only) -- Wi-Fi Display
+# ("Screen mirroring" in the Roku's own Settings > System menu) is the real protocol here.
+# fdkaacenc (gstreamer1.0-fdkaac) matters specifically: gnome-network-displays' default AAC
+# encoder pick, avenc_aac, is GStreamer rank "none" and effectively never gets auto-selected,
+# so a cast without this package gets picture with NO sound. x264enc needs plugins-ugly
+# (patent-encumbered, split out of -good/-bad); openh264enc (plugins-bad, already installed
+# above for AirMirror) is a fallback peachos-connect-tv.desktop doesn't force either way.
+echo "==> Installing Connect to TV (Wi-Fi Display / Miracast casting)"
+apt-get install -y --no-install-recommends gnome-network-displays gstreamer1.0-fdkaac \
+    gstreamer1.0-plugins-ugly
+install -Dm755 "$REPO_DIR/apps/tv-audio/peachos-tv-audio" /usr/bin/peachos-tv-audio
+install -Dm644 "$REPO_DIR/apps/tv-audio/peachos-tv-audio.service" \
+    /usr/lib/systemd/user/peachos-tv-audio.service
+install -Dm644 "$REPO_DIR/apps/tv-audio/peachos-connect-tv.desktop" \
+    /usr/share/applications/peachos-connect-tv.desktop
+update-desktop-database /usr/share/applications
+systemctl --global enable peachos-tv-audio.service >/dev/null 2>&1 || true
 
 echo "==> Installing MacTahoe GTK/Shell theme system-wide -> /usr/share/themes"
 git clone --quiet "$MACTAHOE_GTK_REPO" "$WORK_DIR/gtk-theme"
