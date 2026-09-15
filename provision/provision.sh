@@ -477,7 +477,18 @@ mkdir -p /usr/lib/peachos/settings
 rsync -a --delete "$REPO_DIR/apps/settings/src/" /usr/lib/peachos/settings/src/
 rsync -a --delete "$REPO_DIR/apps/settings/data/" /usr/lib/peachos/settings/data/
 install -Dm755 "$REPO_DIR/apps/settings/peachos-settings" /usr/bin/peachos-settings
-install -Dm644 "$REPO_DIR/apps/settings/peachos-settings.desktop" /usr/share/applications/peachos-settings.desktop
+# Desktop-id must match the GTK app's own application_id (main.py APP_ID =
+# 'org.peachos.Settings', GTK4/Wayland's xdg_toplevel app-id) -- GNOME Shell's
+# WindowTracker correlates a running window to a Shell.App primarily by matching that
+# app-id string to a .desktop file's own id/filename, not the legacy StartupWMClass=
+# hint (still set below for X11/Xwayland compat, but it isn't what Wayland-native
+# WindowTracker keys off of). The old filename, peachos-settings.desktop, didn't match
+# org.peachos.Settings at all, so the pinned favorite (keyed by that old desktop-id) and
+# the actual running window (keyed by the app-id string, no matching .desktop found) were
+# two different Shell.Apps -- Settings showed twice in the dock, once pinned and once as
+# a second, unpinned "running" icon. See favorite-apps below and dconf/01-peachos.
+install -Dm644 "$REPO_DIR/apps/settings/org.peachos.Settings.desktop" /usr/share/applications/org.peachos.Settings.desktop
+rm -f /usr/share/applications/peachos-settings.desktop  # stale pre-rename filename, if this host had it
 
 # Redirect the launchers gnome-control-center registered so anything that opens "Settings",
 # the Wallpaper panel or the Displays panel -- the desktop background right-click menu, the
