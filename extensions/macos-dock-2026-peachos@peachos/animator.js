@@ -35,6 +35,15 @@ const ANIMATE_CACHE_LOOKUP = 4;
 
 const DOT_CANVAS_SIZE = 96;
 
+// How much the reserved work-area strut should overlap the dock's own visible glass,
+// rather than pad past it. GNOME sizes a maximized window's edge to stop exactly at the
+// strut boundary -- a strut taller/wider than the dock's actual background (this used to add
+// `iconSize * 0.2 * scaleFactor` of headroom, presumably for icon-bounce overshoot) makes a
+// maximized window stop short of the dock, leaving a visible sliver of wallpaper between the
+// window's edge and the dock's glass. Sizing the strut 1px *inside* the background instead
+// guarantees the window tucks fully under the dock with no seam -- confirmed live.
+const WINDOW_OVERLAP = 1;
+
 export let Animator = class {
   enable() {
     if (!this._renderers) {
@@ -898,16 +907,17 @@ export let Animator = class {
           // D already includes hover magnification (scaleX), so DON'T also
           // set_scale the badge -- that was the old "location messed up" bug.
           let iconW = icon._renderer.width * icon._renderer.scaleX;
-          let D = iconW * 0.44;
+          let D = iconW * 0.368;
 
           badge.set_scale(1, 1);
           badge.width = D;
           badge.height = D;
           badge.update(icon, { noticesCount, size: D, extension: dock.extension });
 
-          // sit on the icon's top-right corner, ~70% overlapping it
-          badge.x = icon._renderer.x + iconW - D * 0.7;
-          badge.y = icon._renderer.y - D * 0.3;
+          // sit tucked into the icon's top-right corner, barely overflowing it (iOS/macOS
+          // style) -- smaller and closer to the corner than the original tuning.
+          badge.x = icon._renderer.x + iconW - D * 0.94;
+          badge.y = icon._renderer.y - D * 0.08;
           badge.show();
         }
       }
@@ -924,6 +934,18 @@ export let Animator = class {
       ) {
         let appCount = dock.getAppWindowsFiltered(icon._appwell.app).length;
         // appCount = 1;
+        // Shell.AppSystem can briefly report 0 windows for an app right after a burst of
+        // .desktop file changes (it's mid-rescan) -- confirmed live during an icon-
+        // appearance swap, where it read as every running dot on the dock blanking out for
+        // a moment. iconAppearanceBridge.js snapshots each app's real window count into
+        // dock._peachRunning right before a swap and keeps it current through pinOrder();
+        // fall back to that snapshot rather than trusting a live 0 outright.
+        if (appCount === 0 && dock._peachRunning) {
+          const appId = icon._appwell.app.get_id?.();
+          const snapshotCount = appId ? dock._peachRunning[appId] : undefined;
+          if (snapshotCount > 0)
+            appCount = snapshotCount;
+        }
         if (dots && appCount > 0) {
           dots.update(icon, {
             appCount,
@@ -1162,8 +1184,8 @@ export let Animator = class {
       // struts
       if (vertical) {
         dock.struts.width =
-          dock._background.width +
-          iconSize * 0.2 * scaleFactor +
+          dock._background.width -
+          WINDOW_OVERLAP +
           edge_distance -
           dock._background._padding * scaleFactor;
         dock.struts.height = dock.height;
@@ -1184,8 +1206,8 @@ export let Animator = class {
       } else {
         dock.struts.width = dock.width;
         dock.struts.height =
-          dock._background.height +
-          iconSize * 0.2 * scaleFactor +
+          dock._background.height -
+          WINDOW_OVERLAP +
           edge_distance -
           dock._background._padding * scaleFactor;
 

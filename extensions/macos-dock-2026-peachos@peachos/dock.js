@@ -843,7 +843,21 @@ export let Dock = GObject.registerClass(
             // peachySearch (ulauncher) -- Spotlight overlay; KiwiMenu's "About This PC"
             // window. Their Wayland windows can't set skip_taskbar, so the stock Dash
             // counts them as running apps -- filter those icons out of the dock here.
-            const isNonAppSurface = /^(io\.ulauncher\.Ulauncher|com\.github\.kemma\.KiwiMenu)\b/.test(appId);
+            //
+            // The appId prefix check alone misses the About window sometimes: it has no
+            // installed .desktop file, so WindowTracker occasionally correlates it to a
+            // synthetic "GJS" wrapper app instead of com.github.kemma.KiwiMenu.About --
+            // confirmed live. Title/wm_class are a second, independent signal for exactly
+            // that case (same fallback as macos-top-panel's lib/dashFilter.js).
+            let isNonAppSurface = /^(io\.ulauncher\.Ulauncher|com\.github\.kemma\.KiwiMenu)\b/.test(appId);
+            if (!isNonAppSurface && app?.get_windows) {
+              isNonAppSurface = app.get_windows().some((w) => {
+                const title = w.get_title ? w.get_title() : '';
+                if (title === 'peachySearch' || title === 'About This PC') return true;
+                const wmClass = (w.get_wm_class ? w.get_wm_class() : '') || '';
+                return wmClass.toLowerCase().includes('kiwimenu');
+              });
+            }
             if (isNonAppSurface && !this._favorite_ids?.includes(appId)) {
               c._appwell.visible = false;
               c.width = -1;
@@ -955,6 +969,16 @@ export let Dock = GObject.registerClass(
       // hack: sometimes the Dash creates more than one separator
       // workaround - remove all separators in such situation
       //! pinpoint the cause of the errors
+      //
+      // Only ever consider separators dash._box directly parents here. Our own extras
+      // separator (_extraIcons' child, itself a child of dash._box -- see createDash())
+      // shares the same 'dash-separator' style class _inspectIcon() keys off of, so if
+      // _extraIcons' children were ever inspected before this point it would land in
+      // this._separators too; remove_child() below targets dash._box specifically, and
+      // calling it with an actor whose real parent is _extraIcons doesn't remove the
+      // right thing -- confirmed live to leave a collapsed-width hole in the glass where
+      // the extras separator used to sit, right before Trash/Downloads.
+      this._separators = this._separators.filter((s) => s.get_parent() === this.dash._box);
       if (this._separators.length > 1) {
         while (this._separators.length > 0) {
           this.dash._box.remove_child(this._separators[0]);

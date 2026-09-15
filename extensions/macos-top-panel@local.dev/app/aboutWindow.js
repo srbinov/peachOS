@@ -258,6 +258,17 @@ function buildWindow(application) {
   return window;
 }
 
+// GNOME Shell's WindowTracker correlates a window back to a Shell.App primarily by
+// matching this process' app-id against an installed .desktop file -- this window has
+// none (launched directly via `gjs -m`, not a registered launcher), and that lookup has
+// been observed live to occasionally fall back to a synthetic wrapper keyed on the
+// interpreter ("GJS") instead of com.github.kemma.KiwiMenu.About. Setting prgname/
+// application-name explicitly is a second signal for that correlation to key off of;
+// lib/dashFilter.js also has an independent title/wm_class fallback in case this still
+// isn't enough on its own.
+GLib.set_prgname('com.github.kemma.KiwiMenu.About');
+GLib.set_application_name('About This PC');
+
 const application = new Adw.Application({
   application_id: 'com.github.kemma.KiwiMenu.About',
 });

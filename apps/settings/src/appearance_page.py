@@ -7,7 +7,7 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 from PIL import Image
 
-from widgets import DropdownRow, IconPlaceholderRow, make_hero_header
+from widgets import DropdownRow, IconPlaceholderRow, load_extension_settings, make_hero_header
 
 # GNOME Tweaks' Fonts section, ported over -- same org.gnome.desktop.interface
 # keys Tweaks itself reads/writes, just presented in peachOS's own Appearance
@@ -21,8 +21,88 @@ ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data'
 ICON_APPEARANCE_SCRIPT = '/usr/lib/peachos/iconmasker/peachos-icon-appearance'
 PLYMOUTH_SYNC_SCRIPT = '/usr/lib/peachos/plymouth/peachos-plymouth-sync'
 
-DOCK_ORDER_GUARD_BUS_NAME = 'org.peachos.DockOrderGuard'
-DOCK_ORDER_GUARD_OBJECT_PATH = '/org/peachos/DockOrderGuard'
+# ---- live dock hide/pin during an icon-appearance swap --------------------------------
+#
+# peachos-icon-appearance rewrites a whole burst of .desktop files at once; GNOME's own
+# dash.js admits its redisplay diffing "assumes only one item is moved at a given time",
+# so a bulk rewrite can reshuffle every app in the dock. The fix lives entirely in the
+# dock extension itself (extensions/macos-dock-2026-peachos@peachos/iconAppearanceBridge.js,
+# see that file's own top comment) -- this side just has to reach it and know when it's
+# done. There's no D-Bus service for this (unlike lib/dockOrderGuard.js -- the older
+# approach this replaced, still present in the extension as an in-process fallback, just
+# no longer driven from here; see git history for why it wasn't enough on its own): the
+# dock's msg-to-ext gsetting is a one-way fire-and-forget channel (GNOME Shell's own
+# _enableSettings() eval()s the string and clears the key), so completion is signalled
+# back by the Shell process writing a status file Settings polls instead.
+_DOCK_SCHEMA_ID = 'org.gnome.shell.extensions.macos-dock'
+# Several forks of this dock share the exact same schema id -- this repo's own UUID, a
+# developer's live-testing UUID, and the upstream project it was forked from -- so a bare
+# Gio.Settings.new(schema_id) would be ambiguous about which install it reaches. Try each
+# known UUID's own compiled schema in turn (same per-extension schema lookup GNOME Shell's
+# Extension.getSettings() does internally), first one installed wins.
+_DOCK_UUIDS = (
+    'macos-dock-2026-peachos@peachos',
+    'macos-dock-2.00@local',
+    'dash2dock-lite@icedman.github.com',
+)
+
+# Timing -- see extensions/macos-dock-2026-peachos@peachos/iconAppearanceBridge.js for the
+# dock-side half of these (it owns the actual poll loop; this is just how long Settings'
+# own UI is willing to wait on it before giving up and unblocking itself regardless).
+_DOCK_SLIDE_OUT_MS = 420
+_DOCK_READY_TIMEOUT_MS = 10000
+_DOCK_READY_POLL_MS = 150
+
+
+def _dock_settings():
+    for uuid in _DOCK_UUIDS:
+        settings = load_extension_settings(uuid, _DOCK_SCHEMA_ID)
+        if settings is not None:
+            return settings
+    return None
+
+
+def _eval_dock(js: str) -> bool:
+    """Fire-and-forget JS into the live dock's own msg-to-ext key. Silently does nothing
+    if no dock extension is found (e.g. this page opened outside a real peachOS session)
+    -- the icon style still applies, the dock just isn't there to hide/pin."""
+    settings = _dock_settings()
+    if settings is None:
+        return False
+    try:
+        settings.set_string('msg-to-ext', js)
+        return True
+    except GLib.Error:
+        return False
+
+
+def _dock_status_path() -> str:
+    runtime_dir = GLib.getenv('XDG_RUNTIME_DIR') or '/tmp'
+    return os.path.join(runtime_dir, 'peachos-ia-dock')
+
+
+def _wait_dock_ready(on_ready, timeout_ms=_DOCK_READY_TIMEOUT_MS):
+    """Poll the status file iconAppearanceBridge.js's finish()/abort() write 'ready' to --
+    there's no return channel over msg-to-ext, so this is how Settings learns the dock
+    actually finished (icons confirmed matching + slid back in) instead of guessing a
+    fixed delay. Always calls on_ready() eventually, even on timeout: the Settings UI must
+    never hang waiting on the Shell process forever."""
+    path = _dock_status_path()
+    deadline = GLib.get_monotonic_time() + timeout_ms * 1000
+
+    def tick():
+        ready = False
+        try:
+            with open(path, encoding='utf-8') as f:
+                ready = f.read().strip() == 'ready'
+        except OSError:
+            pass
+        if ready or GLib.get_monotonic_time() >= deadline:
+            on_ready()
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
+    GLib.timeout_add(_DOCK_READY_POLL_MS, tick)
 
 
 def _optional_settings(schema_id: str):
@@ -37,21 +117,6 @@ def _optional_settings(schema_id: str):
     if source is None or source.lookup(schema_id, True) is None:
         return None
     return Gio.Settings.new(schema_id)
-
-
-def _call_dock_order_guard(method_name: str):
-    """Fire-and-forget call into lib/dockOrderGuard.js (see that file for why this has to
-    round-trip into the Shell process). Silently does nothing if the extension isn't loaded
-    (e.g. running this page outside a real peachOS session) -- this is a nice-to-have
-    ordering guard, not something worth surfacing an error dialog over."""
-    try:
-        proxy = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
-            DOCK_ORDER_GUARD_BUS_NAME, DOCK_ORDER_GUARD_OBJECT_PATH, DOCK_ORDER_GUARD_BUS_NAME, None,
-        )
-        proxy.call_sync(method_name, None, Gio.DBusCallFlags.NONE, 500, None)
-    except GLib.Error:
-        pass
 
 
 def _load_scaled_picture(path: str, width: int, height: int) -> Gtk.Picture:
@@ -872,25 +937,28 @@ class AppearancePage(Gtk.Box):
         layout_snapshot = shell_settings.get_value('app-picker-layout')
         favorites_snapshot = shell_settings.get_strv('favorite-apps')
 
-        # Separately: GNOME's own dash.js _redisplay() admits in its own source comment that
-        # its diffing algorithm assumes only one item moves at a time, and touching several at
-        # once (exactly what changing every app's icon does) can make it "remove all the
-        # launchers and add them back in a new order" -- a real Shell limitation, not a
-        # gsettings issue, so app-picker-layout/favorite-apps staying byte-identical doesn't
-        # stop it. dockOrderGuard (lib/dockOrderGuard.js in the extension) snapshots the dock's
-        # actual on-screen actor order before, and forces it back after -- that has to happen
-        # inside the Shell process, where those actors live, hence the D-Bus round-trip here.
-        _call_dock_order_guard('Snapshot')
+        # The dock itself needs a separate, bigger guard: GNOME's own dash.js _redisplay()
+        # admits its diffing algorithm "assumes only one item is moved at a given time", and
+        # touching every app's .desktop file at once is exactly what reliably breaks that
+        # assumption. Hide the dock for the whole swap and only reveal it once its icons are
+        # CONFIRMED current -- see iconAppearanceBridge.js's own top comment for the full
+        # reasoning and why this replaced the older dockOrderGuard-based approach (still
+        # present as an in-process fallback, just no longer driven from here).
+        try:
+            os.remove(_dock_status_path())
+        except OSError:
+            pass
+        _eval_dock('this.peachIconAppearanceBegin();')
 
-        proc = Gio.Subprocess.new(
-            [ICON_APPEARANCE_SCRIPT, style_id],
-            Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE,
-        )
+        def launch_subprocess():
+            proc = Gio.Subprocess.new(
+                [ICON_APPEARANCE_SCRIPT, style_id],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE,
+            )
+            proc.communicate_utf8_async(None, None, on_subprocess_done)
+            return GLib.SOURCE_REMOVE
 
-        def on_done(source, result):
-            self._icon_style_busy = False
-            for opt in self._icon_style_options.values():
-                opt.set_opacity(1.0)
+        def on_subprocess_done(source, result):
             try:
                 ok, _stdout, stderr = source.communicate_utf8_finish(result)
                 success = ok and source.get_exit_status() == 0
@@ -899,24 +967,34 @@ class AppearancePage(Gtk.Box):
 
             shell_settings.set_value('app-picker-layout', layout_snapshot)
             shell_settings.set_strv('favorite-apps', favorites_snapshot)
-            # dockOrderGuard.Snapshot froze the dash's redisplay; Restore un-freezes it. Hold
-            # the freeze until well after the AppSystem installed-changed debounce (~1s) has
-            # fired -- while frozen, that signal can't reshuffle the dock. Fire twice as a
-            # safety net (Restore is idempotent).
-            for delay in (1800, 3500):
-                GLib.timeout_add(delay, lambda: _call_dock_order_guard('Restore') or GLib.SOURCE_REMOVE)
 
-            if success:
-                on_success()
-            elif stderr and stderr.strip():
-                dialog = Adw.AlertDialog(
-                    heading='Couldn’t change icon appearance',
-                    body=stderr.strip(),
-                )
-                dialog.add_response('ok', 'OK')
-                dialog.present(self.get_root())
+            # Nothing actually changed on disk if the script failed -- put the dock's order
+            # back and reveal it right away, no icon-matching wait needed. On success, the
+            # dock polls its OWN live icons against the now-current .desktop files and only
+            # reveals once they actually match (see iconAppearanceBridge.js finish()) --
+            # _wait_dock_ready below is Settings finding out when that's done, not driving it.
+            _eval_dock('this.peachIconAppearanceFinish();' if success
+                       else 'this.peachIconAppearanceAbort();')
 
-        proc.communicate_utf8_async(None, None, on_done)
+            def unblock():
+                self._icon_style_busy = False
+                for opt in self._icon_style_options.values():
+                    opt.set_opacity(1.0)
+                if success:
+                    on_success()
+                elif stderr and stderr.strip():
+                    dialog = Adw.AlertDialog(
+                        heading='Couldn’t change icon appearance',
+                        body=stderr.strip(),
+                    )
+                    dialog.add_response('ok', 'OK')
+                    dialog.present(self.get_root())
+
+            _wait_dock_ready(unblock)
+
+        # Don't start rewriting .desktop files until the dock has actually finished sliding
+        # off -- otherwise the first few icon updates land while it's still partway visible.
+        GLib.timeout_add(_DOCK_SLIDE_OUT_MS, launch_subprocess)
 
     def _refresh_icon_style_selection(self):
         active = self._appearance_settings.get_string('icon-style')

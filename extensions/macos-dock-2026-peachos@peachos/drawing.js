@@ -113,6 +113,30 @@ function draw_text(ctx, showtext, font = 'DejaVuSans 42') {
   return [w, h];
 }
 
+// Same as draw_text(), but centers on the glyphs' actual ink extents rather than the
+// layout's logical size. Logical size includes the font's own ascent/descent/leading
+// padding, which for a tiny badge count (one or two digits, ~font size 20-40) reads as
+// visibly off-center -- different fonts pad that whitespace asymmetrically, so a number
+// that looks centered in one font sits noticeably high or low in another. Ink extents are
+// the tight bounding box of what's actually drawn, so this centers the digits themselves,
+// not the invisible line-height box around them.
+function draw_text_ink_centered(ctx, showtext, font = 'DejaVuSans 42') {
+  ctx.save();
+  let pl = PangoCairo.create_layout(ctx);
+  pl.set_text(showtext, -1);
+  pl.set_font_description(Pango.FontDescription.from_string(font));
+  PangoCairo.update_layout(ctx, pl);
+  let [ink] = pl.get_pixel_extents();
+  let [w, h] = pl.get_pixel_size();
+  let dx = -ink.x - ink.width / 2;
+  let dy = -ink.y - ink.height / 2;
+  ctx.relMoveTo(dx, dy);
+  PangoCairo.show_layout(ctx, pl);
+  ctx.relMoveTo(-dx, -dy); // fully restore the cursor, unlike draw_text()'s partial restore
+  ctx.restore();
+  return [w, h];
+}
+
 function set_color(ctx, clr, alpha) {
   if (typeof clr === 'string') {
     const fn = Cogl?.Color.from_string || Clutter?.Color.from_string;
@@ -140,4 +164,5 @@ export const Drawing = {
   draw_rect,
   draw_rounded_rect,
   draw_text,
+  draw_text_ink_centered,
 };

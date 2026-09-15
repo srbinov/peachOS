@@ -15,6 +15,7 @@ import Shell from 'gi://Shell';
 // than reimplementing its own app enumeration) build their running-apps icon list from.
 
 const PEACHY_SEARCH_TITLE = 'peachySearch';
+const ABOUT_WINDOW_TITLE = 'About This PC';
 
 // App IDs that are peachOS UI surfaces, not real apps, and must never take a dock
 // slot while open (same reasoning as peachySearch: their windows can't reliably
@@ -32,7 +33,19 @@ function isNonAppSurface(app) {
     if (NON_APP_ID_PREFIXES.some(p => id === p || id === `${p}.desktop` || id.startsWith(`${p}.`)))
         return true;
     const windows = app.get_windows ? app.get_windows() : [];
-    return windows.some(w => w.get_title() === PEACHY_SEARCH_TITLE);
+    // The id-prefix check above is the reliable path, but it depends on WindowTracker
+    // actually correlating the window back to the com.github.kemma.KiwiMenu.About app-id
+    // -- confirmed live to sometimes fail (aboutWindow.js has no installed .desktop file,
+    // so WindowTracker occasionally falls back to a synthetic wrapper keyed on the
+    // interpreter, "GJS", instead). Title/wm_class are a second, independent signal that
+    // doesn't depend on that correlation succeeding.
+    return windows.some(w => {
+        const title = w.get_title?.() ?? '';
+        if (title === PEACHY_SEARCH_TITLE || title === ABOUT_WINDOW_TITLE)
+            return true;
+        const wmClass = (w.get_wm_class?.() ?? '').toLowerCase();
+        return wmClass.includes('kiwimenu');
+    });
 }
 
 let _originalGetRunning = null;

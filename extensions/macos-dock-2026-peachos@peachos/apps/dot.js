@@ -373,7 +373,13 @@ const DotCanvas = GObject.registerClass(
       // same digit size whether it's "3" or the "9" in "9+"
       let fontSize = Math.round(r * 0.95);
       ctx.moveTo(cx, cy - fontSize * 0.05);
-      Drawing.draw_text(ctx, label, `Inter Heavy ${fontSize}`);
+      // "Inter Heavy" isn't an installed font (Pango silently falls back to a generic
+      // face, inconsistent digit shapes/weight). PeachRounded is the system-wide
+      // fontconfig alias for SF Pro Rounded (provision/fontconfig/49-peachos-widgets.conf,
+      // same one extensions/peachos-widgets@peachos/lib/fonts.js uses) -- it ships with
+      // peachOS and matches the rest of the UI. Ink-centered so the digits sit dead-center
+      // in the badge circle regardless of the font's own line-height padding.
+      Drawing.draw_text_ink_centered(ctx, label, `PeachRounded Medium ${fontSize}`);
     }
   }
 );

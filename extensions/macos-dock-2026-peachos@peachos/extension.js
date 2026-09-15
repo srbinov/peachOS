@@ -36,6 +36,7 @@ import { Dock } from './dock.js';
 import { Services } from './services.js';
 import { Integrations } from './integrations.js';
 import { runTests } from './diagnostics.js';
+import * as PeachIA from './iconAppearanceBridge.js';
 
 import {
   Extension,
@@ -120,6 +121,23 @@ export default class Dash2DockLiteExt extends Extension {
         d._monitorIndex = i;
       }
     }
+  }
+
+  // ---- apps/settings' Appearance page (peachos-icon-appearance) -----------------
+  // Short, stable entry points invoked over the msg-to-ext gsetting (see
+  // _enableSettings()'s 'msg-to-ext' case below) -- the actual freeze/hide/pin
+  // mechanism lives in iconAppearanceBridge.js. See that file's own top comment for
+  // why the dock needs this at all.
+  peachIconAppearanceBegin() {
+    PeachIA.begin(this);
+  }
+
+  peachIconAppearanceFinish() {
+    PeachIA.finish(this);
+  }
+
+  peachIconAppearanceAbort() {
+    PeachIA.abort(this);
   }
 
   destroyDocks() {
