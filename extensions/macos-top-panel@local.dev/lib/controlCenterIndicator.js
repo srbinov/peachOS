@@ -213,6 +213,16 @@ class ControlCenterIndicator extends PanelMenu.Button {
             vertical: true,
             style_class: 'macos-control-center-column',
             x_expand: true,
+            // Belt-and-suspenders on top of every tile's own fixed width (pills, media
+            // card, circle rows, sliders): a hard cap + clip here means NOTHING this
+            // column ever holds -- including anything added later -- can request more
+            // width than the menu's own 280px content area (314px menu - 17px padding
+            // each side, see .macos-control-center-menu) and blow the fixed-width popup
+            // open past the screen edge. Without this, an St.BoxLayout child's reported
+            // natural size can exceed what its parent actually has and just keeps
+            // propagating upward instead of being constrained -- confirmed live, twice.
+            width: 280,
+            clip_to_allocation: true,
         });
         root.add_child(this._container);
 
@@ -418,16 +428,6 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // (matched to the media card next to it), and this row needs to stretch with it
         // so the badge/text -- already y_align: CENTER below -- actually center in the
         // taller pill instead of hugging its top edge with dead space under them.
-        //
-        // x_expand on content AND textColumn matters now that the pill has a fixed CSS
-        // width (134px, 2 units -- see .macos-control-center-pill's own comment): without
-        // it, a long subtitle ("August (Excellent)") reports a natural width wider than
-        // 134px, and nothing forces the label back down to the button's actual allocation
-        // for ellipsize to act on -- that natural-size request just propagates straight up
-        // through content -> button -> leftColumn -> topRow -> the whole popup, which blew
-        // the fixed-width menu open past the screen edge (confirmed live). x_expand makes
-        // content/textColumn take exactly what their parent actually hands them instead of
-        // asking for more, so the label gets truncated at 134px like it always meant to.
         const content = new St.BoxLayout({style_class: 'macos-control-center-row', x_expand: true, y_expand: true});
         button.set_child(content);
 
@@ -444,16 +444,26 @@ class ControlCenterIndicator extends PanelMenu.Button {
         });
         content.add_child(textColumn);
 
-        const titleLabel = new St.Label({
-            text: title, style_class: 'macos-control-center-pill-title', x_expand: true,
-        });
+        // Hard width cap, not just x_expand: true (tried that first -- didn't hold, see
+        // git history). x_expand only governs how BoxLayout hands out space *beyond*
+        // children's own natural sizes; it does NOT shrink a child below what it reports
+        // wanting, so a long real subtitle ("August (Excellent)") still reported a wider
+        // natural size than the pill's fixed 134px and that demand rode straight up
+        // through content -> button -> leftColumn -> topRow -> the whole popup, blowing
+        // the fixed-width (314px) menu open past the screen edge. set_width() on the
+        // ClutterText directly forces Pango to lay out (and ellipsize) inside that exact
+        // pixel count, full stop, regardless of what the text would naturally need -- the
+        // only way to actually guarantee this pill never asks its parent for more than
+        // 134px again. Budget: 134 (pill) - 10*2 (padding) - 26 (badge) - 12 (spacing).
+        const TEXT_COLUMN_WIDTH = 74;
+        const titleLabel = new St.Label({text: title, style_class: 'macos-control-center-pill-title'});
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        titleLabel.clutter_text.set_width(TEXT_COLUMN_WIDTH);
         textColumn.add_child(titleLabel);
 
-        const subtitleLabel = new St.Label({
-            text: subtitle, style_class: 'macos-control-center-pill-subtitle', x_expand: true,
-        });
+        const subtitleLabel = new St.Label({text: subtitle, style_class: 'macos-control-center-pill-subtitle'});
         subtitleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        subtitleLabel.clutter_text.set_width(TEXT_COLUMN_WIDTH);
         textColumn.add_child(subtitleLabel);
 
         return {actor: button, titleLabel, subtitleLabel};
@@ -626,20 +636,20 @@ class ControlCenterIndicator extends PanelMenu.Button {
         artBin.set_child(artIcon);
         actor.add_child(artBin);
 
-        // x_expand: true for the same reason the Wi-Fi/Bluetooth pill labels have it now
-        // (see _createPill's own comment) -- the card has a fixed 134px CSS width too, and
-        // a long real track title/artist would otherwise report a wider natural size than
-        // that and blow the fixed-width popup open, instead of actually ellipsizing.
-        const titleLabel = new St.Label({
-            text: 'Nothing Playing', style_class: 'macos-control-center-media-title', x_expand: true,
-        });
+        // Hard width cap (set_width() on the ClutterText, not just x_expand) -- same fix,
+        // same reason as _createPill's title/subtitle labels: x_expand alone doesn't
+        // shrink a child below its own reported natural size, so a long real track title
+        // would still ask this fixed-134px card's parent for more room and blow the
+        // fixed-width popup open. Budget: 134 (card) - 8*2 (padding).
+        const MEDIA_TEXT_WIDTH = 110;
+        const titleLabel = new St.Label({text: 'Nothing Playing', style_class: 'macos-control-center-media-title'});
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        titleLabel.clutter_text.set_width(MEDIA_TEXT_WIDTH);
         actor.add_child(titleLabel);
 
-        const artistLabel = new St.Label({
-            text: '', style_class: 'macos-control-center-media-artist', x_expand: true,
-        });
+        const artistLabel = new St.Label({text: '', style_class: 'macos-control-center-media-artist'});
         artistLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        artistLabel.clutter_text.set_width(MEDIA_TEXT_WIDTH);
         actor.add_child(artistLabel);
 
         const transportRow = new St.BoxLayout({style_class: 'macos-control-center-media-transport', x_expand: true});
