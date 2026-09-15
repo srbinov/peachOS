@@ -4,14 +4,19 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-// macOS-style Launchpad: a full-screen, dimmed overlay showing every installed app in a
-// paged grid, triggered from a Dock icon rather than launched as a real windowed app (see
-// the peachos-applauncher.desktop entry this exposes a toggle for over D-Bus). Deliberately
-// a flat dark tint, not a real Shell.BlurEffect backdrop -- this project's own liquid-glass
-// doc (docs/liquid-glass-style.md) already establishes why: Shell.BlurEffect on popup-style
-// chrome caused real Clutter paint-abort crashes here before, and this overlay (full-screen,
-// covering everything) has an even bigger blast radius if that same class of bug showed up
-// again, so it isn't worth the risk for a visual nicety.
+// macOS 26/27 "Apps" overlay: a full-screen chrome layer with the wallpaper still visible
+// through a light dim, a floating search pill, and a rounded liquid-glass panel with
+// category tabs over a vertically-scrolling app grid -- NOT the classic paged Launchpad
+// (no page dots, no horizontal paging). Triggered from a Dock icon rather than launched as
+// a real windowed app (see the peachos-applauncher.desktop entry this exposes a toggle for
+// over D-Bus).
+//
+// No Shell.BlurEffect anywhere in here, same rule as the Control Center (see this
+// extension's docs/liquid-glass-style.md "Hard rules"): Shell.BlurEffect on popup-style
+// chrome has caused real Clutter paint-abort crashes here before, and this overlay
+// (full-screen, covering everything) has an even bigger blast radius if that showed up
+// again. The glass panel below is a CSS approximation (translucent fill + vertical
+// gradient + rim + inset top highlight), not a real backdrop blur.
 const BUS_NAME = 'org.peachos.AppLauncher';
 const OBJECT_PATH = '/org/peachos/AppLauncher';
 const IFACE_XML = `
@@ -22,20 +27,33 @@ const IFACE_XML = `
 </node>`;
 
 const FADE_DURATION = 280;
-const PAGE_SLIDE_DURATION = 300;
 const DOCK_ACTOR_NAME = 'dashtodockContainer'; // dash2dock-lite's own name for its dock actor
 // peachOS's own UI-toggle entries -- not real apps to launch from inside this grid.
 // "Apps" is this very overlay (clicking it from within itself would be pointless/recursive),
 // and peachySearch already has its own dedicated top-bar icon and shortcut.
 const EXCLUDED_DESKTOP_IDS = new Set(['peachos-applauncher.desktop', 'io.ulauncher.Ulauncher.desktop']);
+
 const COLUMNS = 7;
-const ROWS = 5;
-const CELL_WIDTH = 132;
-const CELL_HEIGHT = 132;
-const ICON_SIZE = 72;
-// Smooth-scroll (touchpad) delta accumulates until it crosses this before paging, so a
-// single light two-finger nudge doesn't fling through several pages at once.
-const SWIPE_THRESHOLD = 12;
+const VISIBLE_ROWS = 4;
+const CELL_WIDTH = 118;
+const CELL_HEIGHT = 108;
+const ICON_SIZE = 62;
+
+// [tab label, RegExp tested against the app's raw Categories= string, or null for "All"].
+// freedesktop.org categories aren't mutually exclusive (a video editor is both AudioVideo
+// AND AudioVideoEditing) and neither are these tabs -- same as macOS's own App Store
+// categories, an app can reasonably show up under more than one.
+const CATEGORY_TABS = [
+    ['All', null],
+    ['Utilities', /\bUtility\b/],
+    ['Productivity', /\bOffice\b/],
+    ['Social', /\b(Network|Chat|InstantMessaging|Email)\b/],
+    ['Photo & Video', /\b(Photography|Graphics|Viewer)\b/],
+    ['Games', /\bGame\b/],
+    ['Entertainment', /\b(AudioVideo|Audio|Video|Player|Music)\b/],
+    ['Creativity', /\b(2DGraphics|3DGraphics|RasterGraphics|VectorGraphics|AudioVideoEditing|Publishing)\b/],
+    ['Information & Reading', /\b(News|Documentation|Education|Literature|Dictionary)\b/],
+];
 
 function _findActorByName(actor, name) {
     if (actor.name === name)
@@ -51,10 +69,9 @@ function _findActorByName(actor, name) {
 export class AppLauncherOverlay {
     constructor() {
         this._open = false;
-        this._page = 0;
-        this._pages = [];
         this._allApps = [];
-        this._scrollAccum = 0;
+        this._category = CATEGORY_TABS[0];
+        this._categoryButtons = [];
         this._capturedEventId = 0;
         this._ownerId = 0;
         this._exportedObject = null;
@@ -68,6 +85,8 @@ export class AppLauncherOverlay {
             visible: false,
         });
 
+        // A light wash the wallpaper still reads through, not the old flat-black Launchpad
+        // veil -- macOS's own Apps overlay keeps the desktop visibly present behind it.
         this._dim = new St.Widget({style_class: 'macos-applauncher-dim', reactive: true});
         this._dim.connect('button-press-event', () => {
             this.close();
@@ -80,49 +99,20 @@ export class AppLauncherOverlay {
             style_class: 'macos-applauncher-content',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
-            y_expand: true,
         });
         this._content.set_pivot_point(0.5, 0.5);
         this._root.add_child(this._content);
 
-        this._searchEntry = new St.Entry({
-            style_class: 'macos-applauncher-search',
-            hint_text: 'Search',
-            can_focus: true,
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-        this._searchEntry.clutter_text.connect('text-changed', () => this._onSearchChanged());
-        // No blinking text cursor at all, by explicit request -- set_cursor_visible(false)
-        // is the real ClutterText API for this, distinct from just recoloring it.
-        this._searchEntry.clutter_text.set_cursor_visible(false);
-        this._content.add_child(this._searchEntry);
+        this._content.add_child(this._buildSearchBar());
 
-        this._viewport = new St.Widget({
-            style_class: 'macos-applauncher-viewport',
-            clip_to_allocation: true,
-            layout_manager: new Clutter.BinLayout(),
-            reactive: true,
+        this._panel = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'macos-applauncher-panel',
         });
-        this._viewport.set_size(COLUMNS * CELL_WIDTH, ROWS * CELL_HEIGHT);
-        this._viewport.connect('scroll-event', this._onScroll.bind(this));
-        this._content.add_child(this._viewport);
+        this._content.add_child(this._panel);
 
-        this._pagesBox = new St.BoxLayout({orientation: Clutter.Orientation.HORIZONTAL});
-        this._viewport.add_child(this._pagesBox);
-
-        this._dotsBox = new St.BoxLayout({
-            style_class: 'macos-applauncher-dots',
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-        // spacing isn't a constructible property on St.BoxLayout (it's forwarded to the
-        // actor's internal Clutter.BoxLayout layout manager, not a real property on the
-        // widget itself) -- passing it in the object literal above throws "No property
-        // spacing on StBoxLayout" and aborts the whole extension's enable(). Has to be set
-        // as a separate assignment after construction, same as Main.panel._rightBox.spacing
-        // elsewhere in this extension.
-        this._dotsBox.spacing = 8;
-        this._content.add_child(this._dotsBox);
+        this._panel.add_child(this._buildCategoryTabs());
+        this._panel.add_child(this._buildGrid());
 
         Main.layoutManager.addChrome(this._root);
 
@@ -130,6 +120,100 @@ export class AppLauncherOverlay {
             Gio.BusType.SESSION, BUS_NAME, Gio.BusNameOwnerFlags.NONE,
             this._onBusAcquired.bind(this), null, null,
         );
+    }
+
+    // ---- construction ---------------------------------------------------------------
+
+    _buildSearchBar() {
+        const bar = new St.BoxLayout({
+            style_class: 'macos-applauncher-searchbar',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+        bar.spacing = 8; // not constructible on St.BoxLayout -- see below
+
+        bar.add_child(new St.Icon({
+            icon_name: 'edit-find-symbolic',
+            style_class: 'macos-applauncher-searchbar-icon',
+            icon_size: 15,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+
+        this._searchEntry = new St.Entry({
+            style_class: 'macos-applauncher-searchbar-entry',
+            hint_text: 'Search',
+            can_focus: true,
+            x_expand: true,
+        });
+        this._searchEntry.clutter_text.connect('text-changed', () => this._refresh());
+        // No blinking text cursor at all, by explicit request -- set_cursor_visible(false)
+        // is the real ClutterText API for this, distinct from just recoloring it.
+        this._searchEntry.clutter_text.set_cursor_visible(false);
+        bar.add_child(this._searchEntry);
+
+        const more = new St.Button({
+            style_class: 'macos-applauncher-searchbar-more',
+            child: new St.Label({text: '⋯'}), // "⋯"
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        more.connect('clicked', () => {
+            this._searchEntry.set_text('');
+            this._selectCategory(CATEGORY_TABS[0]);
+        });
+        bar.add_child(more);
+
+        return bar;
+    }
+
+    _buildCategoryTabs() {
+        this._catsBox = new St.BoxLayout({
+            style_class: 'macos-applauncher-cats',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+        this._catsBox.spacing = 4; // not constructible -- see the search bar comment above
+
+        this._categoryButtons = CATEGORY_TABS.map((tab) => {
+            const btn = new St.Button({
+                style_class: 'macos-applauncher-cat',
+                label: tab[0],
+                can_focus: true,
+            });
+            btn.connect('clicked', () => this._selectCategory(tab));
+            this._catsBox.add_child(btn);
+            return btn;
+        });
+
+        return this._catsBox;
+    }
+
+    _buildGrid() {
+        this._scroll = new St.ScrollView({
+            style_class: 'macos-applauncher-scroll',
+            width: COLUMNS * CELL_WIDTH,
+            height: VISIBLE_ROWS * CELL_HEIGHT,
+            overlay_scrollbars: true,
+        });
+        this._scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+
+        // St.ScrollView.set_child() requires an St.Scrollable -- St.BoxLayout is one,
+        // a bare St.Widget with a Clutter.GridLayout is NOT. Handing it the grid widget
+        // directly throws "Object is of type St.Widget - cannot convert to StScrollable"
+        // out of set_child(), which aborts this constructor and (uncaught, before
+        // extension.js wrapped this construction in its own try/catch) took the entire
+        // top bar down with it on login -- confirmed live. The grid must go inside a real
+        // St.BoxLayout host, same pattern as every other scrollable list in this
+        // extension (e.g. wifiIndicator.js's networks box).
+        this._gridHost = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
+        this._grid = new St.Widget({
+            layout_manager: new Clutter.GridLayout(),
+            width: COLUMNS * CELL_WIDTH,
+        });
+        this._gridHost.add_child(this._grid);
+        this._scroll.set_child(this._gridHost); // St.BoxLayout, never the grid widget itself
+
+        return this._scroll;
     }
 
     _onBusAcquired(connection) {
@@ -157,6 +241,8 @@ export class AppLauncherOverlay {
         this._reposition();
         this._loadApps();
         this._searchEntry.set_text('');
+        this._selectCategory(CATEGORY_TABS[0]);
+        this._scroll.vscroll?.adjustment.set_value(0);
 
         this._root.visible = true;
         this._root.opacity = 0;
@@ -167,9 +253,9 @@ export class AppLauncherOverlay {
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
-        // Subtle zoom-in on the content (search + grid + dots) on top of the dim
-        // background's plain fade -- the same "settles into place" read real macOS
-        // Launchpad has, rather than just popping straight to full size.
+        // Subtle zoom-in on the content (search + panel) on top of the dim background's
+        // plain fade -- the same "settles into place" read real macOS has, rather than
+        // just popping straight to full size.
         this._content.remove_all_transitions();
         this._content.scale_x = 0.94;
         this._content.scale_y = 0.94;
@@ -277,57 +363,55 @@ export class AppLauncherOverlay {
         this._dim.set_size(monitor.width, monitor.height);
     }
 
+    // ---- apps / filtering -------------------------------------------------------------
+
     _loadApps() {
         this._allApps = Gio.AppInfo.get_all()
             .filter(app => app.should_show() && !EXCLUDED_DESKTOP_IDS.has(app.get_id()))
             .sort((a, b) => a.get_name().localeCompare(b.get_name()));
-        this._buildPages(this._allApps);
+        this._refresh();
     }
 
-    _onSearchChanged() {
-        const query = this._searchEntry.get_text().trim().toLowerCase();
-        const apps = query
-            ? this._allApps.filter(app => app.get_name().toLowerCase().includes(query))
-            : this._allApps;
-        this._buildPages(apps);
+    _selectCategory(tab) {
+        this._category = tab;
+        this._categoryButtons.forEach((btn, i) => {
+            btn[CATEGORY_TABS[i] === tab ? 'add_style_class_name' : 'remove_style_class_name']('selected');
+        });
+        this._refresh();
     }
 
-    _buildPages(apps) {
-        this._pagesBox.remove_all_children();
-        this._dotsBox.remove_all_children();
-        this._pages = [];
-
-        const perPage = COLUMNS * ROWS;
-        const pageCount = Math.max(1, Math.ceil(apps.length / perPage));
-
-        for (let p = 0; p < pageCount; p++) {
-            const pageApps = apps.slice(p * perPage, (p + 1) * perPage);
-            const page = new St.Widget({
-                layout_manager: new Clutter.GridLayout(),
-                width: COLUMNS * CELL_WIDTH,
-                height: ROWS * CELL_HEIGHT,
+    _filteredApps() {
+        let apps = this._allApps;
+        const [, categoryRe] = this._category;
+        if (categoryRe) {
+            apps = apps.filter((app) => {
+                try {
+                    return categoryRe.test(app.get_categories?.() ?? '');
+                } catch (e) {
+                    return false;
+                }
             });
-            const grid = page.layout_manager;
-            pageApps.forEach((appInfo, i) => {
-                grid.attach(this._createAppTile(appInfo), i % COLUMNS, Math.floor(i / COLUMNS), 1, 1);
-            });
-            this._pagesBox.add_child(page);
-            this._pages.push(page);
-
-            const dot = new St.Widget({style_class: 'macos-applauncher-dot', reactive: true});
-            const pageIndex = p;
-            dot.connect('button-press-event', () => {
-                this._goToPage(pageIndex);
-                return Clutter.EVENT_STOP;
-            });
-            this._dotsBox.add_child(dot);
         }
+        const query = this._searchEntry.get_text().trim().toLowerCase();
+        if (query) {
+            apps = apps.filter((app) => {
+                const name = app.get_name().toLowerCase();
+                const generic = (app.get_generic_name?.() ?? '').toLowerCase();
+                return name.includes(query) || generic.includes(query);
+            });
+        }
+        return apps;
+    }
 
-        this._dotsBox.visible = pageCount > 1;
-        this._page = 0;
-        this._pagesBox.remove_all_transitions();
-        this._pagesBox.translation_x = 0;
-        this._updateDots();
+    _refresh() {
+        const apps = this._filteredApps();
+        this._grid.destroy_all_children();
+        const grid = this._grid.layout_manager;
+        apps.forEach((appInfo, i) => {
+            grid.attach(this._createAppTile(appInfo), i % COLUMNS, Math.floor(i / COLUMNS), 1, 1);
+        });
+        const rows = Math.max(1, Math.ceil(apps.length / COLUMNS));
+        this._grid.height = rows * CELL_HEIGHT;
     }
 
     _createAppTile(appInfo) {
@@ -341,7 +425,7 @@ export class AppLauncherOverlay {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        box.spacing = 6; // not constructible -- see the _dotsBox comment above
+        box.spacing = 6; // not constructible -- see the search bar comment above
         box.add_child(new St.Icon({gicon: appInfo.get_icon(), icon_size: ICON_SIZE}));
         box.add_child(new St.Label({
             text: appInfo.get_name(),
@@ -354,54 +438,6 @@ export class AppLauncherOverlay {
             appInfo.launch([], null);
         });
         return tile;
-    }
-
-    _goToPage(index) {
-        this._page = Math.max(0, Math.min(this._pages.length - 1, index));
-        this._pagesBox.remove_all_transitions();
-        this._pagesBox.ease({
-            translation_x: -this._page * COLUMNS * CELL_WIDTH,
-            duration: PAGE_SLIDE_DURATION,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
-        this._updateDots();
-    }
-
-    _updateDots() {
-        this._dotsBox.get_children().forEach((dot, i) => {
-            if (i === this._page)
-                dot.add_style_class_name('active');
-            else
-                dot.remove_style_class_name('active');
-        });
-    }
-
-    _onScroll(_actor, event) {
-        const direction = event.get_scroll_direction();
-        if (direction === Clutter.ScrollDirection.LEFT) {
-            this._goToPage(this._page - 1);
-            return Clutter.EVENT_STOP;
-        }
-        if (direction === Clutter.ScrollDirection.RIGHT) {
-            this._goToPage(this._page + 1);
-            return Clutter.EVENT_STOP;
-        }
-        if (direction === Clutter.ScrollDirection.SMOOTH) {
-            // Real two-finger touchpad swipes arrive as SMOOTH scroll events with a
-            // continuous delta, not discrete LEFT/RIGHT -- accumulate horizontal delta
-            // until it crosses the threshold, then page and reset.
-            const [dx] = event.get_scroll_delta();
-            this._scrollAccum += dx;
-            if (this._scrollAccum > SWIPE_THRESHOLD) {
-                this._scrollAccum = 0;
-                this._goToPage(this._page + 1);
-            } else if (this._scrollAccum < -SWIPE_THRESHOLD) {
-                this._scrollAccum = 0;
-                this._goToPage(this._page - 1);
-            }
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
     }
 
     destroy() {

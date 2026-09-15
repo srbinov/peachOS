@@ -117,7 +117,21 @@ export default class MacosTopPanelExtension extends Extension {
 
             // Launchpad-style app grid, triggered from a Dock icon (peachos-applauncher.desktop)
             // over D-Bus rather than a panel widget -- see lib/appLauncher.js.
-            this._appLauncher = new AppLauncherOverlay();
+            //
+            // Isolated in its own try/catch, same reasoning as the fullscreen auto-hide block
+            // below: this constructor builds a real St.ScrollView, and St.ScrollView.set_child()
+            // throws a TypeError if handed anything that isn't St.Scrollable (an St.Widget with
+            // a Clutter.GridLayout is NOT one, only e.g. St.BoxLayout is -- confirmed live: this
+            // exact mistake once took the whole panel to State: ERROR on login, because an
+            // uncaught throw here aborted enable() partway through everything already built
+            // above it). A future bug in this file specifically must never be able to do that
+            // again.
+            try {
+                this._appLauncher = new AppLauncherOverlay();
+            } catch (e) {
+                logError(e, '[macos-top-panel] AppLauncherOverlay failed to build, Apps launcher disabled');
+                this._appLauncher = null;
+            }
 
             // peachos-icon-appearance (Settings > Appearance > icon style) snapshots/restores
             // the dock's actual app order around its bulk icon swap over D-Bus -- see

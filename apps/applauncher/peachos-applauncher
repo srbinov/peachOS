@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Toggles the "Apps" overlay (macos-top-panel's AppLauncherOverlay, extensions/macos-top-
+# panel@local.dev/lib/appLauncher.js) over D-Bus. Falls back to GNOME Shell's own stock app
+# grid if the overlay's D-Bus name isn't there -- macos-top-panel disabled, still loading
+# after a session start, or its AppLauncherOverlay construction failed (that specific
+# failure is caught and isolated in extension.js's enable(), see appLauncher.js's own
+# crash-history comment, so the rest of the panel stays up even then) -- so clicking "Apps"
+# always shows SOMETHING instead of silently doing nothing.
+set -u
+
+if gdbus call --session \
+    --dest org.peachos.AppLauncher \
+    --object-path /org/peachos/AppLauncher \
+    --method org.peachos.AppLauncher.Toggle >/dev/null 2>&1; then
+    exit 0
+fi
+
+exec gdbus call --session \
+    --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.ShowApplications >/dev/null 2>&1

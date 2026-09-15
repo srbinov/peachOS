@@ -687,46 +687,102 @@
 }
 
 /*###############################################*/
-/*         App Launcher (Launchpad) Styles        */
+/*         App Launcher (Apps overlay) Styles     */
 /*###############################################*/
+/* A light wash the wallpaper still reads through -- macOS 26/27's own Apps overlay keeps
+   the desktop visibly present behind it, unlike the old flat near-black Launchpad veil. */
 .macos-applauncher-dim {
-  background-color: rgba(20, 20, 25, 0.72);
+  background-color: rgba(8, 8, 12, 0.22);
 }
 
 .macos-applauncher-content {
-  spacing: 28px;
+  spacing: 18px;
 }
 
-/* Same liquid glass pill recipe as the Control Center's Wi-Fi/Bluetooth pills
-   (docs/liquid-glass-style.md), just smaller -- was a flat 320px-wide translucent box with
-   no depth, out of place next to everything else in this project that uses this recipe, and
-   wide enough to look more like a text field than a quick search box. caret-color matters
-   here specifically: St.Entry's default text-cursor color is dark and was landing on a dark
-   glass fill, effectively invisible. */
-.macos-applauncher-search {
-  width: 220px;
+/* Floating search pill above the glass panel. Same liquid glass recipe as the Control
+   Center's Wi-Fi/Bluetooth pills (docs/liquid-glass-style.md), darker fill so it reads as
+   its own separate element sitting above the panel rather than blending into it.
+   caret-color matters here specifically: St.Entry's default text-cursor color is dark and
+   was landing on a dark glass fill, effectively invisible. */
+.macos-applauncher-searchbar {
+  width: 460px;
   border-radius: 999px;
-  padding: 6px 16px;
-  font-size: 0.95em;
-  background-color: rgba(255, 255, 255, 0.14);
+  padding: 7px 16px;
+  background-color: rgba(20, 20, 22, 0.55);
   background-gradient-direction: vertical;
-  background-gradient-start: rgba(255, 255, 255, 0.28);
-  background-gradient-end: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  background-gradient-start: rgba(255, 255, 255, 0.14);
+  background-gradient-end: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.macos-applauncher-searchbar-icon {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.macos-applauncher-searchbar-entry {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 0.95em;
   color: white;
   caret-color: white;
 }
 
-.macos-applauncher-search:focus {
-  border-color: rgba(255, 255, 255, 0.6);
-  background-color: rgba(255, 255, 255, 0.18);
-}
-
 /* Hint text ("Search") renders as its own child StLabel with this exact class -- verified
    against GNOME's own stock StEntry rule (StEntry StLabel.hint-text), not a guess. */
-.macos-applauncher-search .hint-text {
+.macos-applauncher-searchbar-entry .hint-text {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.macos-applauncher-searchbar-more {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 1.1em;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.macos-applauncher-searchbar-more:hover {
   color: white;
+}
+
+/* The rounded glass panel everything else sits inside -- same recipe as the search pill,
+   lighter fill (it's the dominant surface, not an accent on top of the dim). */
+.macos-applauncher-panel {
+  padding: 20px 24px 16px 24px;
+  spacing: 14px;
+  border-radius: 28px;
+  background-color: rgba(255, 255, 255, 0.10);
+  background-gradient-direction: vertical;
+  background-gradient-start: rgba(255, 255, 255, 0.20);
+  background-gradient-end: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.macos-applauncher-cats {
+  spacing: 4px;
+}
+
+.macos-applauncher-cat {
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.macos-applauncher-cat:hover {
+  color: white;
+}
+
+.macos-applauncher-cat.selected {
+  background-color: rgba(255, 255, 255, 0.16);
+  color: white;
+}
+
+.macos-applauncher-scroll {
+  -st-vfade-offset: 24px;
 }
 
 .macos-applauncher-tile {
@@ -751,25 +807,6 @@
   font-size: 0.85em;
   text-align: center;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-}
-
-.macos-applauncher-dots {
-  padding-top: 4px;
-}
-
-.macos-applauncher-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.35);
-}
-
-.macos-applauncher-dot:hover {
-  background-color: rgba(255, 255, 255, 0.55);
-}
-
-.macos-applauncher-dot.active {
-  background-color: rgba(255, 255, 255, 0.9);
 }
 
 /*###############################################*/
