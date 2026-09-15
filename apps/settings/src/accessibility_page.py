@@ -79,11 +79,11 @@ class AccessibilityPage(Gtk.Box):
         self.append(GroupCard([
             IconPlaceholderRow(
                 'Typing', 'input-keyboard-symbolic', 'accent-gray', on_click=self._on_open_typing,
-                icon_file=os.path.join(ICON_DIR, 'accessibility_typing.svg'),
+                icon_file=os.path.join(ICON_DIR, 'accessibility_typing.png'),
             ),
             IconPlaceholderRow(
                 'Pointing & Clicking', 'input-mouse-symbolic', 'accent-gray', on_click=self._on_open_pointing,
-                icon_file=os.path.join(ICON_DIR, 'accessibility_pointing.svg'),
+                icon_file=os.path.join(ICON_DIR, 'accessibility_pointing.png'),
             ),
         ]))
 

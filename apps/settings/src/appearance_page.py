@@ -710,6 +710,7 @@ class AppearancePage(Gtk.Box):
         manage_icons_card.append(IconPlaceholderRow(
             'Manage Custom Icons', 'applications-graphics-symbolic', 'accent-black',
             on_click=lambda: self._on_open_custom_icons and self._on_open_custom_icons(),
+            icon_file=os.path.join(ICON_DIR, 'manage_custom_icons.png'),
         ))
         self.append(manage_icons_card)
 
