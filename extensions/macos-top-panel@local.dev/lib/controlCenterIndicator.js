@@ -28,20 +28,20 @@ const PANEL_SCHEMA_ID = 'org.gnome.shell.extensions.macos-top-panel';
 const INTERFACE_SCHEMA_ID = 'org.gnome.desktop.interface';
 const WIDGETS_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-widgets';
 
-const CONTROL_CENTER_MENU_WIDTH = 314; // matches .macos-control-center-menu in stylesheet.css
+const CONTROL_CENTER_MENU_WIDTH = 283; // matches .macos-control-center-menu in stylesheet.css
 
 const CLOCKS_STATE_SCHEMA_ID = 'org.gnome.clocks.state.window';
 
 // Matches .macos-control-center-media-art in stylesheet.css. Sized (along with that tile's
-// own padding/spacing) so the whole card lands on exactly 134px = 2 circle-button widths
-// (61px * 2 + 12px spacing) -- see .macos-control-center-media-card's own comment.
-const MEDIA_ART_SIZE = 50;
+// own padding/spacing) so the whole card lands on exactly 121px = 2 circle-button widths
+// (55px * 2 + 11px spacing) -- see .macos-control-center-media-card's own comment.
+const MEDIA_ART_SIZE = 45;
 // This icon_size is set directly on the St.Icon in JS (below), which wins over the CSS
 // icon-size rule for the same class -- editing the CSS alone previously did nothing, the
 // icon stayed 36px while only the outer button shrank, so it filled a *larger* share of a
 // smaller circle (and looked even more so once screenshot.png went from low-contrast blue
 // to solid white) -- this is the actual, only place that controls it.
-const CIRCLE_ICON_SIZE = 24; // 30% smaller than 29 -- circle-button diameter (51px) is unchanged
+const CIRCLE_ICON_SIZE = 22; // circle-button diameter is 55px (90%-scaled grid, see stylesheet.css)
 
 export const ControlCenterIndicator = GObject.registerClass(
 class ControlCenterIndicator extends PanelMenu.Button {
@@ -172,28 +172,61 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._backgroundAdaptive.setForceDark(foreground === 'black');
     }
 
-    // The menu got 20% wider; GNOME's BoxPointer only clamps it flush to the work-area
-    // edge (minus its tiny arrow gap), which reads as "jammed against the screen edge".
-    // After it's positioned, nudge it back in so it keeps a real margin -- macOS's own
-    // Control Center sits ~14px off the edge.
+    // GNOME's BoxPointer positions the popup near the Control Center toggle button (close
+    // to the screen's right edge), and only clamps it flush to the work-area edge (minus
+    // its tiny arrow gap) -- which reads as "jammed against/past the screen edge", exactly
+    // like the desktop widgets grid's own drag-snap has to guard against (snapPosition()
+    // in peachos-widgets' lib/widgetLayer.js: clamp the placement so width/height never
+    // push the widget's far edge past the monitor bounds). Same idea here, both edges.
+    //
+    // A single GLib.idle_add correction wasn't reliable (confirmed live, repeatedly): the
+    // popup's open animation/reflow can still move or resize it after that first idle
+    // callback fires, and get_width()/get_transformed_position() read whatever the
+    // in-progress layout happened to be at that exact moment, not its final settled state.
+    // Re-running the same clamp a few times over the open animation's window (~300ms,
+    // see FADE_DURATION elsewhere in this project) is self-correcting regardless of
+    // exactly when in that window it happens to run: each pass recomputes translation_x
+    // from the CURRENT actual on-screen position (which already includes any translation
+    // a previous pass applied), so it converges instead of compounding.
     _keepMenuOnScreen() {
-        const EDGE_MARGIN = 14;
+        const EDGE_MARGIN = 12; // 14px in the original 61px-unit grid, scaled to 90%
         const bp = this.menu.actor;
         if (!bp)
             return;
-        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+
+        const clampOnce = () => {
             if (!bp.mapped)
-                return GLib.SOURCE_REMOVE;
+                return;
             const monitor = Main.layoutManager.primaryMonitor;
             if (!monitor)
-                return GLib.SOURCE_REMOVE;
-            const [x] = bp.get_transformed_position();
-            const width = bp.get_width();
-            const rightEdge = x + width;
-            const limit = monitor.x + monitor.width - EDGE_MARGIN;
-            bp.translation_x = rightEdge > limit ? -(rightEdge - limit) : 0;
+                return;
+            // The popup's own current on-screen X (already includes any translation_x a
+            // previous pass applied) minus that same translation -- i.e. where it would
+            // sit with translation_x reset to 0 -- is what BoxPointer itself wants this
+            // frame. Width is the known, hard-capped CSS width (CONTROL_CENTER_MENU_WIDTH),
+            // not a live get_width() query, since that can read 0 or a mid-layout value
+            // before the popup has fully allocated.
+            const [screenX] = bp.get_transformed_position();
+            const naturalX = screenX - bp.translation_x;
+            const width = CONTROL_CENTER_MENU_WIDTH;
+            const minX = monitor.x + EDGE_MARGIN;
+            const maxX = monitor.x + monitor.width - EDGE_MARGIN - width;
+            const clampedX = Math.max(minX, Math.min(naturalX, maxX));
+            bp.translation_x = clampedX - naturalX;
+        };
+
+        // 5 passes spread across ~300ms: first as soon as idle, then a few more while the
+        // open animation/reflow is still potentially settling.
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            clampOnce();
             return GLib.SOURCE_REMOVE;
         });
+        for (const delay of [40, 90, 150, 250]) {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
+                clampOnce();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
     }
 
     _buildMenu() {
@@ -221,7 +254,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
             // open past the screen edge. Without this, an St.BoxLayout child's reported
             // natural size can exceed what its parent actually has and just keeps
             // propagating upward instead of being constrained -- confirmed live, twice.
-            width: 280,
+            width: 253,
             clip_to_allocation: true,
         });
         root.add_child(this._container);
@@ -454,8 +487,8 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // ClutterText directly forces Pango to lay out (and ellipsize) inside that exact
         // pixel count, full stop, regardless of what the text would naturally need -- the
         // only way to actually guarantee this pill never asks its parent for more than
-        // 134px again. Budget: 134 (pill) - 10*2 (padding) - 26 (badge) - 12 (spacing).
-        const TEXT_COLUMN_WIDTH = 74;
+        // 121px again. Budget: 121 (pill) - 9*2 (padding) - 23 (badge) - 11 (spacing).
+        const TEXT_COLUMN_WIDTH = 64;
         const titleLabel = new St.Label({text: title, style_class: 'macos-control-center-pill-title'});
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         titleLabel.clutter_text.set_width(TEXT_COLUMN_WIDTH);
@@ -640,8 +673,8 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // same reason as _createPill's title/subtitle labels: x_expand alone doesn't
         // shrink a child below its own reported natural size, so a long real track title
         // would still ask this fixed-134px card's parent for more room and blow the
-        // fixed-width popup open. Budget: 134 (card) - 8*2 (padding).
-        const MEDIA_TEXT_WIDTH = 110;
+        // fixed-width popup open. Budget: 121 (card) - 7*2 (padding).
+        const MEDIA_TEXT_WIDTH = 100;
         const titleLabel = new St.Label({text: 'Nothing Playing', style_class: 'macos-control-center-media-title'});
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         titleLabel.clutter_text.set_width(MEDIA_TEXT_WIDTH);
@@ -668,7 +701,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
     _createTransportButton(iconName, onActivate) {
         const button = new St.Button({style_class: 'macos-control-center-transport-button', reactive: true, can_focus: true});
         button.connect('clicked', onActivate);
-        const icon = new St.Icon({icon_name: iconName, icon_size: 10, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const icon = new St.Icon({icon_name: iconName, icon_size: 9, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         button.set_child(icon);
         return {button, icon};
     }
