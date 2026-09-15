@@ -8,6 +8,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {WifiTileController} from './wifiTileController.js';
@@ -30,11 +31,11 @@ const WIDGETS_SCHEMA_ID = 'org.gnome.shell.extensions.peachos-widgets';
 const CONTROL_CENTER_MENU_WIDTH = 314; // matches .macos-control-center-menu in stylesheet.css
 
 const CLOCKS_STATE_SCHEMA_ID = 'org.gnome.clocks.state.window';
-const TEXT_EDITOR_NEW_WINDOW_CMD =
-    ['flatpak', 'run', '--branch=stable', '--arch=x86_64', '--command=gnome-text-editor',
-        'org.gnome.TextEditor', '--new-window'];
 
-const MEDIA_ART_SIZE = 58; // matches .macos-control-center-media-art in stylesheet.css
+// Matches .macos-control-center-media-art in stylesheet.css. Sized (along with that tile's
+// own padding/spacing) so the whole card lands on exactly 134px = 2 circle-button widths
+// (61px * 2 + 12px spacing) -- see .macos-control-center-media-card's own comment.
+const MEDIA_ART_SIZE = 50;
 // This icon_size is set directly on the St.Icon in JS (below), which wins over the CSS
 // icon-size rule for the same class -- editing the CSS alone previously did nothing, the
 // icon stayed 36px while only the outer button shrank, so it filled a *larger* share of a
@@ -346,12 +347,17 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._backgroundAdaptive.register(this._timerCircle.button);
         this._utilityRow.add_child(this._timerCircle.button);
 
-        this._pencilCircle = this._createCircleButton('document-edit-symbolic', () => {
-            Gio.Subprocess.new(TEXT_EDITOR_NEW_WINDOW_CMD, Gio.SubprocessFlags.NONE);
+        // Same call KiwiMenu's own "Lock Screen" menu item makes (src/kiwimenu.js's
+        // SYSTEM_ACTIONS map) -- the canonical GNOME Shell API for this, not a raw
+        // Main.screenShield.lock() (SystemActions does its own "can this session actually
+        // lock" checks first).
+        this._lockCircle = this._createCircleButton('system-lock-screen-symbolic', () => {
+            SystemActions.getDefault().activateLockScreen();
+            this.menu.close();
         });
-        this._tileBlur.register(this._pencilCircle.button);
-        this._backgroundAdaptive.register(this._pencilCircle.button);
-        this._utilityRow.add_child(this._pencilCircle.button);
+        this._tileBlur.register(this._lockCircle.button);
+        this._backgroundAdaptive.register(this._lockCircle.button);
+        this._utilityRow.add_child(this._lockCircle.button);
 
         // Same crescent glyph the Dynamic Island's DND toast uses (assets/dnd-*.png):
         // white when off, its own purple when on -- and when on, _applyDndFill() gives
@@ -628,7 +634,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
     _createTransportButton(iconName, onActivate) {
         const button = new St.Button({style_class: 'macos-control-center-transport-button', reactive: true, can_focus: true});
         button.connect('clicked', onActivate);
-        const icon = new St.Icon({icon_name: iconName, icon_size: 12, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const icon = new St.Icon({icon_name: iconName, icon_size: 10, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         button.set_child(icon);
         return {button, icon};
     }

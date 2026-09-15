@@ -428,10 +428,15 @@
  * override the content node explicitly so blur + tile translucency can show.
  */
 .macos-control-center-menu {
-  /* Content area (menu width minus the 14px padding on each side below) matches a row
-     of 4 circle buttons exactly: 4 * 51px + 3 * 10px spacing = 234px. Every row in the
-     menu -- both circle rows, both sliders, and the wifi/bluetooth+media top row --
-     fits within this same width. */
+  /* Content area (menu width minus the 17px padding on each side below, see
+     .macos-control-center-content) matches a row of 4 circle buttons exactly:
+     4 * 61px + 3 * 12px spacing = 280px. Same unit grid the desktop widgets picker uses
+     (widgetPicker.js: square/row/big) -- a circle button is 1 unit, and every other tile
+     is sized in whole units of it: Wi-Fi/Bluetooth pills are 2 units wide x 1 unit tall
+     (.macos-control-center-pill), the media card is 2x2 units
+     (.macos-control-center-media-card), Display/Volume are the full 4-unit row width
+     (naturally, being the lone expanding child of their own row -- no explicit width
+     needed), and both circle rows are exactly 4 units. */
   width: 314px;
   background-color: transparent;
   border: none;
@@ -524,6 +529,11 @@
 }
 
 .macos-control-center-pill {
+  /* 2 units wide x 1 unit tall -- see .macos-control-center-menu's own comment on the
+     unit grid. Two of these stacked (+ the 12px .macos-control-center-column gap between
+     them) land on exactly 134px, matching the media card's height next to them. */
+  width: 134px;
+  height: 61px;
   border-radius: 999px;
   padding: 7px 10px;
 }
@@ -632,14 +642,20 @@
 }
 
 .macos-control-center-media-card {
+  /* 2x2 units -- see .macos-control-center-menu's own comment on the unit grid.
+     padding/spacing/art size (MEDIA_ART_SIZE in controlCenterIndicator.js) below are all
+     tuned together so title + artist + the transport row still fit under the art within
+     this fixed height without clipping. */
+  width: 134px;
+  height: 134px;
   border-radius: 22px;
-  padding: 10px;
-  spacing: 5px;
+  padding: 8px;
+  spacing: 4px;
 }
 
 .macos-control-center-media-art {
-  width: 58px;
-  height: 58px;
+  width: 50px;
+  height: 50px;
   border-radius: 12px;
   background-color: rgba(255, 255, 255, 0.14);
   background-gradient-direction: vertical;
@@ -650,29 +666,29 @@
 }
 
 .macos-control-center-media-art StIcon {
-  width: 58px;
-  height: 58px;
-  icon-size: 58px;
+  width: 50px;
+  height: 50px;
+  icon-size: 50px;
 }
 
 .macos-control-center-media-title {
   font-weight: bold;
-  font-size: 0.94em;
+  font-size: 0.88em;
   color: rgba(255, 255, 255, 0.98);
 }
 
 .macos-control-center-media-artist {
-  font-size: 0.78em;
+  font-size: 0.74em;
   color: rgba(255, 255, 255, 0.88);
 }
 
 .macos-control-center-media-transport {
-  spacing: 5px;
+  spacing: 4px;
 }
 
 .macos-control-center-transport-button {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background-color: transparent;
   color: rgba(255, 255, 255, 0.95);
