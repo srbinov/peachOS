@@ -35,13 +35,45 @@ fi
 
 SINK_NAME_RE='gnome_network_displays'
 PREV_SINK_FILE="${XDG_RUNTIME_DIR:-/tmp}/peachos-tv-audio-prev-sink"
+# Existence-only marker: extensions/macos-top-panel@local.dev/lib/screenSharingIndicator.js
+# watches this file (Gio.FileMonitor) to show/hide the top-bar screen-sharing icon. Kept
+# separate from PREV_SINK_FILE above -- that one only gets written when the audio-redirect
+# itself actually switches something, which it deliberately skips in a couple of edge cases
+# (no previous default sink, previous == the TV sink already) where a TV is still genuinely
+# connected. The indicator should reflect "is a TV sink present", full stop.
+ACTIVE_FILE="${XDG_RUNTIME_DIR:-/tmp}/peachos-tv-active"
+trap 'rm -f "$ACTIVE_FILE"' EXIT
 
 log() {
     echo "[peachos-tv-audio] $*"
 }
 
+mark_active() {
+    : > "$ACTIVE_FILE" 2>/dev/null || true
+}
+
+mark_inactive() {
+    rm -f "$ACTIVE_FILE" 2>/dev/null || true
+}
+
 find_tv_sink() {
     pactl list short sinks 2>/dev/null | awk -v re="$SINK_NAME_RE" '$2 ~ re {print $2; exit}'
+}
+
+# The TV sink's mere existence isn't enough to call it "actively sharing" -- confirmed live:
+# gnome-network-displays loads the null-sink module once and does NOT reliably unload it
+# either when a cast ends or when the app itself quits, so a sink can sit there SUSPENDED
+# (PipeWire's idle-suspend state, meaning nothing is actually flowing through it) long after
+# the TV disconnected. Good enough for the audio-redirect logic below (proactively pointing
+# the default sink at it the moment it exists is harmless), but the top-bar indicator needs
+# a tighter signal or it'd stay lit forever after a single cast. Treat SUSPENDED as "not
+# really connected". Caveat: PipeWire's idle-suspend timeout can also fire during a real
+# cast's quiet passages, which would flicker the indicator off briefly -- a real cast should
+# still self-correct within a few seconds as audio resumes and the sink wakes back up.
+tv_sink_is_live() {
+    local sink="$1" state
+    state=$(pactl list short sinks 2>/dev/null | awk -v s="$sink" '$2==s {print $5; exit}')
+    [[ -n "$state" && "$state" != "SUSPENDED" ]]
 }
 
 move_everything_to() {
@@ -83,14 +115,24 @@ on_tv_disconnected() {
 
 # Catch a cast already in progress when this starts (service restart, late login).
 existing=$(find_tv_sink)
-[[ -n "$existing" ]] && on_tv_connected "$existing"
+if [[ -n "$existing" ]]; then
+    on_tv_connected "$existing"
+    tv_sink_is_live "$existing" && mark_active || mark_inactive
+else
+    mark_inactive
+fi
 
 pactl subscribe 2>/dev/null | while read -r line; do
     [[ "$line" == *"sink"* ]] || continue
     current=$(find_tv_sink)
     if [[ -n "$current" ]]; then
         on_tv_connected "$current"
+        # Re-checked on every sink event, not just "just appeared" -- this is also what
+        # picks up a SUSPENDED -> RUNNING/IDLE transition (the sink existed already but
+        # wasn't actually live yet) and lights the indicator up at that point instead.
+        tv_sink_is_live "$current" && mark_active || mark_inactive
     else
+        mark_inactive
         on_tv_disconnected
     fi
 done

@@ -289,13 +289,25 @@ class ControlCenterIndicator extends PanelMenu.Button {
         this._backgroundAdaptive.register(this._airdropCircle.button);
         this._circleRow.add_child(this._airdropCircle.button);
 
-        this._logoutCircle = this._createCircleButton('system-log-out-symbolic', () => {
-            Gio.Subprocess.new(['gnome-session-quit', '--logout'], Gio.SubprocessFlags.NONE);
+        this._shareScreenGiconLight = Gio.icon_new_for_string(
+            GLib.build_filenamev([this._extensionPath, 'icons', 'control-center', 'share-screen.png']));
+        this._shareScreenGiconDark = Gio.icon_new_for_string(GLib.build_filenamev(
+            [this._extensionPath, 'icons', 'control-center', 'share-screen-lowglass-dark.png']));
+        this._shareScreenCircle = this._createCircleButton(this._shareScreenGiconLight, () => {
+            // peachos-connect-tv.desktop's Exec= carries the AAC/H264 encoder env vars
+            // gnome-network-displays needs for the TV to actually get sound (see
+            // apps/tv-audio/) -- launch through the desktop file rather than spawning the
+            // binary directly so this stays correct if that Exec= is ever retuned.
+            const appInfo = Gio.DesktopAppInfo.new('peachos-connect-tv.desktop');
+            if (appInfo)
+                appInfo.launch([], null);
+            else
+                Gio.Subprocess.new(['gnome-network-displays'], Gio.SubprocessFlags.NONE);
             this.menu.close();
         });
-        this._tileBlur.register(this._logoutCircle.button);
-        this._backgroundAdaptive.register(this._logoutCircle.button);
-        this._circleRow.add_child(this._logoutCircle.button);
+        this._tileBlur.register(this._shareScreenCircle.button);
+        this._backgroundAdaptive.register(this._shareScreenCircle.button);
+        this._circleRow.add_child(this._shareScreenCircle.button);
 
         this._displayCard = this._createSliderCard(
             'Display', 'display-brightness-symbolic', 'display-brightness-symbolic',
@@ -661,10 +673,10 @@ class ControlCenterIndicator extends PanelMenu.Button {
 
     /**
      * Real bug this fixes: the CSS-only Liquid Glass icon-darkening in controlCenterGlass.js
-     * only ever affects symbolic icons (pencil/dnd/logout, loaded by icon_name) -- CSS
+     * only ever affects symbolic icons (pencil/dnd, loaded by icon_name) -- CSS
      * `color` has zero effect on a pre-baked PNG's own pixels, which is what
-     * screenshot/appearance/airdrop/calculator/timer actually are. Those get swapped to a
-     * separate pre-rendered dark-tinted PNG instead, at the exact same
+     * screenshot/appearance/airdrop/calculator/timer/share-screen actually are. Those get
+     * swapped to a separate pre-rendered dark-tinted PNG instead, at the exact same
      * DARK_CONTENT_THRESHOLD cutoff the CSS path uses, so nothing looks out of sync.
      */
     _applyIconTint() {
@@ -674,6 +686,7 @@ class ControlCenterIndicator extends PanelMenu.Button {
 
         this._screenshotCircle.icon.gicon = useDark ? this._screenshotGiconDark : this._screenshotGiconLight;
         this._airdropCircle.icon.gicon = useDark ? this._airdropGiconDark : this._airdropGiconLight;
+        this._shareScreenCircle.icon.gicon = useDark ? this._shareScreenGiconDark : this._shareScreenGiconLight;
         this._calculatorCircle.icon.gicon = useDark ? this._calculatorGiconDark : this._calculatorGiconLight;
         this._timerCircle.icon.gicon = useDark ? this._timerGiconDark : this._timerGiconLight;
 

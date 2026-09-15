@@ -8,6 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {snapshotBox, clearBox, restoreBox} from './lib/panelState.js';
 import {ClockWidget} from './lib/clockWidget.js';
 import {BatteryIndicator} from './lib/batteryIndicator.js';
+import {ScreenSharingIndicator} from './lib/screenSharingIndicator.js';
 import {WifiIndicator} from './lib/wifiIndicator.js';
 import {BluetoothIndicator} from './lib/bluetoothIndicator.js';
 import {SearchIndicator} from './lib/searchIndicator.js';
@@ -69,6 +70,12 @@ export default class MacosTopPanelExtension extends Extension {
                 this._syncGlobalMenuVisibility();
             }, this);
             this._syncGlobalMenuVisibility();
+
+            // Added before the battery indicator (below) so it lands to its left -- children
+            // of _rightBox lay out left-to-right in the order they're added, same as every
+            // other indicator here.
+            this._screenSharingIndicator = new ScreenSharingIndicator(this.path);
+            Main.panel._rightBox.add_child(this._screenSharingIndicator.container);
 
             this._batteryIndicator = new BatteryIndicator(this.path, this._panelSettings);
             Main.panel.menuManager.addMenu(this._batteryIndicator.menu);
@@ -480,6 +487,9 @@ export default class MacosTopPanelExtension extends Extension {
             Main.panel.menuManager.removeMenu(this._batteryIndicator.menu);
         this._batteryIndicator?.destroy();
         this._batteryIndicator = null;
+
+        this._screenSharingIndicator?.destroy();
+        this._screenSharingIndicator = null;
 
         this._menuManager?.destroy();
         this._menuManager = null;
