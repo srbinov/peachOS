@@ -418,7 +418,17 @@ class ControlCenterIndicator extends PanelMenu.Button {
         // (matched to the media card next to it), and this row needs to stretch with it
         // so the badge/text -- already y_align: CENTER below -- actually center in the
         // taller pill instead of hugging its top edge with dead space under them.
-        const content = new St.BoxLayout({style_class: 'macos-control-center-row', y_expand: true});
+        //
+        // x_expand on content AND textColumn matters now that the pill has a fixed CSS
+        // width (134px, 2 units -- see .macos-control-center-pill's own comment): without
+        // it, a long subtitle ("August (Excellent)") reports a natural width wider than
+        // 134px, and nothing forces the label back down to the button's actual allocation
+        // for ellipsize to act on -- that natural-size request just propagates straight up
+        // through content -> button -> leftColumn -> topRow -> the whole popup, which blew
+        // the fixed-width menu open past the screen edge (confirmed live). x_expand makes
+        // content/textColumn take exactly what their parent actually hands them instead of
+        // asking for more, so the label gets truncated at 134px like it always meant to.
+        const content = new St.BoxLayout({style_class: 'macos-control-center-row', x_expand: true, y_expand: true});
         button.set_child(content);
 
         const badge = new St.Bin({
@@ -429,14 +439,20 @@ class ControlCenterIndicator extends PanelMenu.Button {
         badge.set_child(new St.Icon({icon_name: iconName}));
         content.add_child(badge);
 
-        const textColumn = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+        const textColumn = new St.BoxLayout({
+            vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER,
+        });
         content.add_child(textColumn);
 
-        const titleLabel = new St.Label({text: title, style_class: 'macos-control-center-pill-title'});
+        const titleLabel = new St.Label({
+            text: title, style_class: 'macos-control-center-pill-title', x_expand: true,
+        });
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         textColumn.add_child(titleLabel);
 
-        const subtitleLabel = new St.Label({text: subtitle, style_class: 'macos-control-center-pill-subtitle'});
+        const subtitleLabel = new St.Label({
+            text: subtitle, style_class: 'macos-control-center-pill-subtitle', x_expand: true,
+        });
         subtitleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         textColumn.add_child(subtitleLabel);
 
@@ -610,11 +626,19 @@ class ControlCenterIndicator extends PanelMenu.Button {
         artBin.set_child(artIcon);
         actor.add_child(artBin);
 
-        const titleLabel = new St.Label({text: 'Nothing Playing', style_class: 'macos-control-center-media-title'});
+        // x_expand: true for the same reason the Wi-Fi/Bluetooth pill labels have it now
+        // (see _createPill's own comment) -- the card has a fixed 134px CSS width too, and
+        // a long real track title/artist would otherwise report a wider natural size than
+        // that and blow the fixed-width popup open, instead of actually ellipsizing.
+        const titleLabel = new St.Label({
+            text: 'Nothing Playing', style_class: 'macos-control-center-media-title', x_expand: true,
+        });
         titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         actor.add_child(titleLabel);
 
-        const artistLabel = new St.Label({text: '', style_class: 'macos-control-center-media-artist'});
+        const artistLabel = new St.Label({
+            text: '', style_class: 'macos-control-center-media-artist', x_expand: true,
+        });
         artistLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         actor.add_child(artistLabel);
 
