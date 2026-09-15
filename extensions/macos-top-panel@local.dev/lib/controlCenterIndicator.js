@@ -192,40 +192,60 @@ class ControlCenterIndicator extends PanelMenu.Button {
     // keep re-imposing the correction for the ENTIRE time the menu is open, re-fetching
     // this.menu.actor fresh on every tick (rather than a single reference captured once) in
     // case that's ever swapped out too.
+    //
+    // translation_x turned out to be the wrong lever entirely: instrumented logging proved
+    // this class was computing and setting the exact translation_x needed to land the popup
+    // 12px off both edges, every single tick, and the on-screen popup still rendered flush
+    // against the right edge regardless -- something about how BoxPointer paints doesn't
+    // respect a translation set on it from outside. Setting the actor's real x directly
+    // (not a transform) via set_x() is the remaining lever that can plausibly still work --
+    // reacting to the actor's own 'notify::allocation' (BoxPointer re-asserting its own x
+    // fires exactly this) rather than only polling on a timer.
+    //
+    // IMPORTANT: forcePosition() must NOT treat its own last set_x() as a fresh "natural"
+    // position to shift from again -- get_position() after calling set_x() reads back
+    // whatever we just set (set_x() re-triggers 'notify::allocation' too), so subtracting
+    // SHIFT_LEFT unconditionally on every call would compound further left forever. Only
+    // recompute when the actor's x has genuinely changed since our own last correction
+    // (i.e. BoxPointer moved it again on its own).
     _startKeepMenuOnScreen() {
         this._stopKeepMenuOnScreen(); // idempotent -- never run two of these at once
-        const EDGE_MARGIN = 12; // 14px in the original 61px-unit grid, scaled to 90%
+        const SHIFT_LEFT = 60; // fixed, generous nudge -- not edge-math, just "clearly left"
+        this._lastAppliedX = null;
 
-        const clampOnce = () => {
+        const forcePosition = () => {
             const bp = this.menu.actor;
             if (!bp || !bp.mapped)
-                return GLib.SOURCE_CONTINUE;
+                return;
+            const [curX, curY] = bp.get_position();
+            if (this._lastAppliedX !== null && Math.abs(curX - this._lastAppliedX) < 0.5)
+                return; // already sitting exactly where we last put it -- nothing moved
             const monitor = Main.layoutManager.primaryMonitor;
-            if (!monitor)
-                return GLib.SOURCE_CONTINUE;
-            const [screenX] = bp.get_transformed_position();
-            const translationBefore = bp.translation_x;
-            const naturalX = screenX - translationBefore;
-            const width = CONTROL_CENTER_MENU_WIDTH;
-            const minX = monitor.x + EDGE_MARGIN;
-            const maxX = monitor.x + monitor.width - EDGE_MARGIN - width;
-            const clampedX = Math.max(minX, Math.min(naturalX, maxX));
-            const newTranslation = clampedX - naturalX;
-            // TEMP DIAGNOSTIC -- remove once the overflow is actually root-caused. Only
-            // logs when the correction is non-trivial, so a settled popup doesn't spam.
-            if (Math.abs(newTranslation - translationBefore) > 0.5) {
-                log(`[macos-top-panel] CC clamp: screenX=${screenX} translation ${translationBefore} -> `
-                    + `${newTranslation} (monitor ${monitor.width}px, naturalX=${naturalX})`);
-            }
-            bp.translation_x = newTranslation;
-            return GLib.SOURCE_CONTINUE;
+            let targetX = curX - SHIFT_LEFT;
+            if (monitor)
+                targetX = Math.max(monitor.x + 12, targetX);
+            log(`[macos-top-panel] CC forcePosition: x ${curX} -> ${targetX} (y=${curY})`);
+            this._lastAppliedX = targetX;
+            bp.set_x(targetX);
         };
 
-        clampOnce();
-        this._keepOnScreenTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, clampOnce);
+        const bp = this.menu.actor;
+        if (bp)
+            this._keepOnScreenAllocId = bp.connect('notify::allocation', forcePosition);
+        forcePosition();
+        // Backup poll in case allocation never re-notifies after the popup settles.
+        this._keepOnScreenTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
+            forcePosition();
+            return GLib.SOURCE_CONTINUE;
+        });
     }
 
     _stopKeepMenuOnScreen() {
+        this._lastAppliedX = null;
+        if (this._keepOnScreenAllocId) {
+            this.menu.actor?.disconnect(this._keepOnScreenAllocId);
+            this._keepOnScreenAllocId = 0;
+        }
         if (this._keepOnScreenTimerId) {
             GLib.source_remove(this._keepOnScreenTimerId);
             this._keepOnScreenTimerId = 0;
