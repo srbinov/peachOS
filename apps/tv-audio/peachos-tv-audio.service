@@ -1,0 +1,14 @@
+[Unit]
+Description=Redirect audio to the TV while casting (Connect to TV)
+After=graphical-session.target pipewire.service pipewire-pulse.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/peachos-tv-audio
+Restart=on-failure
+RestartSec=3
+Nice=10
+
+[Install]
+WantedBy=graphical-session.target

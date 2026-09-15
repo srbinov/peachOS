@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Redirects audio to the TV automatically while casting via "Connect to TV"
+# (gnome-network-displays / Wi-Fi Display -- Miracast, NOT AirPlay. Roku's own AirPlay
+# support is Apple-only; see app.mirror.Mirror.desktop for the unrelated, opposite-
+# direction AirPlay *receiver* this project ships -- phone-to-this-laptop, not this-
+# laptop-to-TV. Don't confuse the two.)
+#
+# gnome-network-displays creates its own PipeWire null-sink (name starts with
+# "gnome_network_displays_...", description "GNOME Network Displays") and captures its
+# monitor to encode as AAC for the TV. It does NOT touch the system's default sink --
+# apps keep playing to whatever the default was (usually the laptop speakers) unless
+# something switches it. This is that something: watch for the cast sink appearing or
+# disappearing (pactl subscribe) and move the default sink -- and every already-running
+# stream -- over to it and back, so the TV actually gets sound without the user having to
+# go find it in the sound settings themselves.
+#
+# Purely a PipeWire routing helper: it doesn't invent a second audio protocol. If the TV
+# never negotiates the WFD AAC audio codec in the first place, gnome-network-displays sends
+# video only -- no sink named gnome_network_displays_* appears at all, and this script has
+# nothing to move. See peachos-connect-tv.desktop for the encoder env vars that make audio
+# actually get negotiated (NETWORK_DISPLAYS_AAC_ENC=fdkaacenc -- the stock avenc_aac is rank
+# "none" and effectively never gets picked).
+set -u
+
+SINK_NAME_RE='gnome_network_displays'
+PREV_SINK_FILE="${XDG_RUNTIME_DIR:-/tmp}/peachos-tv-audio-prev-sink"
+
+log() {
+    echo "[peachos-tv-audio] $*"
+}
+
+find_tv_sink() {
+    pactl list short sinks 2>/dev/null | awk -v re="$SINK_NAME_RE" '$2 ~ re {print $2; exit}'
+}
+
+move_everything_to() {
+    local sink="$1"
+    pactl set-default-sink "$sink" 2>/dev/null || return 1
+    while IFS=$'\t' read -r id _; do
+        [[ -n "$id" ]] && pactl move-sink-input "$id" "$sink" 2>/dev/null
+    done < <(pactl list short sink-inputs 2>/dev/null)
+    return 0
+}
+
+on_tv_connected() {
+    local tv_sink="$1"
+    # Already switched for this sink (a second subscribe event for the same connect) --
+    # nothing to do, and re-snapshotting "previous" now would overwrite it with the TV
+    # sink itself.
+    [[ -f "$PREV_SINK_FILE" ]] && return 0
+    local prev
+    prev=$(pactl get-default-sink 2>/dev/null) || return 0
+    [[ -z "$prev" || "$prev" == "$tv_sink" ]] && return 0
+    echo "$prev" > "$PREV_SINK_FILE"
+    log "TV sink '$tv_sink' appeared -- switching audio from '$prev'"
+    move_everything_to "$tv_sink"
+}
+
+on_tv_disconnected() {
+    [[ -f "$PREV_SINK_FILE" ]] || return 0
+    local prev
+    prev=$(cat "$PREV_SINK_FILE" 2>/dev/null)
+    rm -f "$PREV_SINK_FILE"
+    [[ -z "$prev" ]] && return 0
+    if pactl list short sinks 2>/dev/null | awk '{print $2}' | grep -qx "$prev"; then
+        log "TV sink gone -- restoring audio to '$prev'"
+        move_everything_to "$prev"
+    else
+        log "TV sink gone -- previous sink '$prev' is also gone, leaving PipeWire's own default"
+    fi
+}
+
+# Catch a cast already in progress when this starts (service restart, late login).
+existing=$(find_tv_sink)
+[[ -n "$existing" ]] && on_tv_connected "$existing"
+
+pactl subscribe 2>/dev/null | while read -r line; do
+    [[ "$line" == *"sink"* ]] || continue
+    current=$(find_tv_sink)
+    if [[ -n "$current" ]]; then
+        on_tv_connected "$current"
+    else
+        on_tv_disconnected
+    fi
+done

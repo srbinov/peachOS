@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Connect to TV
+Comment=Mirror this screen to a TV or Wi-Fi Display receiver (Roku Screen Mirroring, etc.)
+Icon=video-display-symbolic
+Exec=env NETWORK_DISPLAYS_AAC_ENC=fdkaacenc NETWORK_DISPLAYS_H264_ENC=x264enc gnome-network-displays
+Terminal=false
+Categories=Network;AudioVideo;
+StartupNotify=true
+Keywords=Miracast;Wi-Fi Display;Screen Mirroring;Roku;Cast;
