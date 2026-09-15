@@ -230,7 +230,16 @@ def _write_override(desktop_path, out_path):
     lines.insert(entry_end, OVERRIDE_MARKER)
 
     USER_APPS_DIR.mkdir(parents=True, exist_ok=True)
-    target.write_text(''.join(lines), encoding='utf-8')
+    try:
+        target.write_text(''.join(lines), encoding='utf-8')
+    except OSError as e:
+        # An immutable launcher (chattr +i'd -- some third-party Telegram/Discord installers
+        # do this to their own .desktop file) or any other write failure must not take the
+        # whole batch down: apply_dark()/apply_custom() call this once per candidate inside a
+        # loop, and an uncaught exception here used to abort that loop with the remaining
+        # candidates never touched -- the UI ends up showing "Default" while half the dock is
+        # already Dark. Log it and let the caller move on to the next app.
+        return f'could not write {target}: {e}'
     return None
 
 
